@@ -8,6 +8,7 @@
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
@@ -94,20 +95,14 @@
     const { jsPDF } = window.jspdf;
 
     // =================================================================
-    // ### CONFIGURACIÓN: DATOS DEL REPOSITORIO ###
+    // ### CONFIGURACIÓN: SUPABASE ###
     // =================================================================
-    const USUARIO_GITHUB = 'gagegfg';
-    const REPO_NOMBRE = 'Molderil_ListaEmpaque';
-    const RUTA_LOTE_LOGISTICO = 'lotelogistica.txt';
-    const RUTA_HISTORICO_CSV = 'detallelotes.csv';
-    const RUTA_NOTAS_CSV = 'notasskulote.csv';
-    const RUTA_ARTICULOS_CSV = 'articulos.csv';
-    const RUTA_CLS_TXT = 'cls.txt';
-    
-    // --- NUEVO: CONFIGURACIÓN DEL SISTEMA DE BLOQUEO ---
-    const LOCK_FILE_PATH = 'lock.json';
-    const LOCK_TIMEOUT = 45 * 1000; // 45 segundos
-    const SESSION_ID = Date.now().toString(36) + Math.random().toString(36).substr(2);
+    // --- Configuración de Supabase ---
+    // Reemplaza con la URL y la clave anónima de tu proyecto de Supabase.
+    // Para Vercel, estas se configurarán como variables de entorno.
+    const SUPABASE_URL = 'PON_AQUI_TU_SUPABASE_URL';
+    const SUPABASE_KEY = 'PON_AQUI_TU_SUPABASE_ANON_KEY';
+    const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
     // =================================================================
 
     const Toast = ({ message, type, onHide }) => {
@@ -150,30 +145,7 @@
     };
 
     const AppWrapper = () => {
-        const [apiToken, setApiToken] = useState(null);
-        const [isReady, setIsReady] = useState(false);
-
-        useEffect(() => {
-            const fetchToken = async () => {
-                try {
-                    const url = `https://raw.githubusercontent.com/${USUARIO_GITHUB}/${REPO_NOMBRE}/main/${RUTA_CLS_TXT}`;
-                    const response = await fetch(url, { cache: "no-store" });
-                    if (!response.ok) throw new Error(`No se pudo cargar ${RUTA_CLS_TXT}`);
-                    let rawToken = await response.text();
-                    rawToken = rawToken.replace(/aaaa/g, '').replace(/bbbb/g, '').replace(/cccc/g, '');
-                    setApiToken(rawToken.trim());
-                } catch (error) {
-                    console.error("Error al obtener el token:", error);
-                } finally {
-                    setIsReady(true);
-                }
-            };
-            fetchToken();
-        }, []);
-        
-        if (!isReady) return null;
-
-        return <App apiToken={apiToken} />;
+        return <App />;
     };
 
     const App = ({ apiToken }) => {
@@ -206,20 +178,25 @@
         const [refreshState, setRefreshState] = useState('idle'); // idle, loading, error, success
         
         const handleRefreshPalletNumber = async (isSilent = false) => {
+            if (!supabaseClient) return;
             if (!isSilent) setRefreshState('loading');
             
-            const url = `https://raw.githubusercontent.com/${USUARIO_GITHUB}/${REPO_NOMBRE}/main/${RUTA_LOTE_LOGISTICO}?t=${new Date().getTime()}`;
             try {
-                const response = await fetch(url, { cache: "no-store" });
-                if (!response.ok) throw new Error('No se pudo verificar el Nº de pallet.');
-                const text = await response.text();
-                const numeroBase = parseInt(text.trim(), 10);
-                if (isNaN(numeroBase)) throw new Error('El archivo de pallet está corrupto.');
+                // Llama a una función en la DB para obtener el máximo número de pallet
+                const { data, error } = await supabaseClient.rpc('get_max_pallet_number');
+
+                if (error) {
+                    console.error("Error RPC get_max_pallet_number:", error);
+                    throw new Error('No se pudo verificar el Nº de pallet desde la DB.');
+                }
+
+                const numeroBase = data || 0; // Si la tabla está vacía, devuelve null.
                 
                 const proximoNumero = numeroBase + 1;
                 const numeroActual = parseInt(numeroDePallet, 10);
 
-                if (numeroActual !== proximoNumero) {
+                // Si el número actual está vacío (primera carga) o es diferente, lo actualiza.
+                if (!numeroActual || numeroActual !== proximoNumero) {
                     setNumeroDePallet(proximoNumero);
                     if (!isSilent) {
                         showToast(`Nº de pallet actualizado al siguiente disponible: ${proximoNumero}.`, 'info');
@@ -239,7 +216,7 @@
                 }
                 return proximoNumero;
             } catch (error) {
-                console.error("Error al refrescar número de pallet:", error);
+                console.error("Error en handleRefreshPalletNumber:", error);
                 if (!isSilent) {
                     showToast(error.message, 'error');
                     setRefreshState('error');
@@ -249,21 +226,7 @@
             }
         };
 
-        const RUTA_PSW_SKU = 'pswsku.txt'; // Define the path to the password file
 
-        const validatePassword = async (password) => {
-            try {
-                const url = `https://raw.githubusercontent.com/${USUARIO_GITHUB}/${REPO_NOMBRE}/main/${RUTA_PSW_SKU}?t=${new Date().getTime()}`;
-                const response = await fetch(url, { cache: "no-store" });
-                if (!response.ok) throw new Error('No se pudo cargar el archivo de contraseña.');
-                const storedPassword = (await response.text()).trim();
-                return password === storedPassword;
-            } catch (error) {
-                console.error("Error al validar contraseña:", error);
-                showToast(`Error al validar contraseña: ${error.message}`, 'error');
-                return false;
-            }
-        };
 
         const handleManualPalletUpdate = async () => {
             const newPalletInput = prompt("Ingrese el nuevo número de pallet:");
@@ -276,61 +239,50 @@
                 return;
             }
 
-            // Get the current pallet number from the file to compare
+            // Obtener el número de pallet actual de la base de datos para comparar
             let currentFilePalletNum = 0;
             try {
-                const url = `https://raw.githubusercontent.com/${USUARIO_GITHUB}/${REPO_NOMBRE}/main/${RUTA_LOTE_LOGISTICO}?t=${new Date().getTime()}`;
-                const response = await fetch(url, { cache: "no-store" });
-                if (!response.ok) throw new Error('No se pudo verificar el Nº de pallet actual.');
-                const text = await response.text();
-                currentFilePalletNum = parseInt(text.trim(), 10);
-                if (isNaN(currentFilePalletNum)) throw new Error('El archivo de pallet está corrupto.');
+                const { data, error } = await supabaseClient.rpc('get_max_pallet_number');
+                if (error) throw error;
+                currentFilePalletNum = data || 0;
             } catch (error) {
-                console.error("Error al obtener el número de pallet del archivo:", error);
-                showToast(`Error al obtener el número de pallet del archivo: ${error.message}`, 'error');
+                console.error("Error al obtener el número de pallet de la DB:", error);
+                showToast(`Error al obtener el número de pallet de la DB: ${error.message}`, 'error');
                 return;
             }
 
-            const currentDisplayedPalletNum = parseInt(numeroDePallet, 10);
+            const currentDisplayedPalletNum = parseInt(numeroDePallet, 10) -1; // El mostrado es el siguiente, comparamos con el último usado.
 
             if (newPalletNum <= currentFilePalletNum || newPalletNum <= currentDisplayedPalletNum) {
                 showToast(`El nuevo número de pallet (${newPalletNum}) debe ser mayor que el actual en archivo (${currentFilePalletNum}) y en pantalla (${currentDisplayedPalletNum}).`, 'error');
                 return;
             }
 
-            const passwordInput = prompt("Ingrese la clave para actualizar el número de pallet:");
-            if (passwordInput === null) return; // User cancelled
-
-            const isPasswordValid = await validatePassword(passwordInput);
-            if (!isPasswordValid) {
-                showToast("Clave incorrecta. No se puede actualizar el número de pallet.", 'error');
-                return;
-            }
-
-            // Acquire lock before updating the file
-            const lock = await acquireLock('manualPalletUpdate');
-            if (!lock.success) {
-                showToast(`No se pudo actualizar. ${lock.error}. Intente de nuevo.`, 'error');
-                return;
-            }
+            const confirmation = confirm(`¿Está seguro que desea forzar el número de pallet a ${newPalletNum}? Esta acción es irreversible.`);
+            if (!confirmation) return;
 
             try {
-                const updateSuccess = await updateLoteFile(newPalletNum);
-                if (updateSuccess) {
-                    setNumeroDePallet(newPalletNum + 1); // Set to next available number
-                    showToast(`Número de pallet actualizado manualmente a ${newPalletNum}.`, 'success');
-                    if (previewPdfUrl) {
-                        setPreviewPdfUrl(null);
-                        showToast('El Nº de pallet cambió. Por favor, genere una nueva vista previa.', 'info');
-                    }
-                } else {
-                    showToast("Fallo al actualizar el número de pallet manualmente.", 'error');
+                // Esta operación es delicada. Se podría implementar una función RPC en Supabase
+                // que inserte un registro "fantasma" con el nuevo número de pallet para forzar el contador.
+                // Por ejemplo, `crear_pallet_manual(numero_pallet, sku_fantasma, ...)`
+                // Por ahora, lo más seguro es pedir al usuario que refresque.
+                const { error } = await supabaseClient.rpc('force_set_pallet_number', { new_number: newPalletNum });
+
+                if (error) {
+                    console.error('Error en RPC force_set_pallet_number:', error);
+                    throw new Error("Fallo al actualizar el número de pallet manualmente en la DB.");
                 }
+
+                setNumeroDePallet(newPalletNum + 1);
+                showToast(`Número de pallet forzado a ${newPalletNum}. El siguiente es ${newPalletNum + 1}.`, 'success');
+                if (previewPdfUrl) {
+                    setPreviewPdfUrl(null);
+                    showToast('El Nº de pallet cambió. Por favor, genere una nueva vista previa.', 'info');
+                }
+
             } catch (error) {
                 console.error("Error en handleManualPalletUpdate:", error);
                 showToast(`Error al actualizar el número de pallet: ${error.message}`, 'error');
-            } finally {
-                await releaseLock();
             }
         };
 
@@ -346,92 +298,6 @@
 
             return () => clearInterval(interval);
         }, [numeroDePallet, previewPdfUrl]); // Dependencias para tener valores actualizados
-
-
-        const acquireLock = async (operationName) => {
-            const url = `https://api.github.com/repos/${USUARIO_GITHUB}/${REPO_NOMBRE}/contents/${LOCK_FILE_PATH}`;
-            let currentSha = null;
-            try {
-                const response = await fetch(`${url}?t=${new Date().getTime()}`, {
-                    headers: { 'Authorization': `token ${apiToken}` }, cache: 'no-store'
-                });
-
-                if (response.ok) {
-                    const fileData = await response.json();
-                    currentSha = fileData.sha;
-                    const content = atob(fileData.content);
-
-                    if (content && content.trim()) {
-                        const lock = JSON.parse(content);
-                        const isLockedByOther = lock.sessionId && lock.sessionId !== SESSION_ID;
-                        const isExpired = Date.now() - lock.timestamp > LOCK_TIMEOUT;
-
-                        if (isLockedByOther && !isExpired) {
-                            return { success: false, error: `Sistema bloqueado por otra sesión. Operación en curso: ${lock.operation || 'N/A'}` };
-                        }
-                    }
-                } else if (response.status !== 404) {
-                    throw new Error(`Error al leer el archivo de bloqueo: ${response.statusText}`);
-                }
-
-                const lockContent = { sessionId: SESSION_ID, timestamp: Date.now(), operation: operationName };
-                const updateResponse = await fetch(url, {
-                    method: 'PUT',
-                    headers: { 'Authorization': `token ${apiToken}`, 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        message: `Locking for operation: ${operationName}`,
-                        content: btoa(JSON.stringify(lockContent)),
-                        sha: currentSha,
-                    }),
-                });
-
-                if (!updateResponse.ok) throw new Error(`No se pudo adquirir el bloqueo: ${updateResponse.statusText}`);
-                
-                return { success: true };
-
-            } catch (error) {
-                if (error instanceof SyntaxError) {
-                    console.warn("lock.json contenía JSON inválido, se procederá a sobreescribir.");
-                    return { success: true };
-                }
-                console.error("Error en acquireLock:", error);
-                return { success: false, error: error.message };
-            }
-        };
-
-        const releaseLock = async () => {
-            const url = `https://api.github.com/repos/${USUARIO_GITHUB}/${REPO_NOMBRE}/contents/${LOCK_FILE_PATH}`;
-            try {
-                const response = await fetch(`${url}?t=${new Date().getTime()}`, {
-                    headers: { 'Authorization': `token ${apiToken}` }, cache: 'no-store'
-                });
-        
-                if (response.ok) {
-                    const fileData = await response.json();
-                    const content = atob(fileData.content);
-                    if (content) {
-                        const lock = JSON.parse(content);
-                        if (lock.sessionId && lock.sessionId !== SESSION_ID) {
-                            console.warn("Intento de liberar un bloqueo que no pertenece a esta sesión. Se omite.");
-                            return;
-                        }
-                    }
-
-                    const updateResponse = await fetch(url, {
-                        method: 'PUT',
-                        headers: { 'Authorization': `token ${apiToken}`, 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            message: 'Releasing lock',
-                            content: btoa(''),
-                            sha: fileData.sha,
-                        }),
-                    });
-                    if (!updateResponse.ok) console.error("Error al liberar el bloqueo, puede expirar automáticamente.");
-                }
-            } catch (error) {
-                console.error("Error en releaseLock:", error);
-            }
-        };
 
         // --- MODIFICACIÓN: SINCRONIZAR HORA CON INTERNET ---
         useEffect(() => {
@@ -460,50 +326,35 @@
             const loaderStatus = document.getElementById('loader-status');
             const loaderProgress = document.getElementById('loader-progress');
 
-            const fetchInitialData = async () => {
-                const url = `https://raw.githubusercontent.com/${USUARIO_GITHUB}/${REPO_NOMBRE}/main/${RUTA_LOTE_LOGISTICO}`;
-                try {
-                    const response = await fetch(url, { cache: "no-store" });
-                    if (!response.ok) throw new Error('No se pudo obtener el número de pallet desde GitHub.');
-                    const text = await response.text();
-                    const numeroBase = parseInt(text.trim(), 10);
-                    if (isNaN(numeroBase)) throw new Error('El contenido del archivo no es un número.');
-                    setNumeroDePallet(numeroBase + 1);
-                } catch (error) {
-                    console.error("Error al cargar número de pallet:", error);
-                    showToast(`Error: ${error.message}\nIngrese el número de pallet manualmente.`, 'error');
-                    setNumeroDePallet('');
-                    setIsPalletNumEditable(true);
-                }
-            };
-
             const fetchArticulos = async () => {
+                if (!supabaseClient) return;
                 try {
-                    // MODIFICADO: Se añade un parámetro de tiempo para evitar la caché
-                    const url = `https://raw.githubusercontent.com/${USUARIO_GITHUB}/${REPO_NOMBRE}/main/${RUTA_ARTICULOS_CSV}?t=${new Date().getTime()}`;
-                    const response = await fetch(url, { cache: "no-store" });
-                    if (!response.ok) throw new Error(`No se pudo cargar ${RUTA_ARTICULOS_CSV}`);
-                    const text = await response.text();
-                    const rows = text.split('\n').slice(1);
-                    const parsedArticulos = rows.map(row => {
-                        const [tipo_articulo, codigo_articulo, descripcionLarga, descripcionCorta] = row.split(';');
-                        return { 
-                            tipo: tipo_articulo?.trim().toUpperCase(), 
-                            sku: codigo_articulo?.trim(), 
-                            descripcionLarga: descripcionLarga?.trim(),
-                            descripcionCorta: descripcionCorta?.trim() 
-                        };
-                    }).filter(art => art.sku && art.descripcionLarga);
+                    const { data, error } = await supabaseClient
+                        .from('articulos')
+                        .select('tiposku, sku, descriciolarga, descripcioncorta');
+
+                    if (error) {
+                        console.error("Error fetching articulos:", error);
+                        throw new Error('No se pudo cargar la lista de artículos desde la base de datos.');
+                    }
+
+                    const parsedArticulos = data.map(item => ({
+                        tipo: item.tiposku?.trim().toUpperCase(),
+                        sku: item.sku?.trim(),
+                        descripcionLarga: item.descriciolarga?.trim(),
+                        descripcionCorta: item.descripcioncorta?.trim()
+                    })).filter(art => art.sku && art.descripcionLarga);
+                    
                     setArticulos(parsedArticulos);
                 } catch (error) {
-                    console.error(`Error loading ${RUTA_ARTICULOS_CSV}:`, error);
-                    showToast("Error al cargar la lista de artículos.", 'error');
+                    console.error("Error processing articulos:", error);
+                    showToast(error.message, 'error');
                 }
             };
 
             const loadingTasks = [
                 { status: "Inicializando...", duration: 300, progress: 20 },
-                { status: "Cargando número de pallet...", duration: 800, progress: 40, action: fetchInitialData },
+                { status: "Cargando número de pallet...", duration: 800, progress: 40, action: () => handleRefreshPalletNumber(true) },
                 { status: "Cargando lista de artículos...", duration: 800, progress: 70, action: fetchArticulos },
                 { status: "¡Listo!", duration: 500, progress: 100 }
             ];
@@ -552,99 +403,6 @@
                 loteInputRefs.current[lastLoteIndex].focus();
             }
         }, [lotesProduccion.length]);
-
-        const updateLoteFile = async (nuevoContenido) => {
-            const url = `https://api.github.com/repos/${USUARIO_GITHUB}/${REPO_NOMBRE}/contents/${RUTA_LOTE_LOGISTICO}`;
-            try {
-                const fileResponse = await fetch(url, { headers: { 'Authorization': `token ${apiToken}` } });
-                if (!fileResponse.ok) throw new Error(`Error ${fileResponse.status}: No se pudo obtener info del archivo de lotes.`);
-                const fileData = await fileResponse.json();
-                const putResponse = await fetch(url, {
-                    method: 'PUT',
-                    headers: { 'Authorization': `token ${apiToken}`, 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        message: `Actualizando pallet a ${nuevoContenido}`,
-                        content: btoa(String(nuevoContenido)),
-                        sha: fileData.sha,
-                    }),
-                });
-                if (!putResponse.ok) throw new Error(`Error ${putResponse.status} al guardar el número de pallet.`);
-                console.log(`Número de Pallet ${nuevoContenido} guardado correctamente en GitHub.`);
-                return true;
-            } catch (error) {
-                console.error("Error en updateLoteFile:", error);
-                showToast(`ERROR: No se pudo guardar el número de pallet.\n${error.message}`, 'error');
-                return false;
-            }
-        };
-
-        const appendToHistoryFile = async (lineaCsv) => {
-            const url = `https://api.github.com/repos/${USUARIO_GITHUB}/${REPO_NOMBRE}/contents/${RUTA_HISTORICO_CSV}`;
-            try {
-                let fileData;
-                let contenidoActual = "";
-                let sha = null;
-                const fileResponse = await fetch(url, { headers: { 'Authorization': `token ${apiToken}` } });
-                if (fileResponse.ok) {
-                    fileData = await fileResponse.json();
-                    contenidoActual = atob(fileData.content);
-                    sha = fileData.sha;
-                } else if (fileResponse.status !== 404) {
-                    throw new Error(`Error ${fileResponse.status}: No se pudo obtener info del archivo histórico.`);
-                }
-                const nuevoContenido = contenidoActual ? `${contenidoActual.trim()}\n${lineaCsv}` : lineaCsv;
-                const putResponse = await fetch(url, {
-                    method: 'PUT',
-                    headers: { 'Authorization': `token ${apiToken}`, 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        message: `Añadiendo pallet ${numeroDePallet} al histórico`,
-                        content: btoa(nuevoContenido),
-                        ...(sha && { sha }),
-                    }),
-                });
-                if (!putResponse.ok) throw new Error(`Error ${putResponse.status} al guardar en el histórico.`);
-                console.log("Registro añadido al histórico correctamente.");
-                return true;
-            } catch (error) {
-                console.error("Error en appendToHistoryFile:", error);
-                showToast(`ERROR: No se pudo guardar el registro en el histórico.\n${error.message}`, 'error');
-                return false;
-            }
-        };
-
-        const appendToNotesFile = async (lineaCsv) => {
-            const url = `https://api.github.com/repos/${USUARIO_GITHUB}/${REPO_NOMBRE}/contents/${RUTA_NOTAS_CSV}`;
-            try {
-                let fileData;
-                let contenidoActual = "";
-                let sha = null;
-                const fileResponse = await fetch(url, { headers: { 'Authorization': `token ${apiToken}` } });
-                if (fileResponse.ok) {
-                    fileData = await fileResponse.json();
-                    contenidoActual = atob(fileData.content);
-                    sha = fileData.sha;
-                } else if (fileResponse.status !== 404) {
-                    throw new Error(`Error ${fileResponse.status}: No se pudo obtener info del archivo de notas.`);
-                }
-                const nuevoContenido = contenidoActual ? `${contenidoActual.trim()}\n${lineaCsv}` : lineaCsv;
-                const putResponse = await fetch(url, {
-                    method: 'PUT',
-                    headers: { 'Authorization': `token ${apiToken}`, 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        message: `Añadiendo nota para pallet ${numeroDePallet}`,
-                        content: btoa(nuevoContenido),
-                        ...(sha && { sha }),
-                    }),
-                });
-                if (!putResponse.ok) throw new Error(`Error ${putResponse.status} al guardar en el archivo de notas.`);
-                console.log("Nota añadida al histórico correctamente.");
-                return true;
-            } catch (error) {
-                console.error("Error en appendToNotesFile:", error);
-                showToast(`ERROR: No se pudo guardar la nota.\n${error.message}`, 'error');
-                return false;
-            }
-        };
         
         const handleLoteProdChange = (index, value) => {
             const regex = /^\d*$/;
@@ -823,53 +581,37 @@
                 setIsSaving(false);
                 return;
             }
-            if (!apiToken) {
-                showToast("ERROR: Clave de API no disponible. No se puede guardar.", 'error');
-                setIsSaving(false);
-                return;
-            }
-
-            const lock = await acquireLock('generateLabel');
-            if (!lock.success) {
-                showToast(`No se pudo guardar. ${lock.error}. Intente de nuevo.`, 'error');
-                setIsSaving(false);
-                return;
-            }
 
             try {
-                const url = `https://raw.githubusercontent.com/${USUARIO_GITHUB}/${REPO_NOMBRE}/main/${RUTA_LOTE_LOGISTICO}?t=${new Date().getTime()}`;
-                const response = await fetch(url, { cache: "no-store" });
-                if (!response.ok) throw new Error('No se pudo verificar el último número de pallet.');
+                // Doble chequeo del número de pallet antes de guardar
+                const { data: maxPalletData, error: maxPalletError } = await supabaseClient.rpc('get_max_pallet_number');
+                if (maxPalletError) throw new Error('No se pudo verificar el último número de pallet en la DB.');
                 
-                const text = await response.text();
-                const ultimoPalletGuardado = parseInt(text.trim(), 10);
-
-                if (isNaN(ultimoPalletGuardado)) throw new Error('El contenido del archivo de pallet no es un número.');
+                const ultimoPalletGuardado = maxPalletData || 0;
 
                 if (palletNum <= ultimoPalletGuardado) {
                     const nuevoNumeroSugerido = ultimoPalletGuardado + 1;
                     showToast(`¡Conflicto! El Pallet ${palletNum} ya fue usado. Se actualizó al Nº ${nuevoNumeroSugerido}. Por favor, revise la nueva vista previa y guarde de nuevo.`, 'error');
                     setNumeroDePallet(nuevoNumeroSugerido);
-                    
-                    // Forzar regeneración de la vista previa con el número correcto
                     setTimeout(() => handleGeneratePreview(true), 100);
                     return; 
                 }
 
                 const data = getLabelData();
-                const lineaCsv = `${data.qrString};FALSE;`;
-                const historySaved = await appendToHistoryFile(lineaCsv);
-                if (!historySaved) throw new Error("Fallo al guardar en el histórico.");
+                
+                // Llamada a la función RPC para una inserción atómica
+                const { error: insertError } = await supabaseClient.rpc('crear_nuevo_pallet', {
+                    p_sku: data.sku,
+                    p_descripcion: data.descripcion,
+                    p_numero_pallet: data.palletId,
+                    p_lotes_produccion: data.lotes.join('#'),
+                    p_fecha_produccion: data.fechaProd,
+                    p_cantidad: parseFloat(data.cantidad.replace(',', '.')),
+                    p_unidad_medida: data.uom,
+                    p_observacion: data.observacion || null
+                });
 
-                if (data.observacion) {
-                    const sanitizedObservacion = data.observacion.replace(/;/g, ',').replace(/\n/g, ' ');
-                    const lineaNotas = `${data.sku};${data.palletId};${sanitizedObservacion}`;
-                    const notesSaved = await appendToNotesFile(lineaNotas);
-                    if (!notesSaved) throw new Error("Fallo al guardar la nota.");
-                }
-
-                const palletNumSaved = await updateLoteFile(palletNum);
-                if (!palletNumSaved) throw new Error("Fallo al actualizar el número de pallet. ¡CONTACTE A SOPORTE!");
+                if (insertError) throw insertError;
                 
                 showToast(`Pallet Nº ${palletNum} guardado correctamente.`, 'success');
                 const doc = new jsPDF('p', 'mm', 'a4');
@@ -931,7 +673,6 @@
             } catch (error) {
                 showToast(`ERROR CRÍTICO: ${error.message}`, 'error');
             } finally {
-                await releaseLock();
                 setIsSaving(false);
             }
         };
