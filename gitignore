@@ -1,0 +1,10 @@
+# Ignorar archivos de configuración que contienen secretos
+config.js
+
+# Ignorar archivos de dependencias de Node
+node_modules
+
+# Ignorar archivos de caché o de editor
+.vscode
+*.dat
+*.log
