@@ -1,11 +1,11 @@
 const fs = require('fs');
 
 // Estas variables de entorno deben estar configuradas en Vercel
-const supabaseUrl = process.env.SUPABASE_URL;
-const supabaseKey = process.env.SUPABASE_KEY;
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
 if (!supabaseUrl || !supabaseKey) {
-  console.error('Error: Las variables de entorno SUPABASE_URL y SUPABASE_KEY no están definidas.');
+  console.error('Error: Las variables de entorno NEXT_PUBLIC_SUPABASE_URL y NEXT_PUBLIC_SUPABASE_ANON_KEY no están definidas.');
   console.error('Asegúrate de haberlas configurado en Vercel.');
   process.exit(1);
 }
