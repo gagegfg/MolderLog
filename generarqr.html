@@ -9,8 +9,6 @@
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <!-- Carga de la configuración de Supabase -->
-    <script src="config.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
@@ -91,20 +89,23 @@
 <div id="root"></div>
 <div id="toast-container"></div>
 
+<script src="config.js"></script>
 <script type="text/babel">
     const { useState, useEffect, Fragment, useRef } = React;
     const { createRoot } = ReactDOM;
     const { jsPDF } = window.jspdf;
 
-    // Inicializa el cliente de Supabase. 
-    // Las variables SUPABASE_URL y SUPABASE_KEY vienen del archivo config.js
-    let supabaseClient = null;
-    try {
-        supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-    } catch (e) {
-        console.error("Error al inicializar Supabase. Revisa que config.js esté bien configurado.", e);
-        // Se mostrará un error en la pantalla de carga.
-    }
+    // =================================================================
+    // ### CONFIGURACIÓN DE SUPABASE - CARGADA DESDE config.js ###
+    // =================================================================
+    // Las variables SUPABASE_URL y SUPABASE_KEY se cargan desde config.js,
+    // un archivo que se genera en el build de Vercel o se crea
+    // manualmente para el desarrollo local.
+    // =================================================================
+
+    // Inicializa el cliente de Supabase.
+    const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
 
     const Toast = ({ message, type, onHide }) => {
         useEffect(() => {
@@ -315,9 +316,9 @@
             const loaderStatus = document.getElementById('loader-status');
             const loaderProgress = document.getElementById('loader-progress');
 
-            if (!supabaseClient) {
+            if (!supabaseClient || !SUPABASE_URL.startsWith('https')) {
                 if (loaderStatus) {
-                    loaderStatus.textContent = 'ERROR: Revisa la configuración de Supabase en config.js';
+                    loaderStatus.textContent = 'ERROR: Configura las claves de Supabase en el archivo HTML.';
                     loaderStatus.className = 'text-xl text-red-400 mb-4 [text-shadow:_1px_1px_2px_rgba(0,0,0,0.5)]';
                 }
                 if (loaderProgress) {
