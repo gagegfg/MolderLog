@@ -1,0 +1,898 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Molderil - Visualizador de Depósito 3D Paramétrico</title>
+    <!-- Librería para generar códigos QR -->
+    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js"></script>
+    <style>
+        /* Estilos generales y tema oscuro moderno */
+        :root {
+            --panel-bg: rgba(20, 20, 25, 0.8);
+            --text-color: #f0f0f0;
+            --highlight-color: #00aaff;
+            --border-color: rgba(255, 255, 255, 0.2);
+            --action-color: #2dd4bf;
+            --special-color: #f59e0b;
+        }
+        body { margin: 0; overflow: hidden; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #1a1a1a; }
+        canvas#render-canvas { display: block; touch-action: none; /* Previene scroll en touch */ }
+
+        /* Pantalla de carga estilo grillaqr.html con fondo.jpg */
+        #loader {
+            position: fixed; inset: 0;
+            display: flex; align-items: center; justify-content: center;
+            background-image: url('fondo.jpg'); /* FONDO AÑADIDO */
+            background-size: cover;
+            background-position: center;
+            z-index: 100; transition: opacity 0.5s ease-out;
+        }
+        .loader-overlay { /* Capa para oscurecer y desenfocar el fondo */
+            position: absolute;
+            inset: 0;
+            background-color: rgba(0, 0, 0, 0.5);
+            -webkit-backdrop-filter: blur(12px);
+            backdrop-filter: blur(12px);
+        }
+        .loader-panel {
+            position: relative; /* Para que esté por encima del overlay */
+            background: rgba(210, 180, 140, 0.2);
+            border: 1px solid rgba(210, 180, 140, 0.3);
+            padding: 2rem; border-radius: 0.75rem;
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+            width: 100%; max-width: 28rem; text-align: center;
+        }
+        .loader-panel img {
+            margin: 0 auto 1.5rem auto; height: 8rem;
+            filter: drop-shadow(2px 2px 4px rgba(0,0,0,0.4)) drop-shadow(-2px -2px 4px rgba(255,255,255,0.6));
+        }
+        #loader-status {
+            font-size: 1.25rem; color: white; margin-bottom: 1rem;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
+        }
+        .progress-bar-container {
+            width: 100%; background-color: rgba(255, 255, 255, 0.2);
+            border-radius: 9999px; height: 1rem;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+        #loader-progress {
+            background-color: #f59e0b; height: 100%;
+            border-radius: 9999px; transition: width 0.5s ease-in-out;
+        }
+
+        /* Contenedores de la interfaz de usuario */
+        .ui-container {
+            position: absolute; top: 0; padding: 15px;
+            display: flex; flex-direction: column; gap: 15px; max-width: 340px;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+        }
+        .ui-container.hidden { opacity: 0; pointer-events: none; }
+        .ui-container > * { pointer-events: auto; }
+        #left-panel { left: 0; }
+        #right-panel { right: 0; display: none; }
+
+        /* Paneles individuales de la UI con efecto "frosty" */
+        .ui-panel {
+            background: var(--panel-bg); color: var(--text-color);
+            border-radius: 12px; padding: 18px;
+            backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+            border: 1px solid var(--border-color);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+        }
+        .ui-panel h2 {
+            margin: 0 0 12px 0; border-bottom: 1px solid var(--border-color);
+            padding-bottom: 8px; font-size: 1.2em; color: var(--highlight-color);
+        }
+        .ui-panel p, .ui-panel li { margin: 8px 0; font-size: 14px; line-height: 1.5; }
+        
+        #search-input {
+            width: calc(100% - 22px); padding: 10px; border-radius: 8px;
+            border: 1px solid var(--border-color); background: rgba(0,0,0,0.3);
+            color: var(--text-color); font-size: 1em;
+        }
+        #search-result { color: #ffc107; font-weight: bold; margin-top: 8px; height: 20px; }
+        
+        #pallet-info p {
+            display: grid; grid-template-columns: 100px 1fr;
+            align-items: center; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 8px;
+        }
+        #pallet-info p span:first-child { font-weight: bold; color: #aaa; }
+        #pallet-info p span:last-child { text-align: right; word-break: break-word; }
+        #qr-container { text-align: center; margin: 10px 0; background: white; padding: 5px; border-radius: 8px; display: none; }
+        
+        /* Botón para ocultar UI */
+        #toggle-ui-button {
+            position: absolute; bottom: 15px; right: 15px;
+            width: 50px; height: 50px; border-radius: 50%;
+            background: var(--panel-bg); border: 1px solid var(--border-color);
+            color: var(--text-color); font-size: 24px; cursor: pointer;
+            display: flex; justify-content: center; align-items: center;
+            backdrop-filter: blur(10px);
+            z-index: 10;
+        }
+
+        /* Leyenda de colores */
+        #sku-legend { max-height: 150px; overflow-y: auto; padding-right: 10px; }
+        #sku-legend ul { list-style: none; padding: 0; margin: 0; }
+        #sku-legend li { display: flex; align-items: center; margin-bottom: 5px; }
+        .color-swatch { width: 15px; height: 15px; border-radius: 3px; margin-right: 10px; border: 1px solid #000; }
+
+        /* Botón genérico estilizado */
+        .styled-button {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            width: 100%;
+            text-align: center;
+            background: var(--highlight-color);
+            color: white; padding: 12px 10px; border-radius: 8px; text-decoration: none;
+            font-weight: bold;
+            margin-top: 10px;
+            font-size: 1em;
+            border: none;
+            cursor: pointer;
+        }
+        .styled-button.action { background: var(--action-color); }
+        .styled-button.special { background: var(--special-color); }
+        .styled-button svg { width: 20px; height: 20px; }
+
+        /* Controles de vista */
+        .view-controls {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+            margin-top: 10px;
+        }
+        .view-controls button {
+            background-color: rgba(255,255,255,0.1);
+            border: 1px solid var(--border-color);
+            color: var(--text-color);
+            padding: 8px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+    </style>
+</head>
+<body>
+    <div id="loader">
+        <div class="loader-overlay"></div>
+        <div class="loader-panel">
+            <img src="https://placehold.co/400x150/transparent/white?text=MOLDERIL&font=raleway" alt="Logo Molderil"/>
+            <p id="loader-status">Iniciando aplicación...</p>
+            <div class="progress-bar-container">
+                <div id="loader-progress" style="width: 0%"></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="left-panel" class="ui-container">
+        <div class="ui-panel">
+            <h2>Buscar Universal</h2>
+            <input type="text" id="search-input" placeholder="SKU, Pallet, Lote...">
+            <p id="search-result"></p>
+        </div>
+        <div class="ui-panel">
+            <h2>Controles</h2>
+            <p><strong>Flechas:</strong> Moverse</p>
+            <p><strong>Av/Re Pág:</strong> Subir/Bajar</p>
+            <p><strong>Ratón/Táctil:</strong> Orbitar/Zoom</p>
+            <div class="view-controls">
+                <button id="view-n">N</button>
+                <button id="view-e">E</button>
+                <button id="view-s">S</button>
+                <button id="view-w">W</button>
+            </div>
+            <button id="flythrough-button" class="styled-button special">
+                <span>Iniciar Tour Virtual</span>
+            </button>
+            <button id="refresh-button" class="styled-button action">
+                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                    <path fill-rule="evenodd" d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2z"></path>
+                    <path d="M8 4.466V.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384L8.41 4.658A.25.25 0 0 1 8 4.466"></path>
+                </svg>
+                <span>Refrescar y Reposicionar</span>
+            </button>
+            <a href="grillaqr.html" class="styled-button">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                    <path fill-rule="evenodd" d="M15 8a.5.5 0 0 0-.5-.5H2.707l3.147-3.146a.5.5 0 1 0-.708-.708l-4 4a.5.5 0 0 0 0 .708l4 4a.5.5 0 0 0 .708-.708L2.707 8.5H14.5A.5.5 0 0 0 15 8z"></path>
+                </svg>
+                <span>Trazabilidad de Lotes</span>
+            </a>
+        </div>
+         <div class="ui-panel" id="legend-panel" style="display: none;">
+            <h2>Leyenda de Colores</h2>
+            <div id="sku-legend"><ul></ul></div>
+        </div>
+    </div>
+
+    <div id="right-panel" class="ui-container">
+        <div class="ui-panel" id="pallet-info">
+            <h2 id="info-title">Detalles</h2>
+            <div id="qr-container">
+                <canvas id="qr-canvas"></canvas>
+            </div>
+            <p><span>Ubicación:</span> <span id="info-location"></span></p>
+            <p><span>ID Pallet:</span> <span id="info-pallet"></span></p>
+            <p><span>SKU:</span> <span id="info-sku"></span></p>
+            <p><span>Descripción:</span> <span id="info-desc"></span></p>
+            <p><span>Cantidad:</span> <span id="info-qty"></span></p>
+            <p><span>Lotes:</span> <span id="info-lotes"></span></p>
+            <p><span>F. Prod:</span> <span id="info-fecha"></span></p>
+        </div>
+    </div>
+
+    <button id="toggle-ui-button" title="Ocultar/Mostrar UI">👁️</button>
+
+    <canvas id="render-canvas"></canvas>
+
+    <script type="importmap">
+    { "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.164.1/examples/jsm/"
+    } }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        
+        // --- CONFIGURACIÓN DE LA APLICACIÓN ---
+        const GITHUB_USER = 'gagegfg';
+        const GITHUB_REPO = 'Molderil_ListaEmpaque';
+        const BASE_URL = `https://raw.githubusercontent.com/${GITHUB_USER}/${GITHUB_REPO}/main/`;
+
+        // --- ESTADO GLOBAL DE LA APLICACIÓN ---
+        let scene, camera, renderer, controls, clock;
+        let hoveredObject = null;
+        let selectedObject = null;
+        let highlightedObjects = [];
+        let isAnimating = false; // Controla animaciones de cámara
+        let flyThroughPath, flyThroughProgress;
+        const palletsInScene = new Map();
+        const skuColorMap = new Map();
+        const keyboardState = {};
+        let worldBounds = new THREE.Box3();
+        const initialCameraPosition = new THREE.Vector3(40, 30, 50);
+
+        // --- CONTENEDORES DE DATOS CARGADOS ---
+        const racksData = new Map();
+        const inventoryData = new Map();
+        const lotesData = new Map();
+        const articulosData = new Map();
+        
+        // --- MATERIALES Y GEOMETRÍAS REUTILIZABLES PARA OPTIMIZACIÓN ---
+        const rackPostMaterial = new THREE.MeshStandardMaterial({ color: 0x4d6a93, roughness: 0.8, metalness: 0.2 });
+        const rackBeamMaterial = new THREE.MeshStandardMaterial({ color: 0xf59e0b, roughness: 0.8, metalness: 0.2 });
+        const emptySlotMaterial = new THREE.MeshStandardMaterial({ color: 0x22c55e, transparent: true, opacity: 0.15 });
+        const highlightMaterial = new THREE.MeshStandardMaterial({ color: 0x00aaff, emissive: 0x00aaff, emissiveIntensity: 0.8, toneMapped: false });
+        const lineMaterial = new THREE.LineBasicMaterial({ color: 0x000000, linewidth: 1 });
+        let palletBaseMaterial;
+
+        // --- ELEMENTOS DEL DOM ---
+        const loaderUI = document.getElementById('loader');
+        const loaderStatus = document.getElementById('loader-status');
+        const loaderProgress = document.getElementById('loader-progress');
+        const leftPanel = document.getElementById('left-panel');
+        const rightPanel = document.getElementById('right-panel');
+        const legendPanel = document.getElementById('legend-panel');
+        const searchInput = document.getElementById('search-input');
+        const searchResult = document.getElementById('search-result');
+
+        // --- FUNCIÓN PARA ACTUALIZAR LA BARRA DE PROGRESO ---
+        function updateLoader(status, percentage) {
+            loaderStatus.textContent = status;
+            loaderProgress.style.width = `${percentage}%`;
+        }
+
+        // --- FUNCIÓN PRINCIPAL DE INICIALIZACIÓN ---
+        async function init() {
+            clock = new THREE.Clock();
+            
+            updateLoader('Inicializando motor 3D...', 10);
+            setupScene();
+            setupLights();
+            setupControls();
+            
+            try {
+                updateLoader('Descargando archivos de datos...', 25);
+                await Promise.all([
+                    loadCSV('definicion_estanterias.csv', parseRacks, racksData),
+                    loadCSV('inventario_ubicaciones.csv', parseInventory, inventoryData),
+                    loadCSV('detallelotes.csv', parseLotes, lotesData),
+                    loadCSV('articulos.csv', parseArticulos, articulosData)
+                ]);
+                
+                updateLoader('Procesando texturas...', 75);
+                createTextures();
+                
+                updateLoader('Construyendo depósito...', 90);
+                buildWarehouse();
+                populateLegend();
+                setupInteractions();
+                
+                updateLoader('¡Listo!', 100);
+                setTimeout(() => {
+                    loaderUI.style.opacity = '0';
+                    setTimeout(() => {
+                        loaderUI.style.display = 'none';
+                        leftPanel.style.display = 'flex';
+                    }, 500);
+                }, 500);
+
+                animate();
+            } catch (error) {
+                console.error("Error crítico durante la inicialización:", error);
+                updateLoader('Error de Carga', 100);
+                loaderProgress.style.backgroundColor = '#ef4444';
+                loaderStatus.innerHTML = `No se pudo cargar.<br><span style="font-size: 0.8em; color: #ff8888;">${error.message}</span>`;
+            }
+        }
+
+        // --- CONFIGURACIÓN DE LA ESCENA Y RENDERIZADO THREE.JS ---
+        function setupScene() {
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0xdedede);
+
+            camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 2000);
+            camera.position.copy(initialCameraPosition);
+
+            renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('render-canvas'), antialias: true, powerPreference: "high-performance" });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            renderer.toneMapping = THREE.LinearToneMapping;
+            renderer.toneMappingExposure = 1.0;
+        }
+
+        function setupLights() {
+            scene.add(new THREE.AmbientLight(0xffffff, 1.2)); 
+            const hemiLight = new THREE.HemisphereLight(0xffffff, 0x888888, 1.5);
+            hemiLight.position.set(0, 50, 0);
+            scene.add(hemiLight);
+
+            const dirLight = new THREE.DirectionalLight(0xffffff, 2.0);
+            dirLight.position.set(-50, 60, 40);
+            dirLight.castShadow = true;
+            dirLight.shadow.camera.top = 80;
+            dirLight.shadow.camera.bottom = -80;
+            dirLight.shadow.camera.left = -100;
+            dirLight.shadow.camera.right = 100;
+            dirLight.shadow.mapSize.width = 4096;
+            dirLight.shadow.mapSize.height = 4096;
+            dirLight.shadow.bias = -0.002;
+            scene.add(dirLight);
+        }
+
+        function setupControls() {
+            controls = new OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+            controls.minDistance = 2;
+            controls.maxDistance = 150;
+            controls.maxPolarAngle = Math.PI / 1.5;
+            controls.target.set(0, 3, 0);
+        }
+
+        // --- LÓGICA DE CARGA Y PARSEO DE DATOS CSV ---
+        async function loadCSV(path, parser, dataMap) {
+            const url = `${BASE_URL}${path}?t=${new Date().getTime()}`;
+            const response = await fetch(url);
+            if (!response.ok) throw new Error(`No se pudo cargar ${path}`);
+            const text = await response.text();
+            const rows = text.trim().split('\n').slice(1);
+            rows.forEach(row => parser(row.trim(), dataMap));
+        }
+
+        function parseRacks(row, map) {
+            const [id, x, z, levels, cols, w, h, d, p, rotY] = row.split(';');
+            if (id) map.set(id, {
+                x: parseFloat(x), z: parseFloat(z), levels: parseInt(levels),
+                columns: parseInt(cols), slotWidth: parseFloat(w), slotHeight: parseFloat(h),
+                slotDepth: parseFloat(d), depthPositions: parseInt(p) || 1, rotationY: parseFloat(rotY) || 0
+            });
+        }
+        function parseInventory(row, map) {
+            const [locationId, sku, palletId] = row.split(';');
+            if (locationId) map.set(locationId.trim(), { sku: sku.trim(), palletId: palletId.trim() });
+        }
+        function parseLotes(row, map) {
+            const [sku, desc, pallet, lotes, fecha, qty, uom] = row.split(';');
+            if (pallet) map.set(pallet.trim(), { sku, lotes, fecha, cantidad: qty, uom });
+        }
+        function parseArticulos(row, map) {
+            const [tipo, sku, descLarga, descCorta] = row.split(';');
+            if (sku) map.set(sku.trim(), { desc: (descCorta || descLarga || '').trim() });
+        }
+        
+        // --- LÓGICA DE CONSTRUCCIÓN PARAMÉTRICA DEL DEPÓSITO ---
+        function buildWarehouse() {
+            const mainGroup = new THREE.Group();
+            for (const [id, rackDef] of racksData.entries()) {
+                const rackGroup = createRack(rackDef);
+                rackGroup.position.set(rackDef.x, 0, rackDef.z);
+                rackGroup.rotation.y = THREE.MathUtils.degToRad(rackDef.rotationY);
+                mainGroup.add(rackGroup);
+
+                for (let l = 1; l <= rackDef.levels; l++) {
+                    for (let c = 1; c <= rackDef.columns; c++) {
+                        for (let p = 1; p <= rackDef.depthPositions; p++) {
+                            const locationId = `${id}-${l}-${c}-${p}`;
+                            const pos = calculateSlotPosition(rackDef, l, c, p);
+                            
+                            const palletData = inventoryData.get(locationId);
+                            let mesh;
+                            if (palletData) {
+                                mesh = createPallet(palletData, locationId);
+                                palletsInScene.set(palletData.palletId, mesh);
+                            } else {
+                                mesh = createEmptySlot(rackDef, locationId);
+                            }
+                            mesh.position.copy(pos);
+                            rackGroup.add(mesh);
+                        }
+                    }
+                }
+            }
+            scene.add(mainGroup);
+            
+            worldBounds.setFromObject(mainGroup, true).expandByScalar(20);
+            
+            const floorSize = Math.max(worldBounds.getSize(new THREE.Vector3()).x, worldBounds.getSize(new THREE.Vector3()).z) + 20;
+            const textureLoader = new THREE.TextureLoader();
+            const floorTexture = textureLoader.load('fondo.jpg');
+            const floor = new THREE.Mesh(
+                new THREE.PlaneGeometry(floorSize, floorSize),
+                new THREE.MeshStandardMaterial({ 
+                    color: 0xcccccc, map: floorTexture, roughness: 0.9, metalness: 0.1
+                })
+            );
+            floor.rotation.x = -Math.PI / 2;
+            floor.position.y = -0.01;
+            floor.receiveShadow = true;
+            scene.add(floor);
+
+            const wallMaterial = new THREE.MeshStandardMaterial({ color: 0xe0e0e0, side: THREE.BackSide, roughness: 1.0 });
+            const warehouseBox = new THREE.Mesh(new THREE.BoxGeometry(floorSize, 40, floorSize), wallMaterial);
+            warehouseBox.position.y = 19.9;
+            scene.add(warehouseBox);
+
+            createFlyThroughPath();
+        }
+        
+        // --- FUNCIÓN DE CONSTRUCCIÓN DE ESTANTERÍAS (REFACTORIZADA) ---
+        function createRack(def) {
+            const rack = new THREE.Group();
+            const postGeo = new THREE.BoxGeometry(0.12, def.slotHeight * def.levels, 0.12);
+            const beamZGeo = new THREE.BoxGeometry(0.12, 0.1, def.slotDepth); // Viga de soporte en profundidad
+
+            // 1. Matriz de Postes Verticales
+            for (let c = 0; c <= def.columns; c++) {
+                for (let p = 0; p <= def.depthPositions; p++) {
+                    const post = new THREE.Mesh(postGeo, rackPostMaterial);
+                    post.position.set(
+                        c * def.slotWidth,
+                        (def.slotHeight * def.levels) / 2,
+                        (p - def.depthPositions / 2) * def.slotDepth
+                    );
+                    post.castShadow = true;
+                    rack.add(post);
+                }
+            }
+
+            // 2. Vigas de Soporte (en profundidad)
+            for (let l = 1; l <= def.levels; l++) {
+                const yPos = (l - 1) * def.slotHeight;
+                for (let c = 0; c < def.columns; c++) {
+                     for (let p = 0; p < def.depthPositions; p++) {
+                        const xPos = c * def.slotWidth;
+                        const zPos = (p - (def.depthPositions - 1) / 2) * def.slotDepth;
+
+                        const supportRail1 = new THREE.Mesh(beamZGeo, rackBeamMaterial);
+                        supportRail1.position.set(xPos, yPos, zPos);
+                        supportRail1.castShadow = true;
+                        rack.add(supportRail1);
+
+                        const supportRail2 = new THREE.Mesh(beamZGeo, rackBeamMaterial);
+                        supportRail2.position.set(xPos + def.slotWidth, yPos, zPos);
+                        supportRail2.castShadow = true;
+                        rack.add(supportRail2);
+                     }
+                }
+            }
+            return rack;
+        }
+
+        function calculateSlotPosition(def, level, column, depthPos) {
+            const x = (column - 0.5) * def.slotWidth;
+            const y = (level - 1) * def.slotHeight;
+            const z = (depthPos - 0.5 - def.depthPositions / 2) * def.slotDepth;
+            return new THREE.Vector3(x, y, z);
+        }
+
+        function createPallet(data, locationId) {
+            const palletGroup = new THREE.Group();
+            
+            const boxGeo = new THREE.BoxGeometry(1.2, 1.2, 1.0);
+            const boxMaterial = new THREE.MeshStandardMaterial({ color: getSkuColor(data.sku), roughness: 0.7 });
+            const box = new THREE.Mesh(boxGeo, boxMaterial.clone());
+            box.position.y = 0.15 + 1.2/2;
+            box.castShadow = true;
+            box.receiveShadow = true;
+
+            const baseGeo = new THREE.BoxGeometry(1.2, 0.15, 1.0);
+            const base = new THREE.Mesh(baseGeo, palletBaseMaterial);
+            base.position.y = 0.15/2;
+            base.castShadow = true;
+            base.receiveShadow = true;
+            
+            const boxEdges = new THREE.LineSegments(new THREE.EdgesGeometry(boxGeo), lineMaterial);
+            boxEdges.position.copy(box.position);
+            const baseEdges = new THREE.LineSegments(new THREE.EdgesGeometry(baseGeo), lineMaterial);
+            baseEdges.position.copy(base.position);
+
+            palletGroup.add(box, base, boxEdges, baseEdges);
+
+            palletGroup.userData = { isPallet: true, ...data, locationId };
+            palletGroup.userData.originalMaterial = box.material;
+            return palletGroup;
+        }
+
+        function createEmptySlot(def, locationId) {
+            const slotGeo = new THREE.BoxGeometry(def.slotWidth * 0.9, def.slotHeight * 0.8, def.slotDepth * 0.9);
+            const emptySlot = new THREE.Mesh(slotGeo, emptySlotMaterial.clone());
+            emptySlot.position.y = (def.slotHeight * 0.8) / 2 + 0.15;
+            emptySlot.userData = { isEmptySlot: true, locationId };
+            emptySlot.userData.originalMaterial = emptySlot.material;
+            return emptySlot;
+        }
+
+        // --- GESTIÓN DE INTERACTIVIDAD Y UI ---
+        function setupInteractions() {
+            const raycaster = new THREE.Raycaster();
+            const mouse = new THREE.Vector2();
+            
+            function onPointerMove(event) {
+                if (event.pointerType === 'touch' && event.touches.length > 1) return;
+                mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+                mouse.y = - (event.clientY / window.innerHeight) * 2 + 1;
+                raycaster.setFromCamera(mouse, camera);
+
+                const intersects = raycaster.intersectObjects(scene.children, true);
+                let foundObject = null;
+                if (intersects.length > 0) {
+                     for(const intersect of intersects) {
+                         if (intersect.object.parent?.userData.isPallet) {
+                            foundObject = intersect.object.parent;
+                            break;
+                         }
+                         if (intersect.object.userData.isEmptySlot) {
+                             foundObject = intersect.object;
+                             break;
+                         }
+                     }
+                }
+                handleHover(foundObject);
+            }
+            function onClick() { handleClick(hoveredObject); }
+            
+            window.addEventListener('pointermove', onPointerMove);
+            window.addEventListener('click', onClick);
+
+            window.addEventListener('keydown', (event) => { keyboardState[event.code] = true; });
+            window.addEventListener('keyup', (event) => { keyboardState[event.code] = false; });
+            searchInput.addEventListener('change', (e) => searchAndFocus(e.target.value.trim()));
+
+            document.getElementById('toggle-ui-button').addEventListener('click', () => {
+                leftPanel.classList.toggle('hidden');
+                rightPanel.classList.toggle('hidden');
+            });
+            
+            document.getElementById('refresh-button').addEventListener('click', (e) => {
+                e.preventDefault();
+                window.location.reload(true);
+            });
+
+            // Vistas Cardinales y Tour
+            setupViewControls();
+        }
+        
+        function handleKeyboardInput(deltaTime) {
+            if (isAnimating) return; // No mover si hay otra animación en curso
+            const moveSpeed = 20 * deltaTime;
+            const moveVector = new THREE.Vector3(0, 0, 0);
+
+            if (keyboardState['ArrowUp'] || keyboardState['KeyW']) moveVector.z -= 1;
+            if (keyboardState['ArrowDown'] || keyboardState['KeyS']) moveVector.z += 1;
+            if (keyboardState['ArrowLeft'] || keyboardState['KeyA']) moveVector.x -= 1;
+            if (keyboardState['ArrowRight'] || keyboardState['KeyD']) moveVector.x += 1;
+            if (keyboardState['PageUp'] || keyboardState['KeyE']) moveVector.y += 1;
+            if (keyboardState['PageDown'] || keyboardState['KeyQ']) moveVector.y -= 1;
+
+            if (moveVector.lengthSq() > 0) {
+                moveVector.normalize().multiplyScalar(moveSpeed);
+                moveVector.applyQuaternion(camera.quaternion);
+                
+                camera.position.add(moveVector);
+                controls.target.add(moveVector);
+            }
+        }
+        
+        function clearHighlights() {
+            highlightedObjects.forEach(obj => restoreMaterial(obj));
+            highlightedObjects = [];
+            if(selectedObject) {
+                restoreMaterial(selectedObject);
+                selectedObject = null;
+            }
+        }
+
+        function restoreMaterial(object) {
+            if (!object) return;
+            const mat = object.userData.originalMaterial;
+            if (object.userData.isPallet) object.children[0].material = mat;
+            else if (object.userData.isEmptySlot) object.material = mat;
+        }
+
+        function handleHover(object) {
+            if (hoveredObject === object) return;
+            if (hoveredObject && !highlightedObjects.includes(hoveredObject) && hoveredObject !== selectedObject) {
+                restoreMaterial(hoveredObject);
+            }
+            hoveredObject = object;
+            if (hoveredObject && !highlightedObjects.includes(hoveredObject) && hoveredObject !== selectedObject) {
+                 if (hoveredObject.userData.isPallet) hoveredObject.children[0].material = highlightMaterial;
+                 else if (hoveredObject.userData.isEmptySlot) hoveredObject.material = highlightMaterial;
+            }
+        }
+        
+        function handleClick(object) {
+            if (isAnimating) return;
+            clearHighlights();
+            if (object) {
+                selectedObject = object;
+                if (selectedObject.userData.isPallet) {
+                    selectedObject.children[0].material = highlightMaterial;
+                    updateInfoPanel(selectedObject.userData);
+                } else if (selectedObject.userData.isEmptySlot) {
+                    selectedObject.material = highlightMaterial;
+                    updateInfoPanel(selectedObject.userData);
+                }
+                const targetPosition = new THREE.Vector3();
+                selectedObject.getWorldPosition(targetPosition);
+                animateCameraTo({target: targetPosition});
+            } else {
+                rightPanel.style.display = 'none';
+            }
+        }
+
+        function updateInfoPanel(data) {
+            if (data.isPallet) {
+                const loteInfo = lotesData.get(data.palletId) || {};
+                const artInfo = articulosData.get(data.sku) || {};
+                
+                const palletId = data.palletId || 'N/A';
+                const sku = data.sku || 'N/A';
+                const desc = artInfo.desc || 'Descripción no encontrada';
+                const qty = loteInfo.cantidad || 'N/A';
+                const uom = loteInfo.uom || '';
+                const lotes = loteInfo.lotes || 'N/A';
+                const fecha = loteInfo.fecha || 'N/A';
+
+                document.getElementById('info-title').textContent = `Pallet: ${palletId}`;
+                document.getElementById('info-location').textContent = data.locationId;
+                document.getElementById('info-pallet').textContent = palletId;
+                document.getElementById('info-sku').textContent = sku;
+                document.getElementById('info-desc').textContent = desc;
+                document.getElementById('info-qty').textContent = `${qty} ${uom}`;
+                document.getElementById('info-lotes').textContent = lotes.replace(/#/g, ', ');
+                document.getElementById('info-fecha').textContent = fecha;
+                
+                const cantidadParaQR = (qty !== 'N/A') ? qty.replace(',', '.') : '';
+                const qrString = [ sku, desc, palletId, lotes, fecha, cantidadParaQR, uom ].join(';');
+                QRCode.toCanvas(document.getElementById('qr-canvas'), qrString, { width: 150, margin: 1 });
+                document.getElementById('qr-container').style.display = 'block';
+
+            } else if (data.isEmptySlot) {
+                document.getElementById('info-title').textContent = `Ubicación Vacía`;
+                document.getElementById('info-location').textContent = data.locationId;
+                ['pallet', 'sku', 'desc', 'qty', 'lotes', 'fecha'].forEach(id => {
+                    document.getElementById(`info-${id}`).textContent = '---';
+                });
+                document.getElementById('qr-container').style.display = 'none';
+            }
+            rightPanel.style.display = 'block';
+        }
+        
+        function searchAndFocus(searchTerm) {
+            clearHighlights();
+            searchResult.textContent = '';
+            if (!searchTerm) return;
+            
+            const term = searchTerm.toLowerCase();
+            const foundPallets = [];
+
+            for (const pallet of palletsInScene.values()) {
+                const loteInfo = lotesData.get(pallet.userData.palletId) || {};
+                const skuMatch = pallet.userData.sku.toLowerCase().includes(term);
+                const palletIdMatch = pallet.userData.palletId.toLowerCase().includes(term);
+                const lotesMatch = (loteInfo.lotes || '').toLowerCase().includes(term);
+
+                if (skuMatch || palletIdMatch || lotesMatch) {
+                    foundPallets.push(pallet);
+                }
+            }
+
+            if (foundPallets.length === 0) {
+                searchResult.textContent = 'No se encontraron pallets.';
+            } else if (foundPallets.length === 1) {
+                const pallet = foundPallets[0];
+                handleClick(pallet);
+                searchResult.textContent = `Encontrado: ${pallet.userData.locationId}`;
+            } else {
+                searchResult.textContent = `${foundPallets.length} pallets encontrados.`;
+                foundPallets.forEach(pallet => {
+                    if (pallet.userData.isPallet) {
+                        pallet.children[0].material = highlightMaterial;
+                    }
+                    highlightedObjects.push(pallet);
+                });
+            }
+        }
+        
+        function animateCameraTo({position, target}) {
+            if (isAnimating) return;
+            isAnimating = true;
+            controls.enabled = false;
+
+            const startPos = camera.position.clone();
+            const endPos = position;
+            const startTarget = controls.target.clone();
+            const endTarget = target;
+
+            let t = 0;
+            function animate() {
+                t = Math.min(t + clock.getDelta() * 0.7, 1);
+                const easedT = 0.5 - 0.5 * Math.cos(t * Math.PI);
+                
+                if (endPos) camera.position.lerpVectors(startPos, endPos, easedT);
+                if (endTarget) controls.target.lerpVectors(startTarget, endTarget, easedT);
+
+                if (t < 1) {
+                    requestAnimationFrame(animate);
+                } else {
+                    if (endTarget) controls.target.copy(endTarget);
+                    isAnimating = false;
+                    controls.enabled = true;
+                }
+            }
+            animate();
+        }
+        
+        // --- NUEVAS FUNCIONES DE VISTAS Y TOUR ---
+        function setupViewControls() {
+            const center = worldBounds.getCenter(new THREE.Vector3());
+            const size = worldBounds.getSize(new THREE.Vector3());
+            const maxDim = Math.max(size.x, size.z) * 0.8;
+
+            document.getElementById('view-n').addEventListener('click', () => {
+                animateCameraTo({ position: new THREE.Vector3(center.x, maxDim, center.z - maxDim), target: center });
+            });
+            document.getElementById('view-s').addEventListener('click', () => {
+                animateCameraTo({ position: new THREE.Vector3(center.x, maxDim, center.z + maxDim), target: center });
+            });
+            document.getElementById('view-e').addEventListener('click', () => {
+                animateCameraTo({ position: new THREE.Vector3(center.x + maxDim, maxDim, center.z), target: center });
+            });
+            document.getElementById('view-w').addEventListener('click', () => {
+                animateCameraTo({ position: new THREE.Vector3(center.x - maxDim, maxDim, center.z), target: center });
+            });
+            document.getElementById('flythrough-button').addEventListener('click', startFlyThrough);
+        }
+
+        function createFlyThroughPath() {
+             const center = worldBounds.getCenter(new THREE.Vector3());
+             const size = worldBounds.getSize(new THREE.Vector3());
+             const p1 = new THREE.Vector3(worldBounds.min.x, 10, worldBounds.min.z);
+             const p2 = new THREE.Vector3(worldBounds.max.x, 10, worldBounds.min.z);
+             const p3 = new THREE.Vector3(worldBounds.max.x, 15, worldBounds.max.z);
+             const p4 = new THREE.Vector3(worldBounds.min.x, 15, worldBounds.max.z);
+             flyThroughPath = new THREE.CatmullRomCurve3([p1,p2,p3,p4], true);
+        }
+
+        function startFlyThrough() {
+            if (isAnimating) return;
+            isAnimating = true;
+            controls.enabled = false;
+            flyThroughProgress = 0;
+            searchResult.textContent = "Tour virtual en progreso...";
+        }
+
+        // --- FUNCIONES DE UTILIDAD ---
+        function populateLegend() {
+            const legendList = document.querySelector("#sku-legend ul");
+            if (!legendList) return;
+            const sortedSkus = [...skuColorMap.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+            
+            for (const [sku, color] of sortedSkus) {
+                const listItem = document.createElement('li');
+                const swatch = document.createElement('div');
+                swatch.className = 'color-swatch';
+                swatch.style.backgroundColor = `#${color.getHexString()}`;
+                listItem.appendChild(swatch);
+                listItem.append(sku);
+                legendList.appendChild(listItem);
+            }
+            legendPanel.style.display = 'block';
+        }
+
+        function getSkuColor(sku) {
+            if (skuColorMap.has(sku)) return skuColorMap.get(sku);
+            let hash = 0;
+            for (let i = 0; i < sku.length; i++) {
+                hash = sku.charCodeAt(i) + ((hash << 5) - hash);
+            }
+            const color = new THREE.Color().setHSL((hash % 360) / 360, 0.85, 0.7);
+            skuColorMap.set(sku, color);
+            return color;
+        }
+
+        function createTextures() {
+            const canvas = document.createElement('canvas'); canvas.width = 256; canvas.height = 256;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#c2a385'; ctx.fillRect(0, 0, 256, 256);
+            ctx.strokeStyle = '#a18465'; ctx.lineWidth = 2;
+            for (let i = 0; i < 20; i++) {
+                ctx.beginPath();
+                ctx.moveTo(Math.random() * 256, -10);
+                ctx.bezierCurveTo(128 + (Math.random()-0.5)*100, 85, 128 + (Math.random()-0.5)*100, 170, Math.random() * 256, 266);
+                ctx.stroke();
+            }
+            palletBaseMaterial = new THREE.MeshStandardMaterial({ map: new THREE.CanvasTexture(canvas) });
+        }
+        
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+        window.addEventListener('resize', onWindowResize);
+
+        // --- BUCLE DE ANIMACIÓN ---
+        function animate() {
+            requestAnimationFrame(animate);
+            const deltaTime = clock.getDelta();
+            
+            if (isAnimating && flyThroughProgress !== undefined) {
+                 flyThroughProgress += deltaTime * 0.03; // Velocidad del tour
+                 if (flyThroughProgress >= 1) {
+                     flyThroughProgress = 0;
+                     isAnimating = false;
+                     controls.enabled = true;
+                     searchResult.textContent = "";
+                 }
+                 const pos = flyThroughPath.getPointAt(flyThroughProgress);
+                 camera.position.copy(pos);
+                 
+                 const lookAtPos = flyThroughPath.getPointAt((flyThroughProgress + 0.01) % 1);
+                 camera.lookAt(lookAtPos);
+                 controls.target.copy(lookAtPos);
+            } else {
+                handleKeyboardInput(deltaTime);
+            }
+            
+            camera.position.clamp(worldBounds.min, worldBounds.max);
+
+            controls.update(deltaTime);
+            renderer.render(scene, camera);
+        }
+
+        init();
+    </script>
+</body>
+</html>
