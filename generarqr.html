@@ -9,6 +9,8 @@
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <!-- Carga de la configuración de Supabase -->
+    <script src="config.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
@@ -94,16 +96,15 @@
     const { createRoot } = ReactDOM;
     const { jsPDF } = window.jspdf;
 
-    // =================================================================
-    // ### CONFIGURACIÓN: SUPABASE ###
-    // =================================================================
-    // --- Configuración de Supabase ---
-    // Reemplaza con la URL y la clave anónima de tu proyecto de Supabase.
-    // Para Vercel, estas se configurarán como variables de entorno.
-    const SUPABASE_URL = 'PON_AQUI_TU_SUPABASE_URL';
-    const SUPABASE_KEY = 'PON_AQUI_TU_SUPABASE_ANON_KEY';
-    const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-    // =================================================================
+    // Inicializa el cliente de Supabase. 
+    // Las variables SUPABASE_URL y SUPABASE_KEY vienen del archivo config.js
+    let supabaseClient = null;
+    try {
+        supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    } catch (e) {
+        console.error("Error al inicializar Supabase. Revisa que config.js esté bien configurado.", e);
+        // Se mostrará un error en la pantalla de carga.
+    }
 
     const Toast = ({ message, type, onHide }) => {
         useEffect(() => {
@@ -175,14 +176,13 @@
         const [observacion, setObservacion] = useState('');
         const articuloInputRef = useRef(null);
         const loteInputRefs = useRef([]);
-        const [refreshState, setRefreshState] = useState('idle'); // idle, loading, error, success
+        const [refreshState, setRefreshState] = useState('idle');
         
         const handleRefreshPalletNumber = async (isSilent = false) => {
             if (!supabaseClient) return;
             if (!isSilent) setRefreshState('loading');
             
             try {
-                // Llama a una función en la DB para obtener el máximo número de pallet
                 const { data, error } = await supabaseClient.rpc('get_max_pallet_number');
 
                 if (error) {
@@ -190,12 +190,10 @@
                     throw new Error('No se pudo verificar el Nº de pallet desde la DB.');
                 }
 
-                const numeroBase = data || 0; // Si la tabla está vacía, devuelve null.
-                
+                const numeroBase = data || 0;
                 const proximoNumero = numeroBase + 1;
                 const numeroActual = parseInt(numeroDePallet, 10);
 
-                // Si el número actual está vacío (primera carga) o es diferente, lo actualiza.
                 if (!numeroActual || numeroActual !== proximoNumero) {
                     setNumeroDePallet(proximoNumero);
                     if (!isSilent) {
@@ -220,17 +218,15 @@
                 if (!isSilent) {
                     showToast(error.message, 'error');
                     setRefreshState('error');
-                    setTimeout(() => setRefreshState('idle'), 3000); // Reset error state after 3s
+                    setTimeout(() => setRefreshState('idle'), 3000);
                 }
                 return null;
             }
         };
 
-
-
         const handleManualPalletUpdate = async () => {
             const newPalletInput = prompt("Ingrese el nuevo número de pallet:");
-            if (newPalletInput === null) return; // User cancelled
+            if (newPalletInput === null) return;
 
             const newPalletNum = parseInt(newPalletInput, 10);
 
@@ -239,7 +235,6 @@
                 return;
             }
 
-            // Obtener el número de pallet actual de la base de datos para comparar
             let currentFilePalletNum = 0;
             try {
                 const { data, error } = await supabaseClient.rpc('get_max_pallet_number');
@@ -251,7 +246,7 @@
                 return;
             }
 
-            const currentDisplayedPalletNum = parseInt(numeroDePallet, 10) -1; // El mostrado es el siguiente, comparamos con el último usado.
+            const currentDisplayedPalletNum = parseInt(numeroDePallet, 10) -1;
 
             if (newPalletNum <= currentFilePalletNum || newPalletNum <= currentDisplayedPalletNum) {
                 showToast(`El nuevo número de pallet (${newPalletNum}) debe ser mayor que el actual en archivo (${currentFilePalletNum}) y en pantalla (${currentDisplayedPalletNum}).`, 'error');
@@ -262,11 +257,7 @@
             if (!confirmation) return;
 
             try {
-                // Esta operación es delicada. Se podría implementar una función RPC en Supabase
-                // que inserte un registro "fantasma" con el nuevo número de pallet para forzar el contador.
-                // Por ejemplo, `crear_pallet_manual(numero_pallet, sku_fantasma, ...)`
-                // Por ahora, lo más seguro es pedir al usuario que refresque.
-                const { error } = await supabaseClient.rpc('force_set_pallet_number', { new_number: newPalletNum });
+                const { error } = await supabaseClient.rpc('force_set_pallet_number', { pallet_number: newPalletNum });
 
                 if (error) {
                     console.error('Error en RPC force_set_pallet_number:', error);
@@ -287,44 +278,55 @@
         };
 
         useEffect(() => {
+            if (!supabaseClient) return;
             const interval = setInterval(() => {
                 const now = new Date();
                 const hour = now.getHours();
                 if (hour >= 5 && hour < 22) {
                     console.log("Verificación periódica de número de pallet...");
-                    handleRefreshPalletNumber(true); // silent = true
+                    handleRefreshPalletNumber(true);
                 }
-            }, Math.floor(Math.random() * (5 * 60 * 1000 - 1 * 60 * 1000 + 1)) + 1 * 60 * 1000); // Entre 1 y 5 minutos
+            }, Math.floor(Math.random() * (5 * 60 * 1000 - 1 * 60 * 1000 + 1)) + 1 * 60 * 1000);
 
             return () => clearInterval(interval);
-        }, [numeroDePallet, previewPdfUrl]); // Dependencias para tener valores actualizados
+        }, [numeroDePallet, previewPdfUrl]);
 
-        // --- MODIFICACIÓN: SINCRONIZAR HORA CON INTERNET ---
         useEffect(() => {
+            if (!supabaseClient) return;
             const fetchInternetTime = async () => {
                 try {
                     const response = await fetch('https://worldtimeapi.org/api/timezone/America/Argentina/Buenos_Aires', { cache: "no-store" });
                     if (!response.ok) throw new Error('No se pudo conectar al servidor de tiempo.');
                     
                     const data = await response.json();
-                    const internetDate = data.datetime.substring(0, 10); // Extrae 'YYYY-MM-DD'
+                    const internetDate = data.datetime.substring(0, 10);
                     setFechaProd(internetDate);
                     showToast('Fecha sincronizada con hora de internet.', 'info');
                 } catch (error) {
                     console.error("Error al obtener la hora de internet:", error);
                     showToast('Fallo al sincronizar fecha. Usando hora local.', 'error');
-                    // El estado ya tiene la fecha local como respaldo, no es necesario hacer nada más.
                 }
             };
             fetchInternetTime();
-        }, []); // El array vacío asegura que esto se ejecute solo una vez cuando carga la app.
-        // --- FIN DE LA MODIFICACIÓN ---
-
+        }, []);
 
         useEffect(() => {
             const staticLoader = document.getElementById('static-loader');
             const loaderStatus = document.getElementById('loader-status');
             const loaderProgress = document.getElementById('loader-progress');
+
+            if (!supabaseClient) {
+                if (loaderStatus) {
+                    loaderStatus.textContent = 'ERROR: Revisa la configuración de Supabase en config.js';
+                    loaderStatus.className = 'text-xl text-red-400 mb-4 [text-shadow:_1px_1px_2px_rgba(0,0,0,0.5)]';
+                }
+                if (loaderProgress) {
+                    loaderProgress.style.width = '100%';
+                    loaderProgress.classList.remove('bg-amber-400');
+                    loaderProgress.classList.add('bg-red-600');
+                }
+                return;
+            }
 
             const fetchArticulos = async () => {
                 if (!supabaseClient) return;
@@ -451,25 +453,22 @@
             doc.line(margin, currentY, pageW - margin, currentY);
             currentY += 10;
             
-            // --- MODIFICADO: Lógica para ajustar tamaño de fuente de la descripción ---
             doc.setFont("helvetica", "bold");
             const baseFontSize = 84;
-            doc.setFontSize(baseFontSize); // Set to base size to calculate initial line count
+            doc.setFontSize(baseFontSize);
             
             let descLines = doc.splitTextToSize(data.descripcion, contentW);
             let finalFontSize = baseFontSize;
 
-            // Si la descripción ocupa más de 3 líneas con el tamaño base, se reduce la fuente.
             if (descLines.length > 3) {
-                finalFontSize = 60; // Usar un tamaño de fuente más pequeño y fijo
+                finalFontSize = 60;
             }
             
-            doc.setFontSize(finalFontSize); // Establecer el tamaño de fuente final para el renderizado
-            const lineHeight = finalFontSize / 3; // Calcular la altura de la línea en función del tamaño de fuente final
+            doc.setFontSize(finalFontSize);
+            const lineHeight = finalFontSize / 3;
 
             doc.text(descLines, pageW / 2, currentY + lineHeight, { align: "center", lineHeightFactor: 1 });
             currentY += (descLines.length * lineHeight) + 10;
-            // --- FIN DE LA MODIFICACIÓN ---
 
             doc.line(margin, currentY, pageW - margin, currentY);
             currentY += 2;
@@ -551,8 +550,6 @@
             if (!isRegeneration) {
                 const updatedPalletNum = await handleRefreshPalletNumber(true);
                 if (updatedPalletNum && parseInt(numeroDePallet, 10) !== updatedPalletNum) {
-                    // El número de pallet fue actualizado, el usuario debe estar al tanto.
-                    // La invalidación de la preview ya la hace handleRefreshPalletNumber.
                     return;
                 }
             }
@@ -583,7 +580,6 @@
             }
 
             try {
-                // Doble chequeo del número de pallet antes de guardar
                 const { data: maxPalletData, error: maxPalletError } = await supabaseClient.rpc('get_max_pallet_number');
                 if (maxPalletError) throw new Error('No se pudo verificar el último número de pallet en la DB.');
                 
@@ -599,7 +595,6 @@
 
                 const data = getLabelData();
                 
-                // Llamada a la función RPC para una inserción atómica
                 const { error: insertError } = await supabaseClient.rpc('crear_nuevo_pallet', {
                     p_sku: data.sku,
                     p_descripcion: data.descripcion,
@@ -620,14 +615,11 @@
                     await drawLabelOnDoc(doc, data);
                 }
                 
-                // ### INICIO DE LA MODIFICACIÓN DE IMPRESIÓN ###
                 const isMobile = /Android|iPhone/i.test(navigator.userAgent);
 
-                // Siempre guardar el archivo, como se hacía antes.
                 doc.save(`etiqueta_pallet_${palletNum}.pdf`);
 
                 if (!isMobile) {
-                    // En escritorio, intentar abrir el diálogo de impresión.
                     try {
                         const pdfBlob = doc.output('blob');
                         const blobUrl = URL.createObjectURL(pdfBlob);
@@ -647,20 +639,18 @@
                                     console.error("No se pudo abrir el diálogo de impresión.", e);
                                     showToast("No se pudo abrir el diálogo de impresión automáticamente.", "error");
                                 } finally {
-                                    // Limpiar después de un tiempo prudencial
                                     setTimeout(() => {
                                         document.body.removeChild(iframe);
                                         URL.revokeObjectURL(blobUrl);
                                     }, 60000);
                                 }
-                            }, 1); // Un pequeño delay puede ser necesario
+                            }, 1);
                         };
                     } catch (e) {
                         console.error("Error al crear el iframe de impresión:", e);
                         showToast("Error al preparar la impresión automática.", "error");
                     }
                 }
-                // ### FIN DE LA MODIFICACIÓN DE IMPRESIÓN ###
 
                 setNumeroDePallet(palletNum + 1);
                 setSelectedArticulo(null);
