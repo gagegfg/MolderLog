@@ -8,6 +8,8 @@
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="config.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.23/jspdf.plugin.autotable.min.js"></script>
@@ -46,11 +48,11 @@
         const { createRoot } = ReactDOM;
         const { jsPDF } = window.jspdf;
 
+        const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
         // --- CONFIGURACIÓN DE GITHUB ---
         const GITHUB_USER = 'gagegfg';
         const GITHUB_REPO = 'Molderil_ListaEmpaque';
-        const CSV_PATH_LOTES = 'detallelotes.csv';
-        const CSV_PATH_NOTAS = 'notasskulote.csv';
         const CSV_PATH_ALMACENADO = 'nropalletalmacenado.csv';
         const AUTH_TIMEOUT = 5 * 60 * 1000; // 5 minutos en milisegundos
 
@@ -85,7 +87,6 @@
         
         const App = () => {
             const [allData, setAllData] = useState([]);
-            const [notesData, setNotesData] = useState([]);
             const [storedData, setStoredData] = useState(new Set());
             const [articulosMap, setArticulosMap] = useState(new Map());
             const [filteredData, setFilteredData] = useState([]);
@@ -97,16 +98,12 @@
 
             const [modalState, setModalState] = useState({ isOpen: false, type: null, title: '', message: '', onConfirm: null });
             const [observationModal, setObservationModal] = useState({ isOpen: false, text: '' });
-            // --- INICIO: Funcionalidad de Notas ---
             const [noteModal, setNoteModal] = useState({ isOpen: false, item: null, text: '' });
-            // --- FIN: Funcionalidad de Notas ---
             const [reprintModal, setReprintModal] = useState({ isOpen: false, pdfUrl: null, printablePdfUrl: null, palletId: null });
             const [showHelpModal, setShowHelpModal] = useState(false);
             const [showPendingModal, setShowPendingModal] = useState(false);
             const [activeActionMenu, setActiveActionMenu] = useState(null);
-            const [activeClientMenu, setActiveClientMenu] = useState({rowId: null, client: null});
             const actionMenuRef = useRef(null);
-            const clientMenuRef = useRef(null);
 
             const [isTransferMode, setIsTransferMode] = useState(false);
             const [transferSelection, setTransferSelection] = useState({});
@@ -150,7 +147,6 @@
                 }
             };
             
-            // --- FUNCIONES DEL SISTEMA DE BLOQUEO ---
             const acquireLock = async (operationName) => {
                 const url = `https://api.github.com/repos/${GITHUB_USER}/${GITHUB_REPO}/contents/${LOCK_FILE_PATH}`;
                 let currentSha = null;
@@ -164,9 +160,7 @@
                         currentSha = fileData.sha;
                         const content = atob(fileData.content);
 
-                        if (!content.trim()) {
-                           // El archivo está vacío, se considera desbloqueado.
-                        } else {
+                        if (content.trim()) {
                             const lock = JSON.parse(content);
                             const isLockedByOther = lock.sessionId && lock.sessionId !== SESSION_ID;
                             const isExpired = Date.now() - lock.timestamp > LOCK_TIMEOUT;
@@ -238,7 +232,6 @@
                 }
             };
 
-
             const fetchCsvFromGithub = useCallback(async (path) => {
                 const url = `https://api.github.com/repos/${GITHUB_USER}/${GITHUB_REPO}/contents/${path}?t=${new Date().getTime()}`;
                 try {
@@ -260,85 +253,47 @@
 
             const loadData = useCallback(async () => {
                 setIsLoading(true);
-                const [lotesRows, notasRows, almacenadoRows] = await Promise.all([
-                    fetchCsvFromGithub(CSV_PATH_LOTES),
-                    fetchCsvFromGithub(CSV_PATH_NOTAS),
-                    fetchCsvFromGithub(CSV_PATH_ALMACENADO)
-                ]);
-
-                const storedSet = new Set(almacenadoRows);
-                setStoredData(storedSet);
-
-                const notesMap = new Map();
-                const parsedNotes = notasRows.map(row => {
-                    const [sku, numeroDePallet, observacion] = row.split(';');
-                    const key = `${sku};${numeroDePallet}`;
-                    notesMap.set(key, observacion);
-                    return { sku, numeroDePallet, observacion };
-                });
-                setNotesData(parsedNotes);
-
-                const parsedLotes = lotesRows.map((row, index) => {
-                    const [sku, originalDescription, numeroDePallet, lotesProduccion, fechaProduccion, cantidad, unidadMedida, despachado, cliente] = row.split(';');
-                    
-                    const articuloInfo = articulosMap.get(sku.trim());
-                    const descripcion = (articuloInfo && articuloInfo.larga) ? articuloInfo.larga : originalDescription;
-
-                    const noteKey = `${sku};${numeroDePallet}`;
-                    const storedKey = `${sku};${numeroDePallet}`;
-                    const hasNote = notesMap.has(noteKey);
-                    const noteText = hasNote ? notesMap.get(noteKey) : '';
-                    const isStored = storedSet.has(storedKey);
-                    return { id: index, sku, descripcion, numeroDePallet, lotesProduccion, fechaProduccion, cantidad, unidadMedida, despachado, cliente, hasNote, noteText, isStored };
-                });
-                
-                setAllData(parsedLotes);
-                setIsLoading(false);
-            }, [fetchCsvFromGithub, articulosMap]);
-            
-            const saveCsvToGithub = async (path, dataToSave, formatRow) => {
-                if (!apiToken) {
-                    alert("Error: El token de API no está disponible.");
-                    return false;
-                }
-                const csvContent = dataToSave.map(formatRow).join('\n');
-                const url = `https://api.github.com/repos/${GITHUB_USER}/${GITHUB_REPO}/contents/${path}`;
                 try {
-                    const fileResponse = await fetch(`${url}?t=${new Date().getTime()}`, {
-                        headers: { 'Authorization': `token ${apiToken}` },
-                        cache: 'no-store'
-                    });
+                    const { data: lotesData, error: lotesError } = await supabaseClient
+                        .from('vista_detallelotes_completa')
+                        .select('*');
 
-                    let currentSha = null;
-                    if (fileResponse.ok) {
-                        const fileData = await fileResponse.json();
-                        currentSha = fileData.sha;
-                    } else if (fileResponse.status !== 404) {
-                        const errorData = await fileResponse.json();
-                        throw new Error(`Error ${fileResponse.status} al obtener SHA: ${errorData.message}`);
+                    if (lotesError) {
+                        throw lotesError;
                     }
 
-                    const updateResponse = await fetch(url, {
-                        method: 'PUT',
-                        headers: { 'Authorization': `token ${apiToken}`, 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            message: `Actualización de ${path} desde grilla web`,
-                            content: btoa(unescape(encodeURIComponent(csvContent))),
-                            sha: currentSha,
-                        }),
-                    });
+                    const almacenadoRows = await fetchCsvFromGithub(CSV_PATH_ALMACENADO);
+                    const storedSet = new Set(almacenadoRows);
+                    setStoredData(storedSet);
 
-                    if (!updateResponse.ok) {
-                        const errorData = await updateResponse.json();
-                        throw new Error(`Error ${updateResponse.status}: ${errorData.message || 'Falló la actualización del archivo.'}`);
-                    }
-                    return true;
-                } catch (e) {
-                    console.error(e);
-                    return e.message; 
+                    const parsedLotes = lotesData.map(item => {
+                        const storedKey = `${item.sku};${item.nropallet}`;
+                        return {
+                            id: item.id,
+                            sku: item.sku,
+                            descripcion: item.descripcion,
+                            numeroDePallet: item.nropallet,
+                            lotesProduccion: item.lotesproduccion,
+                            fechaProduccion: new Date(item.fechaproduccion).toLocaleDateString('es-AR'),
+                            cantidad: item.cantidad,
+                            unidadMedida: item.unidadmedida,
+                            despachado: item.despachado ? 'TRUE' : 'FALSE',
+                            cliente: item.cliente,
+                            hasNote: item.has_note,
+                            noteText: item.notatext || '',
+                            isStored: storedSet.has(storedKey)
+                        };
+                    });
+                    
+                    setAllData(parsedLotes);
+                } catch (error) {
+                    alert(`Error al cargar los datos desde Supabase: ${error.message}`);
+                    console.error(error);
+                } finally {
+                    setIsLoading(false);
                 }
-            };
-
+            }, [fetchCsvFromGithub]);
+            
             const appendCsvToGithub = async (path, stringToAppend) => {
                 if (!apiToken) {
                     alert("Error: El token de API no está disponible.");
@@ -381,44 +336,6 @@
                 } catch (e) {
                     console.error(e);
                     return { success: false, error: e.message };
-                }
-            };
-            
-            const saveData = async (updatedLotes, updatedNotes) => {
-                const lock = await acquireLock('saveData');
-                if (!lock.success) {
-                    alert(`No se pudo guardar. ${lock.error}. Por favor, intente de nuevo en unos momentos.`);
-                    return;
-                }
-
-                setIsSaving(true);
-                let lotesResult = false;
-                let notesResult = false;
-                try {
-                    // 1. Guardar Lotes
-                    lotesResult = await saveCsvToGithub(CSV_PATH_LOTES, updatedLotes, item => 
-                        [item.sku, item.descripcion, item.numeroDePallet, item.lotesProduccion, item.fechaProduccion, item.cantidad, item.unidadMedida, item.despachado || 'FALSE', item.cliente || ''].join(';')
-                    );
-
-                    // 2. Guardar Notas
-                    if (lotesResult === true) {
-                        notesResult = await saveCsvToGithub(CSV_PATH_NOTAS, updatedNotes, item => 
-                            [item.sku, item.numeroDePallet, item.observacion].join(';')
-                        );
-                    }
-                    
-                    const success = lotesResult === true && notesResult === true;
-
-                    if (success) {
-                        alert("¡Operación exitosa! Los datos se han guardado correctamente.");
-                    } else {
-                        const errorMessage = `Ocurrió un error al guardar:\n- Lotes: ${lotesResult === true ? 'OK' : lotesResult}\n- Notas: ${notesResult === true ? 'OK' : notesResult}\n\nSe recargarán los datos para asegurar la consistencia.`;
-                        alert(errorMessage);
-                    }
-                } finally {
-                    await releaseLock();
-                    setIsSaving(false);
-                    await loadData();
                 }
             };
 
@@ -496,7 +413,7 @@
             }, []);
 
             useEffect(() => {
-                if(apiToken && articulosMap.size > 0) {
+                if(apiToken) {
                     const loadInitialData = async () => {
                         const loaderStatus = document.getElementById('loader-status');
                         const loaderProgress = document.getElementById('loader-progress');
@@ -521,7 +438,7 @@
                     };
                     loadInitialData();
                 }
-            }, [apiToken, articulosMap, loadData]);
+            }, [apiToken, loadData]);
 
             useEffect(() => {
                 let data = [...allData];
@@ -537,7 +454,7 @@
                                 return despachadoText.includes(filterValue);
                             }
                              if (key === 'numeroDePallet' && item.hasNote) {
-                                const palletWithAsterisk = `${item.numeroDePallet} (*)`
+                                const palletWithAsterisk = `${item.numeroDePallet} (*)`;
                                 return palletWithAsterisk.toLowerCase().includes(filterValue) || (item[key] && item[key].toString().toLowerCase().includes(filterValue));
                             }
                             return item[key] && item[key].toString().toLowerCase().includes(filterValue);
@@ -564,7 +481,6 @@
                 const handleClickOutside = (event) => {
                     if (exportMenuRef.current && !exportMenuRef.current.contains(event.target)) setIsExportOpen(false);
                     if (actionMenuRef.current && !actionMenuRef.current.parentElement.contains(event.target)) setActiveActionMenu(null);
-                    if (clientMenuRef.current && !clientMenuRef.current.parentElement.contains(event.target)) setActiveClientMenu({rowId: null, client: null});
                 };
                 document.addEventListener("mousedown", handleClickOutside);
                 return () => document.removeEventListener("mousedown", handleClickOutside);
@@ -578,55 +494,26 @@
             };
 
             const handleDeleteRow = (rowId) => {
-                setModalState({ 
+                setModalState({
                     isOpen: true, type: 'confirm', title: `Confirmar Eliminación`,
-                    message: `¿Seguro que quieres eliminar la fila? Si tiene una nota asociada, también se eliminará. Esta acción es irreversible.`,
+                    message: `¿Seguro que quieres eliminar el pallet Nº ${rowId}? Si tiene una nota asociada, también se eliminará. Esta acción es irreversible.`,
                     onConfirm: () => {
                         setModalState({ isOpen: false });
-                        executeActionWithAuth(() => {
-                            const itemToDelete = allData.find(item => item.id === rowId);
-                            const newLotesData = allData.filter(item => item.id !== rowId);
-                            let newNotesData = [...notesData];
-                            if (itemToDelete && itemToDelete.hasNote) {
-                                newNotesData = notesData.filter(note => 
-                                    !(note.sku === itemToDelete.sku && note.numeroDePallet === itemToDelete.numeroDePallet)
-                                );
+                        executeActionWithAuth(async () => {
+                            setIsSaving(true);
+                            const { error } = await supabaseClient.rpc('delete_pallet_lot', { p_nropallet: rowId });
+                            setIsSaving(false);
+                            if (error) {
+                                alert(`Error al eliminar: ${error.message}`);
+                            } else {
+                                alert("Pallet eliminado correctamente.");
+                                loadData();
                             }
-                            saveData(newLotesData, newNotesData);
                         });
                     }
                 });
             };
             
-            const handleAddClient = (rowId) => {
-                 setModalState({
-                    isOpen: true, type: 'textInputWithSuggestions', title: 'Añadir Nuevo Cliente',
-                    message: 'Ingrese el nombre del nuevo cliente para este lote.',
-                    onConfirm: (newClient) => {
-                        if (!newClient || !clientList.includes(newClient.toUpperCase())) {
-                            alert(`El cliente "${newClient || ''}" no es válido. Por favor, seleccione uno de la lista.`);
-                            return;
-                        }
-                        setModalState({ isOpen: false });
-                        executeActionWithAuth(() => {
-                            const newData = allData.map(item => {
-                                if (item.id === rowId) {
-                                    const existingClients = item.cliente ? item.cliente.split('#').filter(Boolean) : [];
-                                    if (existingClients.includes(newClient.toUpperCase())) {
-                                        alert("Este cliente ya está asignado a este lote."); return item;
-                                    }
-                                    const updatedClients = [...existingClients, newClient.toUpperCase()].join('#');
-                                    return { ...item, cliente: updatedClients, despachado: 'TRUE' };
-                                }
-                                return item;
-                            });
-                            saveData(newData, notesData);
-                        });
-                    }
-                });
-            };
-
-            // --- INICIO: Funcionalidad de Notas ---
             const handleOpenNoteModal = (item) => {
                 setNoteModal({
                     isOpen: true,
@@ -639,35 +526,22 @@
                 const { item, text } = noteModal;
                 const updatedText = text.trim();
 
-                // Cerrar el modal inmediatamente
                 setNoteModal({ isOpen: false, item: null, text: '' });
 
-                executeActionWithAuth(() => {
-                    let newNotesData = [...notesData];
-                    const noteIndex = newNotesData.findIndex(n => n.sku === item.sku && n.numeroDePallet === item.numeroDePallet);
-
-                    if (updatedText) { // Guardar o actualizar nota
-                        if (noteIndex > -1) {
-                            newNotesData[noteIndex].observacion = updatedText;
-                        } else {
-                            newNotesData.push({ sku: item.sku, numeroDePallet: item.numeroDePallet, observacion: updatedText });
-                        }
-                    } else if (noteIndex > -1) { // Eliminar nota si el texto está vacío
-                        newNotesData.splice(noteIndex, 1);
-                    }
-                    
-                    // Actualizar UI instantáneamente
-                    const newAllData = allData.map(d => {
-                        if (d.id === item.id) {
-                            return { ...d, hasNote: !!updatedText, noteText: updatedText };
-                        }
-                        return d;
+                executeActionWithAuth(async () => {
+                    setIsSaving(true);
+                    const { error } = await supabaseClient.rpc('upsert_note', {
+                        p_nropallet: item.numeroDePallet,
+                        p_notatext: updatedText
                     });
-                    setAllData(newAllData);
+                    setIsSaving(false);
 
-                    // Guardar los cambios en GitHub (se guarda el archivo de notas completo)
-                    // Se pasa `allData` sin modificar, ya que el archivo detallelotes.csv no cambia
-                    saveData(allData, newNotesData);
+                    if (error) {
+                        alert(`Error al guardar la nota: ${error.message}`);
+                    } else {
+                        alert("Nota guardada correctamente.");
+                        loadData();
+                    }
                 });
             };
 
@@ -691,58 +565,7 @@
                     </div>
                 );
             };
-            // --- FIN: Funcionalidad de Notas ---
 
-            const handleChangeClientName = (rowId, oldClient, newClient) => {
-                if (!newClient || !clientList.includes(newClient.toUpperCase())) {
-                    alert(`El cliente "${newClient || ''}" no es válido. Por favor, seleccione un cliente de la lista.`); return;
-                }
-                setModalState({ isOpen: false });
-                executeActionWithAuth(() => {
-                    const newData = allData.map(item => {
-                        if (item.id === rowId) {
-                            const clients = item.cliente.split('#');
-                            const clientIndex = clients.indexOf(oldClient);
-                            if(clientIndex > -1) clients[clientIndex] = newClient.toUpperCase();
-                            return { ...item, cliente: clients.join('#') };
-                        }
-                        return item;
-                    });
-                    saveData(newData, notesData);
-                });
-            };
-
-            const handleDeleteClient = (rowId, clientToDelete) => {
-                setModalState({ isOpen: false });
-                executeActionWithAuth(() => {
-                    const newData = allData.map(item => {
-                        if (item.id === rowId) {
-                            let clients = item.cliente.split('#').filter(c => c !== clientToDelete);
-                            return { ...item, cliente: clients.join('#'), despachado: clients.length > 0 ? 'TRUE' : 'FALSE' };
-                        }
-                        return item;
-                    });
-                    saveData(newData, notesData);
-                });
-            };
-
-            const openChangeClientModal = (rowId, oldClient) => {
-                setActiveClientMenu({rowId: null, client: null});
-                setModalState({
-                    isOpen: true, type: 'textInputWithSuggestions', title: `Cambiar Nombre de "${oldClient}"`,
-                    message: 'Ingrese el nuevo nombre para este cliente.', onConfirm: (newClient) => handleChangeClientName(rowId, oldClient, newClient)
-                });
-            };
-
-            const openDeleteClientConfirm = (rowId, clientToDelete) => {
-                setActiveClientMenu({rowId: null, client: null});
-                 setModalState({
-                    isOpen: true, type: 'confirm', title: 'Confirmar Eliminación',
-                    message: `¿Seguro que quieres eliminar a "${clientToDelete}" de este lote?`,
-                    onConfirm: () => handleDeleteClient(rowId, clientToDelete)
-                });
-            };
-            
             const handleEnterTransferMode = () => {
                 setIsTransferMode(true);
                 setTransferSelection({});
@@ -903,7 +726,7 @@
                 doc.line(margin, currentY, pageW - margin, currentY); currentY += 2;
                 doc.setFontSize(20); doc.setFont("helvetica", "bold"); doc.text(`SKU: ${data.sku}`, margin, currentY + 12);
                 let lotesProdString = data.lotes.join(' / ');
-                if (data.hasNote) { lotesProdString += ' (*)'; }
+                if (data.hasNote) { lotesProdString += ' (*)'; } 
                 if(lotesProdString) { doc.setFontSize(18); doc.setFont("helvetica", "normal"); doc.text(`Lotes: ${lotesProdString}`, pageW - margin, currentY + 12, { align: "right" }); }
                 currentY += 18; doc.line(margin, currentY, pageW - margin, currentY); currentY += 8;
                 const formatNumberES = (numStr) => { if (!numStr) return ''; const [integerPart, decimalPart] = numStr.split(','); const formattedInteger = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, "."); return decimalPart !== undefined ? `${formattedInteger},${decimalPart}` : formattedInteger; };
@@ -938,34 +761,19 @@
                 setReprintModal({ isOpen: true, pdfUrl: previewDoc.output('datauristring'), printablePdfUrl: printDoc.output('bloburl'), palletId: item.numeroDePallet });
             };
 
-            const ActionModal = ({ isOpen, type, title, message, onConfirm, onClose, suggestions }) => {
+            const ActionModal = ({ isOpen, type, title, message, onConfirm, onClose }) => {
                 if (!isOpen) return null;
                 const [inputValue, setInputValue] = useState('');
-                const [showSuggestions, setShowSuggestions] = useState(false);
                 const inputRef = useRef(null);
-                const modalContentRef = useRef(null);
                 useEffect(() => { if (isOpen) setTimeout(() => inputRef.current?.focus(), 100); }, [isOpen]);
-                useEffect(() => {
-                    const handleClickOutside = (e) => { if (modalContentRef.current && !modalContentRef.current.contains(e.target)) setShowSuggestions(false); };
-                    document.addEventListener('mousedown', handleClickOutside);
-                    return () => document.removeEventListener('mousedown', handleClickOutside);
-                }, []);
                 const handleConfirm = () => onConfirm(inputValue);
-                const filteredSuggestions = suggestions ? suggestions.filter(s => s.toLowerCase().includes(inputValue.toLowerCase())) : [];
                 return (
                     <div className="fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center z-50 p-4">
-                        <div ref={modalContentRef} className="bg-white p-6 rounded-xl shadow-lg w-full max-w-sm">
+                        <div className="bg-white p-6 rounded-xl shadow-lg w-full max-w-sm">
                             <h3 className="text-lg font-bold text-gray-800 mb-4">{title}</h3>
                             <p className="text-sm text-gray-600 mb-4">{message}</p>
                             {type !== 'confirm' && (
-                                <div className="relative">
-                                    <input ref={inputRef} type={type === 'password' ? 'password' : 'text'} value={inputValue} onChange={e => { setInputValue(e.target.value); if (type === 'textInputWithSuggestions') setShowSuggestions(true); }} onKeyDown={e => e.key === 'Enter' && handleConfirm()} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border" autoComplete="off" />
-                                    {type === 'textInputWithSuggestions' && showSuggestions && filteredSuggestions.length > 0 && (
-                                        <ul className="absolute z-10 w-full bg-white border rounded-md mt-1 max-h-40 overflow-y-auto shadow-lg">
-                                            {filteredSuggestions.map(client => ( <li key={client} className="p-2 hover:bg-indigo-100 cursor-pointer" onClick={() => { setInputValue(client); setShowSuggestions(false); }}>{client}</li> ))}
-                                        </ul>
-                                    )}
-                                </div>
+                                <input ref={inputRef} type={type === 'password' ? 'password' : 'text'} value={inputValue} onChange={e => setInputValue(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleConfirm()} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border" autoComplete="off" />
                             )}
                             <div className="flex justify-end space-x-3 mt-6">
                                 <button onClick={onClose} className="bg-gray-200 text-gray-800 font-semibold py-2 px-4 rounded-lg hover:bg-gray-300">Cancelar</button>
@@ -1056,13 +864,6 @@
                                 </ul>
                             </div>
                             {/* --- FIN: Funcionalidad de Notas (Ayuda) --- */}
-                            <div>
-                                <h4 className="font-bold text-lg text-indigo-700">Gestión de Clientes</h4>
-                                <ul className="list-disc list-inside mt-2 space-y-1">
-                                    <li><strong>Añadir Cliente:</strong> En el menú de acciones (<i className="fas fa-ellipsis-v"></i>) de una fila, selecciona "Añadir Cliente" para asignar un cliente a ese lote. El lote se marcará como "Despachado".</li>
-                                    <li><strong>Modificar Cliente:</strong> Haz clic en el nombre de un cliente ya asignado para abrir un menú que te permitirá cambiar su nombre o eliminarlo del lote.</li>
-                                </ul>
-                            </div>
                              <div>
                                 <h4 className="font-bold text-lg text-indigo-700">Módulo de Transferencia a Depósito</h4>
                                 <p className="mt-2">Esta sección te permite gestionar qué pallets han sido físicamente movidos al depósito final.</p>
@@ -1096,12 +897,11 @@
                 <div className="min-h-screen p-4 sm:p-6 bg-black bg-opacity-50">
                     {isSaving && (
                         <div className="fixed inset-0 bg-white bg-opacity-80 flex items-center justify-center z-50">
-                            <div className="flex items-center space-x-3 text-xl font-semibold text-gray-700"><i className="fas fa-sync-alt animate-spin"></i><span>Guardando en GitHub...</span></div>
+                            <div className="flex items-center space-x-3 text-xl font-semibold text-gray-700"><i className="fas fa-sync-alt animate-spin"></i><span>Guardando...</span></div>
                         </div>
                     )}
-                    <ActionModal isOpen={modalState.isOpen} type={modalState.type} title={modalState.title} message={modalState.message} onClose={() => setModalState({ isOpen: false })} onConfirm={modalState.onConfirm} suggestions={clientList}/>
+                    <ActionModal isOpen={modalState.isOpen} type={modalState.type} title={modalState.title} message={modalState.message} onClose={() => setModalState({ isOpen: false })} onConfirm={modalState.onConfirm} />
                     <ObservationModal isOpen={observationModal.isOpen} text={observationModal.text} onClose={() => setObservationModal({ isOpen: false, text: '' })} />
-                    {/* --- INICIO: Funcionalidad de Notas --- */}
                     <NoteModal 
                         isOpen={noteModal.isOpen}
                         text={noteModal.text}
@@ -1109,7 +909,6 @@
                         onClose={() => setNoteModal({ isOpen: false, item: null, text: '' })}
                         onSave={handleSaveNote}
                     />
-                    {/* --- FIN: Funcionalidad de Notas --- */}
                     <ReprintModal isOpen={reprintModal.isOpen} pdfUrl={reprintModal.pdfUrl} printablePdfUrl={reprintModal.printablePdfUrl} palletId={reprintModal.palletId} onClose={() => setReprintModal({ isOpen: false, pdfUrl: null, printablePdfUrl: null, palletId: null })} />
                     <PendingModal isOpen={showPendingModal} onClose={() => setShowPendingModal(false)} data={allData} />
                     {showHelpModal && <HelpModal onClose={() => setShowHelpModal(false)} />}
@@ -1221,28 +1020,19 @@
                                                 </td>
                                                 <td className="px-4 py-2 text-sm text-gray-600 align-middle">
                                                     {item.lotesProduccion && item.lotesProduccion.includes('#') ? (
-                                                        <div className="flex flex-wrap gap-1">{item.lotesProduccion.split('#').map((lote, i) => (<span key={`${lote}-${i}`} className="px-2.5 py-0.5 text-xs font-semibold bg-gray-100 text-gray-800 rounded-full">{lote}</span>))}</div>
+                                                        <div className="flex flex-wrap gap-1">{item.lotesProduccion.split('#').map((lote, i) => (<span key={`${lote}-${i}`} className="px-2.5 py-0.5 text-xs font-semibold bg-gray-100 text-gray-800 rounded-full">{lote}</span>))}
+                                                        </div>
                                                     ) : ( item.lotesProduccion )}
                                                 </td>
                                                 <td className="px-4 py-2 whitespace-nowrap text-sm font-semibold"><span className={isDespachado ? 'text-green-600' : 'text-red-600'}>{isDespachado ? 'Sí' : 'No'}</span></td>
                                                 <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-600">
                                                     <div className="flex flex-wrap gap-1">{clients.map(client => (
                                                         <div key={client} className="relative">
-                                                            <button 
-                                                                onClick={() => setActiveClientMenu({rowId: item.id, client: client})} 
-                                                                disabled={isSaving}
-                                                                className="px-2.5 py-0.5 text-xs font-semibold bg-indigo-100 text-indigo-800 rounded-full hover:bg-indigo-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                                                            <span 
+                                                                className="px-2.5 py-0.5 text-xs font-semibold bg-indigo-100 text-indigo-800 rounded-full"
                                                             >
                                                                 {client}
-                                                            </button>
-                                                            {activeClientMenu.rowId === item.id && activeClientMenu.client === client && (
-                                                                <div ref={clientMenuRef} className="absolute left-0 mt-2 w-48 bg-white rounded-md shadow-lg border z-30">
-                                                                    <ul className="text-gray-700 text-left">
-                                                                        <li><button onClick={() => openChangeClientModal(item.id, client)} className="w-full text-left hover:bg-gray-100 p-3 flex items-center"><i className="fas fa-user-edit w-6 mr-2 text-blue-500"></i>Cambiar Nombre</button></li>
-                                                                        <li><button onClick={() => openDeleteClientConfirm(item.id, client)} className="w-full text-left hover:bg-gray-100 p-3 flex items-center"><i className="fas fa-trash-alt w-6 mr-2 text-red-500"></i>Eliminar Cliente</button></li>
-                                                                    </ul>
-                                                                </div>
-                                                            )}
+                                                            </span>
                                                         </div>))}
                                                     </div>
                                                 </td>
@@ -1261,11 +1051,8 @@
                                                         {activeActionMenu === item.id && (
                                                             <div className="absolute right-0 mt-2 w-56 bg-white rounded-md shadow-lg border z-30">
                                                                 <ul className="text-gray-700 text-left">
-                                                                    {/* --- INICIO: Funcionalidad de Notas --- */}
                                                                     <li><button onClick={() => { handleOpenNoteModal(item); setActiveActionMenu(null); }} className="w-full text-left hover:bg-gray-100 p-3 flex items-center"><i className="fas fa-sticky-note w-6 mr-2 text-yellow-500"></i>{item.hasNote ? 'Editar/Ver Nota' : 'Agregar Nota'}</button></li>
-                                                                    {/* --- FIN: Funcionalidad de Notas --- */}
                                                                     <li><button onClick={() => { handleReprint(item); setActiveActionMenu(null); }} className="w-full text-left hover:bg-gray-100 p-3 flex items-center"><i className="fas fa-print w-6 mr-2 text-blue-500"></i>Reimprimir Etiqueta</button></li>
-                                                                    <li><button onClick={() => { handleAddClient(item.id); setActiveActionMenu(null); }} className="w-full text-left hover:bg-gray-100 p-3 flex items-center"><i className="fas fa-user-plus w-6 mr-2 text-green-500"></i>Añadir Cliente</button></li>
                                                                     <li><hr className="my-1"/></li>
                                                                     <li><button onClick={() => { handleDeleteRow(item.id); setActiveActionMenu(null); }} className="w-full text-left hover:bg-gray-100 p-3 flex items-center"><i className="fas fa-trash-alt w-6 mr-2 text-red-500"></i>Eliminar Fila</button></li>
                                                                 </ul>
