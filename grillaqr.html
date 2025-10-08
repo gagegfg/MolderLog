@@ -680,6 +680,12 @@
                                             const isDespachado = item.despachado && item.despachado.toUpperCase() === 'TRUE';
                                             const clients = item.cliente ? item.cliente.split('#').filter(Boolean) : [];
                                             const handleRowDoubleClick = () => { if (item.hasNote) { setObservationModal({ isOpen: true, text: item.noteText }); } };
+                                            const noteAction = () => {
+                                                if (item.hasNote) {
+                                                    setObservationModal({ isOpen: true, text: item.noteText });
+                                                }
+                                            };
+
                                             let rowClassName = 'transition-colors';
                                             if (isTransferMode) {
                                                 rowClassName += ' cursor-pointer';
@@ -697,17 +703,17 @@
                                             const handleRowClick = () => {
                                                 if (isTransferMode) {
                                                     handleToggleTransferSelection(item.id);
-                                                } else if (item.hasNote) {
-                                                    setObservationModal({ isOpen: true, text: item.noteText });
+                                                } else {
+                                                    noteAction();
                                                 }
                                             };
 
                                             return (
                                             <tr key={item.id} className={rowClassName} 
                                                 onClick={handleRowClick}
-                                                onTouchStart={() => !isTransferMode && handlePressStart(handleRowDoubleClick)} 
+                                                onTouchStart={() => !isTransferMode && handlePressStart(noteAction)} 
                                                 onTouchEnd={() => !isTransferMode && handlePressEnd()}
-                                                onMouseDown={() => !isTransferMode && handlePressStart(handleRowDoubleClick)} 
+                                                onMouseDown={() => !isTransferMode && handlePressStart(noteAction)} 
                                                 onMouseUp={() => !isTransferMode && handlePressEnd()} 
                                                 onMouseLeave={() => !isTransferMode && handlePressEnd()}>
                                                 <td className="px-1 py-2 text-center align-middle">
