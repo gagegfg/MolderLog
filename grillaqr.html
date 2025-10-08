@@ -672,14 +672,14 @@
                                         <th colSpan="4" className="p-1"></th>
                                     </tr>
                                 </thead>
-                                <tbody className="bg-white divide-y divide-gray-200">
+                                <tbody class="bg-white divide-y divide-gray-200">
                                     {isLoading ? (
-                                        <tr><td colSpan="11" className="p-8 text-center text-gray-500">Cargando datos...</td></tr>
+                                        <tr><td colSpan="11" class="p-8 text-center text-gray-500">Cargando datos...</td></tr>
                                     ) : (
                                         filteredData.length > 0 ? filteredData.map((item) => {
                                             const isDespachado = item.despachado && item.despachado.toUpperCase() === 'TRUE';
                                             const clients = item.cliente ? item.cliente.split('#').filter(Boolean) : [];
-                                            const handleRowDoubleClick = () => { if (item.hasNote) { setObservationModal({ isOpen: true, text: item.noteText }); } };
+
                                             const noteAction = () => {
                                                 if (item.hasNote) {
                                                     setObservationModal({ isOpen: true, text: item.noteText });
@@ -752,8 +752,8 @@
                                                 <td className="px-4 py-2 text-center">
                                                     <div className="relative" ref={activeActionMenu === item.id ? actionMenuRef : null}>
                                                         <button 
-                                                            onClick={() => setActiveActionMenu(activeActionMenu === item.id ? null : item.id)} 
-                                                            disabled={isSaving}
+                                                            onClick={(e) => { e.stopPropagation(); setActiveActionMenu(activeActionMenu === item.id ? null : item.id); }} 
+                                                            disabled={isSaving || isTransferMode}
                                                             className="text-gray-500 hover:text-blue-600 p-2 rounded-full disabled:opacity-50 disabled:cursor-not-allowed"
                                                         >
                                                             <i className="fas fa-ellipsis-v"></i>
