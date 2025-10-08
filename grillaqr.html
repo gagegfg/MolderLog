@@ -78,17 +78,17 @@
             const [filteredData, setFilteredData] = useState([]);
             const [isLoading, setIsLoading] = useState(true);
             const [isSaving, setIsSaving] = useState(false);
-            const [clientList, setClientList] = useState([]);
-            const [articulosMap, setArticulosMap] = useState(new Map());
 
             const [modalState, setModalState] = useState({ isOpen: false, type: null, title: '', message: '', onConfirm: null });
-            const [observationModal, setObservationModal] = useState({ isOpen: false, text: '' });
             const [noteModal, setNoteModal] = useState({ isOpen: false, item: null, text: '' });
             const [reprintModal, setReprintModal] = useState({ isOpen: false, pdfUrl: null, printablePdfUrl: null, palletId: null });
             const [showHelpModal, setShowHelpModal] = useState(false);
             const [showPendingModal, setShowPendingModal] = useState(false);
             const [activeActionMenu, setActiveActionMenu] = useState(null);
             const actionMenuRef = useRef(null);
+
+            const [isTransferMode, setIsTransferMode] = useState(false);
+            const [transferSelection, setTransferSelection] = useState({});
             
             const [columnFilters, setColumnFilters] = useLocalStorage('grillaqr_columnFilters_v3', {
                 sku: '',
@@ -120,20 +120,10 @@
             const loadData = useCallback(async () => {
                 setIsLoading(true);
                 try {
-                    const [lotesResult, transferidosResult] = await Promise.all([
-                        supabaseClient.from('vista_detallelotes_completa').select('*'),
-                        supabaseClient.from('nropalettransferidos').select('nropallet')
-                    ]);
+                    const { data, error } = await supabaseClient.from('vista_detallelotes_completa').select('*');
+                    if (error) throw error;
 
-                    const { data: lotesData, error: lotesError } = lotesResult;
-                    if (lotesError) throw lotesError;
-
-                    const { data: transferidosData, error: transferidosError } = transferidosResult;
-                    if (transferidosError) throw transferidosError;
-
-                    const storedSet = new Set(transferidosData.map(t => t.nropallet));
-
-                    const parsedLotes = lotesData.map(item => ({
+                    const parsedLotes = data.map(item => ({
                         id: item.id,
                         sku: item.sku,
                         descripcion: item.descripcion,
@@ -146,7 +136,7 @@
                         cliente: item.cliente,
                         hasNote: item.has_note,
                         noteText: item.notatext || '',
-                        isStored: storedSet.has(item.nropallet)
+                        isStored: item.is_transferred
                     }));
                     
                     setAllData(parsedLotes);
@@ -202,6 +192,10 @@
 
             useEffect(() => {
                 let data = [...allData];
+                if (isTransferMode) {
+                    data = data.filter(item => !item.isStored);
+                }
+
                 Object.keys(columnFilters).forEach(key => {
                     const filterValue = columnFilters[key].toLowerCase();
                     if (filterValue) {
@@ -232,7 +226,7 @@
                     });
                 }
                 setFilteredData(data);
-            }, [columnFilters, fechaDesde, fechaHasta, allData]);
+            }, [columnFilters, fechaDesde, fechaHasta, allData, isTransferMode]);
             
             useEffect(() => {
                 const handleClickOutside = (event) => {
@@ -316,6 +310,47 @@
                         </div>
                     </div>
                 );
+            };
+
+            const handleEnterTransferMode = () => {
+                setIsTransferMode(true);
+                setTransferSelection({});
+            };
+            
+            const handleCancelTransferMode = () => {
+                setIsTransferMode(false);
+                setTransferSelection({});
+            };
+
+            const handleToggleTransferSelection = (itemId) => {
+                setTransferSelection(prev => ({...prev, [itemId]: !prev[itemId]}));
+            };
+
+            const handleConfirmTransfer = async () => {
+                const selectedItems = allData.filter(item => transferSelection[item.id]);
+                if (selectedItems.length === 0) {
+                    alert("No ha seleccionado ningún lote para transferir.");
+                    return;
+                }
+                
+                setModalState({
+                    isOpen: true, type: 'confirm', title: 'Confirmar Transferencia',
+                    message: `Está a punto de transferir ${selectedItems.length} lote(s) al depósito. ¿Desea continuar?`,
+                    onConfirm: async () => {
+                        setModalState({ isOpen: false });
+                        setIsSaving(true);
+                        const palletsToTransfer = selectedItems.map(item => item.numeroDePallet);
+                        const { error } = await supabaseClient.rpc('transfer_pallets', { p_nropallets: palletsToTransfer });
+                        setIsSaving(false);
+                        if (error) {
+                            alert(`Error al transferir: ${error.message}`);
+                        } else {
+                            alert(`${selectedItems.length} pallet(s) transferido(s) correctamente.`);
+                            handleCancelTransferMode();
+                            loadData();
+                        }
+                    }
+                });
             };
 
             const exportToPDF = () => {
@@ -517,6 +552,32 @@
                 </div>
             );
 
+            const handleSelectAll = () => {
+                const allVisibleIds = filteredData.map(item => item.id);
+                const allSelected = allVisibleIds.every(id => transferSelection[id]);
+                const newSelection = {};
+                if (!allSelected) {
+                    allVisibleIds.forEach(id => { newSelection[id] = true; });
+                }
+                setTransferSelection(newSelection);
+            };
+
+            const TransferBar = () => {
+                if (!isTransferMode) return null;
+                const selectionCount = Object.values(transferSelection).filter(Boolean).length;
+                return (
+                    <div className="bg-indigo-600 text-white p-4 rounded-lg mb-4 shadow-lg flex justify-between items-center">
+                        <h2 className="text-xl font-bold">Modo Transferencia</h2>
+                        <div className="flex items-center space-x-4">
+                            <span className="font-semibold">{selectionCount} pallet(s) seleccionado(s)</span>
+                            <button onClick={handleSelectAll} className="bg-indigo-400 hover:bg-indigo-500 text-white font-semibold py-2 px-4 rounded-lg"><i className="fas fa-check-double mr-2"></i>Tildar/Destildar Todo</button>
+                            <button onClick={handleConfirmTransfer} disabled={selectionCount === 0} className="bg-green-500 hover:bg-green-600 text-white font-semibold py-2 px-4 rounded-lg disabled:opacity-50"><i className="fas fa-check mr-2"></i>Confirmar Transferencia</button>
+                            <button onClick={handleCancelTransferMode} className="bg-red-500 hover:bg-red-600 text-white font-semibold py-2 px-4 rounded-lg"><i className="fas fa-times mr-2"></i>Cancelar</button>
+                        </div>
+                    </div>
+                );
+            };
+
             return (
                 <div className="min-h-screen p-4 sm:p-6 bg-black bg-opacity-50">
                     {isSaving && (
@@ -544,6 +605,9 @@
                                 <button onClick={() => setShowHelpModal(true)} title="Ayuda" className="text-gray-400 hover:text-indigo-600 transition-colors"><i className="fas fa-question-circle text-2xl"></i></button>
                             </div>
                             <div className="flex items-center space-x-3 mt-4 sm:mt-0">
+                                {!isTransferMode && (
+                                    <button onClick={handleEnterTransferMode} className="bg-blue-500 text-white font-semibold py-2 px-4 rounded-lg hover:bg-blue-600 transition-colors shadow-sm flex items-center"><i className="fas fa-truck mr-2"></i>Modo Transferencia</button>
+                                )}
                                 <button onClick={() => setShowPendingModal(true)} className="bg-yellow-500 text-white font-semibold py-2 px-4 rounded-lg hover:bg-yellow-600 transition-colors shadow-sm flex items-center"><i className="fas fa-pallet mr-2"></i>Pendientes de Transferencia</button>
                                 <a href="posiciones3d.html" className="bg-teal-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-teal-700 transition-colors shadow-sm flex items-center"><i className="fas fa-cubes mr-2"></i>Ubicaciones 3D</a>
                                 <a href="histolistaempaque.html" className="bg-purple-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-purple-700 transition-colors shadow-sm flex items-center"><i className="fas fa-history mr-2"></i>Histórico Empaque</a>
@@ -552,6 +616,8 @@
                             </div>
                         </div>
                         
+                        <TransferBar />
+
                         <div className="mb-6 p-4 border rounded-lg bg-gray-50 space-y-4">
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                 <div>
@@ -614,16 +680,41 @@
                                             const isDespachado = item.despachado && item.despachado.toUpperCase() === 'TRUE';
                                             const clients = item.cliente ? item.cliente.split('#').filter(Boolean) : [];
                                             const handleRowDoubleClick = () => { if (item.hasNote) { setObservationModal({ isOpen: true, text: item.noteText }); } };
-                                            let rowClassName = item.hasNote ? 'bg-yellow-50 hover:bg-yellow-100 cursor-pointer' : 'hover:bg-gray-50';
+                                            let rowClassName = 'transition-colors';
+                                            if (isTransferMode) {
+                                                rowClassName += ' cursor-pointer';
+                                                if (transferSelection[item.id]) {
+                                                    rowClassName += ' bg-indigo-100 hover:bg-indigo-200';
+                                                } else {
+                                                    rowClassName += ' hover:bg-gray-100';
+                                                }
+                                            } else if (item.hasNote) {
+                                                rowClassName += ' bg-yellow-50 hover:bg-yellow-100 cursor-pointer';
+                                            } else {
+                                                rowClassName += ' hover:bg-gray-50';
+                                            }
+
+                                            const handleRowClick = () => {
+                                                if (isTransferMode) {
+                                                    handleToggleTransferSelection(item.id);
+                                                } else if (item.hasNote) {
+                                                    setObservationModal({ isOpen: true, text: item.noteText });
+                                                }
+                                            };
 
                                             return (
                                             <tr key={item.id} className={rowClassName} 
-                                                onDoubleClick={handleRowDoubleClick} onTouchStart={() => handlePressStart(handleRowDoubleClick)} onTouchEnd={handlePressEnd}
-                                                onMouseDown={() => handlePressStart(handleRowDoubleClick)} onMouseUp={handlePressEnd} onMouseLeave={handlePressEnd}>
+                                                onClick={handleRowClick}
+                                                onTouchStart={() => !isTransferMode && handlePressStart(handleRowDoubleClick)} 
+                                                onTouchEnd={() => !isTransferMode && handlePressEnd()}
+                                                onMouseDown={() => !isTransferMode && handlePressStart(handleRowDoubleClick)} 
+                                                onMouseUp={() => !isTransferMode && handlePressEnd()} 
+                                                onMouseLeave={() => !isTransferMode && handlePressEnd()}>
                                                 <td className="px-1 py-2 text-center align-middle">
-                                                    <input type="checkbox" className="h-5 w-5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 disabled:opacity-50"
-                                                        checked={item.isStored}
-                                                        disabled={true}
+                                                    <input type="checkbox" className={`h-5 w-5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 ${isTransferMode ? 'cursor-pointer' : ''}`}
+                                                        checked={isTransferMode ? !!transferSelection[item.id] : item.isStored}
+                                                        disabled={!isTransferMode}
+                                                        onChange={() => handleToggleTransferSelection(item.id)}
                                                     />
                                                 </td>
                                                 <td className="px-4 py-2 whitespace-nowrap text-sm font-medium text-gray-900">{item.sku}</td>
