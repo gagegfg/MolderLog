@@ -124,10 +124,10 @@
         const [toasts, setToasts] = useState([]);
         const toastContainer = document.getElementById('toast-container');
 
-        const showToast = (message, type = 'info') => {
+        const showToast = React.useCallback((message, type = 'info') => {
             const id = Date.now();
             setToasts(prev => [...prev, { id, message, type }]);
-        };
+        }, []);
 
         useEffect(() => {
             const onHide = (id) => {
