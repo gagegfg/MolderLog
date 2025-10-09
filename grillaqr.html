@@ -112,6 +112,48 @@
             const [fechaDesde, setFechaDesde] = useLocalStorage('grillaqr_fechaDesde', '');
             const [fechaHasta, setFechaHasta] = useLocalStorage('grillaqr_fechaHasta', '');
             
+            const [sortConfig, setSortConfig] = useState({ key: 'numeroDePallet', direction: 'descending' });
+
+            const requestSort = (key) => {
+                let direction = 'ascending';
+                if (sortConfig.key === key && sortConfig.direction === 'ascending') {
+                    direction = 'descending';
+                }
+                setSortConfig({ key, direction });
+            };
+
+            const sortedData = React.useMemo(() => {
+                let sortableItems = [...filteredData];
+                if (sortConfig.key) {
+                    sortableItems.sort((a, b) => {
+                        const parseDate = (dateString) => {
+                            if (!dateString) return new Date(0);
+                            const parts = dateString.split('/');
+                            if (parts.length !== 3) return new Date(0);
+                            return new Date(parts[2], parts[1] - 1, parts[0]);
+                        };
+
+                        const aValue = a[sortConfig.key];
+                        const bValue = b[sortConfig.key];
+
+                        let comparison = 0;
+
+                        if (sortConfig.key === 'fechaProduccion') {
+                            comparison = parseDate(aValue).getTime() - parseDate(bValue).getTime();
+                        } else if (sortConfig.key === 'numeroDePallet' || sortConfig.key === 'cantidad') {
+                            const numA = aValue ? parseFloat(String(aValue).replace(',', '.')) : 0;
+                            const numB = bValue ? parseFloat(String(bValue).replace(',', '.')) : 0;
+                            comparison = numA - numB;
+                        } else {
+                            comparison = String(aValue || '').localeCompare(String(bValue || ''));
+                        }
+
+                        return sortConfig.direction === 'ascending' ? comparison : -comparison;
+                    });
+                }
+                return sortableItems;
+            }, [filteredData, sortConfig]);
+
             const [isExportOpen, setIsExportOpen] = useState(false);
             const exportMenuRef = useRef(null);
             
@@ -696,10 +738,87 @@
                             <table className="min-w-full divide-y divide-gray-200">
                                 <thead className="bg-gray-800 text-white sticky top-0 z-10">
                                     <tr>
-                                        <th className="px-1 py-3 text-left text-xs font-medium uppercase tracking-wider">Almacenado</th>
-                                        {["SKU", "Descripción", "Nº Pallet", "Lotes Prod.", "Despachado", "Cliente", "F. Prod.", "Cantidad", "U.M.", "Acciones"].map(header => (
-                                            <th key={header} className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">{header}</th>
-                                        ))}
+                                        <th className="px-1 py-3 text-left text-xs font-medium uppercase tracking-wider">
+                                            <button onClick={() => requestSort('isStored')} className="flex items-center space-x-1 hover:text-gray-300">
+                                                <span>Almacenado</span>
+                                                {sortConfig.key === 'isStored' ? (
+                                                    sortConfig.direction === 'ascending' ? <i className="fas fa-sort-up"></i> : <i className="fas fa-sort-down"></i>
+                                                ) : <i className="fas fa-sort text-gray-500"></i>}
+                                            </button>
+                                        </th>
+                                        <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">
+                                            <button onClick={() => requestSort('sku')} className="flex items-center space-x-1 hover:text-gray-300">
+                                                <span>SKU</span>
+                                                {sortConfig.key === 'sku' ? (
+                                                    sortConfig.direction === 'ascending' ? <i className="fas fa-sort-up"></i> : <i className="fas fa-sort-down"></i>
+                                                ) : <i className="fas fa-sort text-gray-500"></i>}
+                                            </button>
+                                        </th>
+                                        <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">
+                                            <button onClick={() => requestSort('descripcion')} className="flex items-center space-x-1 hover:text-gray-300">
+                                                <span>Descripción</span>
+                                                {sortConfig.key === 'descripcion' ? (
+                                                    sortConfig.direction === 'ascending' ? <i className="fas fa-sort-up"></i> : <i className="fas fa-sort-down"></i>
+                                                ) : <i className="fas fa-sort text-gray-500"></i>}
+                                            </button>
+                                        </th>
+                                        <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">
+                                            <button onClick={() => requestSort('numeroDePallet')} className="flex items-center space-x-1 hover:text-gray-300">
+                                                <span>Nº Pallet</span>
+                                                {sortConfig.key === 'numeroDePallet' ? (
+                                                    sortConfig.direction === 'ascending' ? <i className="fas fa-sort-up"></i> : <i className="fas fa-sort-down"></i>
+                                                ) : <i className="fas fa-sort text-gray-500"></i>}
+                                            </button>
+                                        </th>
+                                        <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">
+                                            <button onClick={() => requestSort('lotesProduccion')} className="flex items-center space-x-1 hover:text-gray-300">
+                                                <span>Lotes Prod.</span>
+                                                {sortConfig.key === 'lotesProduccion' ? (
+                                                    sortConfig.direction === 'ascending' ? <i className="fas fa-sort-up"></i> : <i className="fas fa-sort-down"></i>
+                                                ) : <i className="fas fa-sort text-gray-500"></i>}
+                                            </button>
+                                        </th>
+                                        <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">
+                                            <button onClick={() => requestSort('despachado')} className="flex items-center space-x-1 hover:text-gray-300">
+                                                <span>Despachado</span>
+                                                {sortConfig.key === 'despachado' ? (
+                                                    sortConfig.direction === 'ascending' ? <i className="fas fa-sort-up"></i> : <i className="fas fa-sort-down"></i>
+                                                ) : <i className="fas fa-sort text-gray-500"></i>}
+                                            </button>
+                                        </th>
+                                        <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">
+                                            <button onClick={() => requestSort('cliente')} className="flex items-center space-x-1 hover:text-gray-300">
+                                                <span>Cliente</span>
+                                                {sortConfig.key === 'cliente' ? (
+                                                    sortConfig.direction === 'ascending' ? <i className="fas fa-sort-up"></i> : <i className="fas fa-sort-down"></i>
+                                                ) : <i className="fas fa-sort text-gray-500"></i>}
+                                            </button>
+                                        </th>
+                                        <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">
+                                            <button onClick={() => requestSort('fechaProduccion')} className="flex items-center space-x-1 hover:text-gray-300">
+                                                <span>F. Prod.</span>
+                                                {sortConfig.key === 'fechaProduccion' ? (
+                                                    sortConfig.direction === 'ascending' ? <i className="fas fa-sort-up"></i> : <i className="fas fa-sort-down"></i>
+                                                ) : <i className="fas fa-sort text-gray-500"></i>}
+                                            </button>
+                                        </th>
+                                        <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">
+                                            <button onClick={() => requestSort('cantidad')} className="flex items-center space-x-1 hover:text-gray-300">
+                                                <span>Cantidad</span>
+                                                {sortConfig.key === 'cantidad' ? (
+                                                    sortConfig.direction === 'ascending' ? <i className="fas fa-sort-up"></i> : <i className="fas fa-sort-down"></i>
+                                                ) : <i className="fas fa-sort text-gray-500"></i>}
+                                            </button>
+                                        </th>
+                                        <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">
+                                            <button onClick={() => requestSort('unidadMedida')} className="flex items-center space-x-1 hover:text-gray-300">
+                                                <span>U.M.</span>
+                                                {sortConfig.key === 'unidadMedida' ? (
+                                                    sortConfig.direction === 'ascending' ? <i className="fas fa-sort-up"></i> : <i className="fas fa-sort-down"></i>
+                                                ) : <i className="fas fa-sort text-gray-500"></i>}
+                                            </button>
+                                        </th>
+                                        <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Acciones</th>
                                     </tr>
                                     <tr className="bg-gray-200">
                                         <th className="p-1"></th>
@@ -716,7 +835,7 @@
                                     {isLoading ? (
                                         <tr><td colSpan="11" class="p-8 text-center text-gray-500">Cargando datos...</td></tr>
                                     ) : (
-                                        filteredData.length > 0 ? filteredData.map((item) => {
+                                        sortedData.length > 0 ? sortedData.map((item) => {
                                             const isDespachado = item.despachado && item.despachado.toUpperCase() === 'TRUE';
                                             const clients = item.cliente ? item.cliente.split('#').filter(Boolean) : [];
 
