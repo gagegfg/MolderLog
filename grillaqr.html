@@ -447,12 +447,127 @@
                         if (error) {
                             alert(`Error al transferir: ${error.message}`);
                         } else {
-                            alert(`${selectedItems.length} pallet(s) transferido(s) correctamente.`);
+                            await generateTransferPDF(selectedItems);
                             handleCancelTransferMode();
                             loadData();
                         }
                     }
                 });
+            };
+
+            const loadImageAsDataURI = (url) => {
+                return new Promise((resolve, reject) => {
+                    const image = new Image();
+                    image.crossOrigin = "Anonymous"; // In case it's hosted differently
+                    image.onload = () => {
+                        const canvas = document.createElement('canvas');
+                        canvas.width = image.width;
+                        canvas.height = image.height;
+                        const ctx = canvas.getContext('2d');
+                        ctx.drawImage(image, 0, 0);
+                        resolve(canvas.toDataURL('image/jpeg'));
+                    };
+                    image.onerror = (error) => {
+                        console.error("Error loading image for PDF:", error);
+                        resolve(null); // Resolve null to not break PDF generation
+                    };
+                    image.src = url;
+                });
+            };
+
+            const generateTransferPDF = async (transferredPallets) => {
+                const doc = new jsPDF({ orientation: 'landscape' });
+                const pageWidth = doc.internal.pageSize.getWidth();
+                const pageHeight = doc.internal.pageSize.getHeight();
+                const margin = 14;
+
+                // Load logo
+                const logoDataUri = await loadImageAsDataURI('logo.jpg');
+
+                // Header
+                if (logoDataUri) {
+                    doc.addImage(logoDataUri, 'JPEG', margin, margin, 40, 15);
+                }
+                doc.setFont('helvetica', 'bold');
+                doc.setFontSize(18);
+                doc.text('Reporte de Transferencia de Pallets', pageWidth / 2, margin + 10, { align: 'center' });
+                doc.setFontSize(10);
+                doc.setFont('helvetica', 'normal');
+                doc.text(`Fecha de Generación: ${new Date().toLocaleString('es-AR')}`, pageWidth - margin, margin + 10, { align: 'right' });
+
+                // --- Detail Table ---
+                doc.setFont('helvetica', 'bold');
+                doc.setFontSize(12);
+                doc.text('Detalle de Pallets Transferidos', margin, 45);
+
+                const detailHead = [["SKU", "Descripción", "Nº Pallet", "Lotes Prod.", "F. Prod.", "Cantidad", "U.M."]];
+                const detailBody = transferredPallets.map(item => [
+                    item.sku,
+                    item.descripcion,
+                    item.numeroDePallet,
+                    item.lotesProduccion.replace(/#/g, ' '),
+                    item.fechaProduccion,
+                    item.cantidad,
+                    item.unidadMedida
+                ]);
+
+                doc.autoTable({
+                    startY: 50,
+                    head: detailHead,
+                    body: detailBody,
+                    theme: 'grid',
+                    headStyles: { fillColor: [41, 128, 185], textColor: 255, fontStyle: 'bold' },
+                    alternateRowStyles: { fillColor: [245, 245, 245] },
+                    margin: { left: margin, right: margin }
+                });
+
+                // --- Summary Table ---
+                const summary = transferredPallets.reduce((acc, item) => {
+                    if (!acc[item.sku]) {
+                        acc[item.sku] = {
+                            descripcion: item.descripcion,
+                            cantidad: 0,
+                            unidadMedida: item.unidadMedida
+                        };
+                    }
+                    const cantidad = parseFloat(String(item.cantidad).replace(',', '.')) || 0;
+                    acc[item.sku].cantidad += cantidad;
+                    return acc;
+                }, {});
+
+                const summaryHead = [["SKU", "Descripción", "Cantidad Total", "U.M."]];
+                const summaryBody = Object.keys(summary).map(sku => [
+                    sku,
+                    summary[sku].descripcion,
+                    String(summary[sku].cantidad.toFixed(2)).replace('.', ','),
+                    summary[sku].unidadMedida
+                ]);
+
+                let finalY = doc.lastAutoTable.finalY || 80;
+                if (finalY > pageHeight - 50) { // Check if there's enough space, otherwise add new page
+                    doc.addPage();
+                    finalY = margin;
+                }
+
+                doc.setFont('helvetica', 'bold');
+                doc.setFontSize(12);
+                doc.text('Resumen por SKU', margin, finalY + 15);
+
+                doc.autoTable({
+                    startY: finalY + 20,
+                    head: summaryHead,
+                    body: summaryBody,
+                    theme: 'grid',
+                    headStyles: { fillColor: [39, 174, 96], textColor: 255, fontStyle: 'bold' },
+                    margin: { left: margin, right: margin }
+                });
+
+                // Filename and Save
+                const now = new Date();
+                const dateStr = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
+                const timeStr = String(now.getHours()).padStart(2, '0') + '-' + String(now.getMinutes()).padStart(2, '0') + '-' + String(now.getSeconds()).padStart(2, '0');
+                const fileName = `reporte_transferencia_${dateStr}_${timeStr}.pdf`;
+                doc.save(fileName);
             };
 
             const exportToPDF = () => {
@@ -646,6 +761,14 @@
                                     <li><strong>Agregar/Editar:</strong> En el menú de acciones (<i className="fas fa-ellipsis-v"></i>), selecciona "Agregar Nota" o "Editar/Ver Nota". Se abrirá una ventana para que escribas.</li>
                                     <li><strong>Visualizar:</strong> Las filas con notas aparecen resaltadas en amarillo y el número de pallet tiene un asterisco (*). Puedes ver la nota haciendo doble clic en la fila.</li>
                                     <li><strong>Eliminar:</strong> Para borrar una nota, ábrela para editarla y simplemente guarda el campo de texto vacío.</li>
+                                </ul>
+                            </div>
+                            <div>
+                                <h4 className="font-bold text-lg text-indigo-700">Modo Transferencia</h4>
+                                <ul className="list-disc list-inside mt-2 space-y-1">
+                                    <li><strong>Activar:</strong> Usa el botón "Modo Transferencia" para empezar a seleccionar pallets.</li>
+                                    <li><strong>Selección:</strong> Haz clic en las filas para seleccionar/deseleccionar los pallets a transferir.</li>
+                                    <li><strong>Confirmar:</strong> Al confirmar la transferencia, se descargará automáticamente un <strong>reporte en PDF</strong> con el detalle y resumen de los pallets transferidos.</li>
                                 </ul>
                             </div>
                         </div>
