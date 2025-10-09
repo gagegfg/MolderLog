@@ -641,7 +641,7 @@
                 const [day, month, year] = data.fechaProd.split('/');
                 doc.text(new Date(year, month - 1, day).toLocaleDateString('es-ES'), pageW - margin, currentY + 22, { align: "right" });
                 
-                let yPos = currentY + 30;
+                let yPos = currentY + 35;
 
                 if (data.rnpa && data.rnpa.trim() !== '') {
                     doc.setFontSize(20);
