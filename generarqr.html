@@ -160,6 +160,45 @@
         const [numeroDePallet, setNumeroDePallet] = useState('');
         const [isPalletNumEditable, setIsPalletNumEditable] = useState(false);
         const [cantidadCopias, setCantidadCopias] = useState(2);
+        const [editMode, setEditMode] = useState(false);
+        
+        useEffect(() => {
+            const urlParams = new URLSearchParams(window.location.search);
+            const palletToEdit = urlParams.get('edit');
+
+            if (palletToEdit) {
+                setEditMode(true);
+                setIsPalletNumEditable(false);
+                const fetchPalletData = async () => {
+                    const { data, error } = await supabaseClient
+                        .from('vista_detallelotes_completa')
+                        .select('*')
+                        .eq('nropallet', palletToEdit)
+                        .single();
+
+                    if (error) {
+                        showToast(`Error al cargar los datos del pallet: ${error.message}`, 'error');
+                        return;
+                    }
+
+                    const articulo = articulos.find(a => a.sku === data.sku);
+                    setSelectedArticulo(articulo);
+                    setSearchTerm(`${data.sku} - ${data.descripcion}`);
+                    setNumeroDePallet(data.nropallet);
+                    setLotesProduccion(data.lotesproduccion.split('#'));
+                    setFechaProd(new Date(data.fechaproduccion).toISOString().split('T')[0]);
+                    setCantidad(String(data.cantidad).replace('.', ','));
+                    setUom(data.unidadmedida);
+                    setObservacion(data.notatext || '');
+                };
+
+                if (articulos.length > 0) {
+                    fetchPalletData();
+                }
+            } else {
+                handleRefreshPalletNumber(true);
+            }
+        }, [articulos, showToast]);
         
         const getTodayDateString = () => {
             const today = new Date();
@@ -225,59 +264,6 @@
             }
         };
 
-        const handleManualPalletUpdate = async () => {
-            const newPalletInput = prompt("Ingrese el nuevo número de pallet:");
-            if (newPalletInput === null) return;
-
-            const newPalletNum = parseInt(newPalletInput, 10);
-
-            if (isNaN(newPalletNum) || newPalletNum <= 0) {
-                showToast("El número de pallet debe ser un entero positivo.", 'error');
-                return;
-            }
-
-            let currentFilePalletNum = 0;
-            try {
-                const { data, error } = await supabaseClient.rpc('get_max_pallet_number');
-                if (error) throw error;
-                currentFilePalletNum = data || 0;
-            } catch (error) {
-                console.error("Error al obtener el número de pallet de la DB:", error);
-                showToast(`Error al obtener el número de pallet de la DB: ${error.message}`, 'error');
-                return;
-            }
-
-            const currentDisplayedPalletNum = parseInt(numeroDePallet, 10) -1;
-
-            if (newPalletNum <= currentFilePalletNum || newPalletNum <= currentDisplayedPalletNum) {
-                showToast(`El nuevo número de pallet (${newPalletNum}) debe ser mayor que el actual en archivo (${currentFilePalletNum}) y en pantalla (${currentDisplayedPalletNum}).`, 'error');
-                return;
-            }
-
-            const confirmation = confirm(`¿Está seguro que desea forzar el número de pallet a ${newPalletNum}? Esta acción es irreversible.`);
-            if (!confirmation) return;
-
-            try {
-                const { error } = await supabaseClient.rpc('force_set_pallet_number', { pallet_number: newPalletNum });
-
-                if (error) {
-                    console.error('Error en RPC force_set_pallet_number:', error);
-                    throw new Error("Fallo al actualizar el número de pallet manualmente en la DB.");
-                }
-
-                setNumeroDePallet(newPalletNum + 1);
-                showToast(`Número de pallet forzado a ${newPalletNum}. El siguiente es ${newPalletNum + 1}.`, 'success');
-                if (previewPdfUrl) {
-                    setPreviewPdfUrl(null);
-                    showToast('El Nº de pallet cambió. Por favor, genere una nueva vista previa.', 'info');
-                }
-
-            } catch (error) {
-                console.error("Error en handleManualPalletUpdate:", error);
-                showToast(`Error al actualizar el número de pallet: ${error.message}`, 'error');
-            }
-        };
-
         useEffect(() => {
             if (!supabaseClient) return;
             const interval = setInterval(() => {
@@ -287,7 +273,7 @@
                     console.log("Verificación periódica de número de pallet...");
                     handleRefreshPalletNumber(true);
                 }
-            }, Math.floor(Math.random() * (5 * 60 * 1000 - 1 * 60 * 1000 + 1)) + 1 * 60 * 1000);
+            }, Math.floor(Math.random() * (3 * 60 * 1000 - 1 * 60 * 1000 + 1)) + 1 * 60 * 1000);
 
             return () => clearInterval(interval);
         }, [numeroDePallet, previewPdfUrl]);
@@ -567,6 +553,87 @@
             setPreviewPdfUrl(pdfDataUrl);
         };
         
+        const handleUpdateAndPrintPDF = async () => {
+            if (isSaving) return;
+            setIsSaving(true);
+
+            const numCopias = parseInt(cantidadCopias, 10);
+            const palletNum = parseInt(numeroDePallet, 10);
+
+            if (isNaN(numCopias) || numCopias < 1 || isNaN(palletNum) || !previewPdfUrl) {
+                showToast("Genere una vista previa y verifique los datos.", 'error');
+                setIsSaving(false);
+                return;
+            }
+
+            try {
+                const data = getLabelData();
+                
+                const { error: updateError } = await supabaseClient.rpc('update_pallet_data', {
+                    p_nropallet: data.palletId,
+                    p_sku: data.sku,
+                    p_cantidad: parseFloat(data.cantidad.replace(',', '.')),
+                    p_lotes_produccion: data.lotes.join('#'),
+                    p_fecha_produccion: data.fechaProd,
+                    p_observacion: data.observacion || null
+                });
+
+                if (updateError) throw updateError;
+                
+                showToast(`Pallet Nº ${palletNum} actualizado correctamente.`, 'success');
+                const doc = new jsPDF('p', 'mm', 'a4');
+                for (let i = 0; i < numCopias; i++) {
+                    if (i > 0) doc.addPage();
+                    await drawLabelOnDoc(doc, data);
+                }
+                
+                const isMobile = /Android|iPhone/i.test(navigator.userAgent);
+
+                doc.save(`etiqueta_pallet_${palletNum}.pdf`);
+
+                if (!isMobile) {
+                    try {
+                        const pdfBlob = doc.output('blob');
+                        const blobUrl = URL.createObjectURL(pdfBlob);
+                        
+                        const iframe = document.createElement('iframe');
+                        iframe.style.display = 'none';
+                        iframe.src = blobUrl;
+                        
+                        document.body.appendChild(iframe);
+                        
+                        iframe.onload = () => {
+                            setTimeout(() => {
+                                try {
+                                    iframe.contentWindow.focus();
+                                    iframe.contentWindow.print();
+                                } catch (e) {
+                                    console.error("No se pudo abrir el diálogo de impresión.", e);
+                                    showToast("No se pudo abrir el diálogo de impresión automáticamente.", "error");
+                                } finally {
+                                    setTimeout(() => {
+                                        document.body.removeChild(iframe);
+                                        URL.revokeObjectURL(blobUrl);
+                                    }, 60000);
+                                }
+                            }, 1);
+                        };
+                    } catch (e) {
+                        console.error("Error al crear el iframe de impresión:", e);
+                        showToast("Error al preparar la impresión automática.", "error");
+                    }
+                }
+
+                // Redirect to grillaqr.html after updating
+                window.location.href = 'grillaqr.html';
+
+            } catch (error) {
+                showToast(`ERROR CRÍTICO: ${error.message}`, 'error');
+            } finally {
+                setIsSaving(false);
+            }
+        };
+
         const handleGenerateAndPrintPDF = async () => {
             if (isSaving) return;
             setIsSaving(true);
@@ -732,15 +799,7 @@
                                             }`}></i>
                                             <span>Refrescar</span>
                                         </button>
-                                        <button 
-                                            type="button"
-                                            onClick={handleManualPalletUpdate}
-                                            className="relative -ml-px inline-flex items-center space-x-2 rounded-r-md border border-gray-300 bg-gray-50 px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-100 disabled:opacity-50"
-                                            title="Ingresar número de pallet manualmente"
-                                        >
-                                            <i className="fas fa-edit h-5 w-5 text-purple-500"></i>
-                                            <span>Manual</span>
-                                        </button>
+
                                     </div>
                                 </div>
                                 <div>
@@ -788,9 +847,16 @@
                                     )}
                                 </div>
                                 {previewPdfUrl && (
-                                    <button onClick={handleGenerateAndPrintPDF} disabled={isSaving} className="w-full mt-4 bg-green-600 text-white font-semibold py-3 px-4 rounded-md shadow-md hover:bg-green-700 text-xl flex items-center justify-center disabled:opacity-60 disabled:cursor-wait">
+                                    <button 
+                                        onClick={editMode ? handleUpdateAndPrintPDF : handleGenerateAndPrintPDF} 
+                                        disabled={isSaving} 
+                                        className={`w-full mt-4 text-white font-semibold py-3 px-4 rounded-md shadow-md text-xl flex items-center justify-center disabled:opacity-60 disabled:cursor-wait ${editMode ? 'bg-orange-600 hover:bg-orange-700' : 'bg-green-600 hover:bg-green-700'}`}
+                                    >
                                         {isSaving && <span className="spinner"></span>}
-                                        {isSaving ? 'Guardando...' : '🖨️ Imprimir y Guardar'}
+                                        {isSaving 
+                                            ? (editMode ? 'Actualizando...' : 'Guardando...') 
+                                            : (editMode ? '💾 Actualizar e Imprimir' : '🖨️ Imprimir y Guardar')
+                                        }
                                     </button>
                                 )}
                             </div>
