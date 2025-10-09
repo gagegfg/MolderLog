@@ -507,13 +507,13 @@
                 let yPos = currentY + 30;
 
                 if (data.rnpa && data.rnpa.trim() !== '') {
-                    doc.setFontSize(14);
+                    doc.setFontSize(20);
                     doc.setFont("helvetica", "normal");
-                    doc.text(`RNPA: ${data.rnpa}`, margin, yPos);
+                    doc.text(`RNPE: ${data.rnpa}`, margin, yPos);
                 }
 
                 if (data.rne && data.rne.trim() !== '') {
-                    doc.setFontSize(14);
+                    doc.setFontSize(20);
                     doc.setFont("helvetica", "normal");
                     doc.text(`RNE: ${data.rne}`, pageW - margin, yPos, { align: "right" });
                 }
