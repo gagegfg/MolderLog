@@ -161,6 +161,7 @@
         const [isPalletNumEditable, setIsPalletNumEditable] = useState(false);
         const [cantidadCopias, setCantidadCopias] = useState(2);
         const [editMode, setEditMode] = useState(false);
+        const [isAlreadyTransferred, setIsAlreadyTransferred] = useState(false);
         
         useEffect(() => {
             const urlParams = new URLSearchParams(window.location.search);
@@ -677,6 +678,17 @@
                 if (insertError) throw insertError;
                 
                 showToast(`Pallet Nº ${palletNum} guardado correctamente.`, 'success');
+
+                if (isAlreadyTransferred) {
+                    const { error: transferError } = await supabaseClient
+                        .from('nropalettransferidos')
+                        .insert({ nropallet: data.palletId });
+
+                    if (transferError) {
+                        showToast(`Error al marcar como transferido: ${transferError.message}`, 'error');
+                    }
+                }
+
                 const doc = new jsPDF('p', 'mm', 'a4');
                 for (let i = 0; i < numCopias; i++) {
                     if (i > 0) doc.addPage();
@@ -727,6 +739,7 @@
                 setCantidad('');
                 setObservacion('');
                 setPreviewPdfUrl(null);
+                setIsAlreadyTransferred(false);
 
             } catch (error) {
                 showToast(`ERROR CRÍTICO: ${error.message}`, 'error');
@@ -752,6 +765,19 @@
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <div className="space-y-4">
+                                {!editMode && (
+                                    <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                                        <label className="flex items-center space-x-3 cursor-pointer">
+                                            <input
+                                                type="checkbox"
+                                                checked={isAlreadyTransferred}
+                                                onChange={e => setIsAlreadyTransferred(e.target.checked)}
+                                                className="h-5 w-5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                                            />
+                                            <span className="text-base font-bold text-blue-800">Marcar como ya transferido (Ej: Devolución)</span>
+                                        </label>
+                                    </div>
+                                )}
                                 <div className="relative">
                                     <label className="block text-base font-bold text-black">Artículo (Buscar por SKU o Descripción)</label>
                                     <input type="text" ref={articuloInputRef} value={searchTerm} onChange={e => { setSearchTerm(e.target.value); }} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border" />
