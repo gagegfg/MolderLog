@@ -90,815 +90,832 @@
 <div id="toast-container"></div>
 
 <script src="config.js"></script>
-<script type="text/babel">
-    const { useState, useEffect, Fragment, useRef } = React;
-    const { createRoot } = ReactDOM;
-    const { jsPDF } = window.jspdf;
+    <script type="text/babel">
+        const { useState, useEffect, Fragment, useRef } = React;
+        const { createRoot } = ReactDOM;
+        const { jsPDF } = window.jspdf;
 
-    // =================================================================
-    // ### CONFIGURACIÓN DE SUPABASE - CARGADA DESDE config.js ###
-    // =================================================================
-    // Las variables SUPABASE_URL y SUPABASE_KEY se cargan desde config.js,
-    // un archivo que se genera en el build de Vercel o se crea
-    // manualmente para el desarrollo local.
-    // =================================================================
+        // =================================================================
+        // ### CONFIGURACIÓN DE SUPABASE - CARGADA DESDE config.js ###
+        // =================================================================
+        // Las variables SUPABASE_URL y SUPABASE_KEY se cargan desde config.js,
+        // un archivo que se genera en el build de Vercel o se crea
+        // manualmente para el desarrollo local.
+        // =================================================================
 
-    // Inicializa el cliente de Supabase.
-    const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+        // Inicializa el cliente de Supabase.
+        const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 
-    const Toast = ({ message, type, onHide }) => {
-        useEffect(() => {
-            const timer = setTimeout(onHide, 3000);
-            return () => clearTimeout(timer);
-        }, [onHide]);
+        const Toast = ({ message, type, onHide }) => {
+            useEffect(() => {
+                const timer = setTimeout(onHide, 3000);
+                return () => clearTimeout(timer);
+            }, [onHide]);
 
-        return (
-            <div className={`toast show toast-${type}`}>
-                {message}
-            </div>
-        );
-    };
-    
-    const useToasts = () => {
-        const [toasts, setToasts] = useState([]);
-        const toastContainer = document.getElementById('toast-container');
-
-        const showToast = React.useCallback((message, type = 'info') => {
-            const id = Date.now();
-            setToasts(prev => [...prev, { id, message, type }]);
-        }, []);
-
-        useEffect(() => {
-            const onHide = (id) => {
-                setToasts(prev => prev.filter(toast => toast.id !== id));
-            };
-            
-            const toastElements = toasts.map(toast => (
-                <Toast key={toast.id} {...toast} onHide={() => onHide(toast.id)} />
-            ));
-            
-            if (toastContainer) {
-                ReactDOM.createPortal(toastElements, toastContainer);
-            }
-        }, [toasts, toastContainer]);
-
-        return showToast;
-    };
-
-    const AppWrapper = () => {
-        return <App />;
-    };
-
-    const App = ({ apiToken }) => {
-        const showToast = useToasts();
-        const [appIsLoading, setAppIsLoading] = useState(true);
-        const [articulos, setArticulos] = useState([]);
-        const [searchTerm, setSearchTerm] = useState('');
-        const [selectedArticulo, setSelectedArticulo] = useState(null);
-        const [lotesProduccion, setLotesProduccion] = useState(['']);
-        const [numeroDePallet, setNumeroDePallet] = useState('');
-        const [isPalletNumEditable, setIsPalletNumEditable] = useState(false);
-        const [cantidadCopias, setCantidadCopias] = useState(2);
-        const [editMode, setEditMode] = useState(false);
-        const [isAlreadyTransferred, setIsAlreadyTransferred] = useState(false);
-        
-        useEffect(() => {
-            const urlParams = new URLSearchParams(window.location.search);
-            const palletToEdit = urlParams.get('edit');
-
-            if (palletToEdit) {
-                setEditMode(true);
-                setIsPalletNumEditable(false);
-                const fetchPalletData = async () => {
-                    const { data, error } = await supabaseClient
-                        .from('vista_detallelotes_completa')
-                        .select('*')
-                        .eq('nropallet', palletToEdit)
-                        .single();
-
-                    if (error) {
-                        showToast(`Error al cargar los datos del pallet: ${error.message}`, 'error');
-                        return;
-                    }
-
-                    const articulo = articulos.find(a => a.sku === data.sku);
-                    setSelectedArticulo(articulo);
-                    setSearchTerm(`${data.sku} - ${data.descripcion}`);
-                    setNumeroDePallet(data.nropallet);
-                    setLotesProduccion(data.lotesproduccion.split('#'));
-                    setFechaProd(new Date(data.fechaproduccion).toISOString().split('T')[0]);
-                    setCantidad(String(data.cantidad).replace('.', ','));
-                    setUom(data.unidadmedida);
-                    setObservacion(data.notatext || '');
-                };
-
-                if (articulos.length > 0) {
-                    fetchPalletData();
-                }
-            } else {
-                handleRefreshPalletNumber(true);
-            }
-        }, [articulos, showToast]);
-        
-        const getTodayDateString = () => {
-            const today = new Date();
-            const year = today.getFullYear();
-            const month = String(today.getMonth() + 1).padStart(2, '0');
-            const day = String(today.getDate()).padStart(2, '0');
-            return `${year}-${month}-${day}`;
+            return (
+                <div className={`toast show toast-${type}`}>
+                    {message}
+                </div>
+            );
         };
-        const [fechaProd, setFechaProd] = useState(getTodayDateString());
-
-        const [cantidad, setCantidad] = useState('');
-        const [uom, setUom] = useState('Unidad');
-        const [previewPdfUrl, setPreviewPdfUrl] = useState(null);
-        const [isSaving, setIsSaving] = useState(false);
-        const [observacion, setObservacion] = useState('');
-        const articuloInputRef = useRef(null);
-        const loteInputRefs = useRef([]);
-        const [refreshState, setRefreshState] = useState('idle');
         
-        const handleRefreshPalletNumber = async (isSilent = false) => {
-            if (!supabaseClient) return;
-            if (!isSilent) setRefreshState('loading');
-            
-            try {
-                const { data, error } = await supabaseClient.rpc('get_max_pallet_number');
+        const useToasts = () => {
+            const [toasts, setToasts] = useState([]);
+            const toastContainer = document.getElementById('toast-container');
 
-                if (error) {
-                    console.error("Error RPC get_max_pallet_number:", error);
-                    throw new Error('No se pudo verificar el Nº de pallet desde la DB.');
+            const showToast = React.useCallback((message, type = 'info') => {
+                const id = Date.now();
+                setToasts(prev => [...prev, { id, message, type }]);
+            }, []);
+
+            useEffect(() => {
+                const onHide = (id) => {
+                    setToasts(prev => prev.filter(toast => toast.id !== id));
+                };
+                
+                const toastElements = toasts.map(toast => (
+                    <Toast key={toast.id} {...toast} onHide={() => onHide(toast.id)} />
+                ));
+                
+                if (toastContainer) {
+                    ReactDOM.createPortal(toastElements, toastContainer);
                 }
+            }, [toasts, toastContainer]);
 
-                const numeroBase = data || 0;
-                const proximoNumero = numeroBase + 1;
-                const numeroActual = parseInt(numeroDePallet, 10);
+            return showToast;
+        };
 
-                if (!numeroActual || numeroActual !== proximoNumero) {
-                    setNumeroDePallet(proximoNumero);
-                    if (!isSilent) {
-                        showToast(`Nº de pallet actualizado al siguiente disponible: ${proximoNumero}.`, 'info');
-                    }
-                    if (previewPdfUrl) {
-                        setPreviewPdfUrl(null);
-                        showToast('El Nº de pallet cambió. Por favor, genere una nueva vista previa.', 'info');
+        const AppWrapper = () => {
+            return <App />;
+        };
+
+        const App = ({ apiToken }) => {
+            const showToast = useToasts();
+            const [appIsLoading, setAppIsLoading] = useState(true);
+            const [articulos, setArticulos] = useState([]);
+            const [searchTerm, setSearchTerm] = useState('');
+            const [selectedArticulo, setSelectedArticulo] = useState(null);
+            const [lotesProduccion, setLotesProduccion] = useState(['']);
+            const [numeroDePallet, setNumeroDePallet] = useState('');
+            const [isPalletNumEditable, setIsPalletNumEditable] = useState(false);
+            const [cantidadCopias, setCantidadCopias] = useState(2);
+            const [editMode, setEditMode] = useState(false);
+            const [isAlreadyTransferred, setIsAlreadyTransferred] = useState(false);
+            
+            useEffect(() => {
+                const urlParams = new URLSearchParams(window.location.search);
+                const palletToEdit = urlParams.get('edit');
+
+                if (palletToEdit) {
+                    setEditMode(true);
+                    setIsPalletNumEditable(false);
+                    const fetchPalletData = async () => {
+                        const { data, error } = await supabaseClient
+                            .from('vista_detallelotes_completa')
+                            .select('*')
+                            .eq('nropallet', palletToEdit)
+                            .single();
+
+                        if (error) {
+                            showToast(`Error al cargar los datos del pallet: ${error.message}`, 'error');
+                            return;
+                        }
+
+                        const articulo = articulos.find(a => a.sku === data.sku);
+                        setSelectedArticulo(articulo);
+                        setSearchTerm(`${data.sku} - ${data.descripcion}`);
+                        setNumeroDePallet(data.nropallet);
+                        setLotesProduccion(data.lotesproduccion.split('#'));
+                        setFechaProd(new Date(data.fechaproduccion).toISOString().split('T')[0]);
+                        setCantidad(String(data.cantidad).replace('.', ','));
+                        setUom(data.unidadmedida);
+                        setObservacion(data.notatext || '');
+                    };
+
+                    if (articulos.length > 0) {
+                        fetchPalletData();
                     }
                 } else {
-                    if (!isSilent) {
-                         showToast('El número de pallet ya está actualizado.', 'success');
-                    }
-                }
-                if (!isSilent) {
-                    setRefreshState('success');
-                    setTimeout(() => setRefreshState('idle'), 2000);
-                }
-                return proximoNumero;
-            } catch (error) {
-                console.error("Error en handleRefreshPalletNumber:", error);
-                if (!isSilent) {
-                    showToast(error.message, 'error');
-                    setRefreshState('error');
-                    setTimeout(() => setRefreshState('idle'), 3000);
-                }
-                return null;
-            }
-        };
-
-        useEffect(() => {
-            if (!supabaseClient || editMode) return;
-            const interval = setInterval(() => {
-                const now = new Date();
-                const hour = now.getHours();
-                if (hour >= 5 && hour < 22) {
-                    console.log("Verificación periódica de número de pallet...");
                     handleRefreshPalletNumber(true);
                 }
-            }, Math.floor(Math.random() * (3 * 60 * 1000 - 1 * 60 * 1000 + 1)) + 1 * 60 * 1000);
-
-            return () => clearInterval(interval);
-        }, [numeroDePallet, previewPdfUrl, editMode]);
-
-        useEffect(() => {
-            if (!supabaseClient) return;
-            const fetchInternetTime = async () => {
-                try {
-                    const response = await fetch('https://worldtimeapi.org/api/timezone/America/Argentina/Buenos_Aires', { cache: "no-store" });
-                    if (!response.ok) throw new Error('No se pudo conectar al servidor de tiempo.');
-                    
-                    const data = await response.json();
-                    const internetDate = data.datetime.substring(0, 10);
-                    setFechaProd(internetDate);
-                    showToast('Fecha sincronizada con hora de internet.', 'info');
-                } catch (error) {
-                    console.error("Error al obtener la hora de internet:", error);
-                    showToast('Fallo al sincronizar fecha. Usando hora local.', 'error');
-                }
+            }, [articulos, showToast]);
+            
+            const getTodayDateString = () => {
+                const today = new Date();
+                const year = today.getFullYear();
+                const month = String(today.getMonth() + 1).padStart(2, '0');
+                const day = String(today.getDate()).padStart(2, '0');
+                return `${year}-${month}-${day}`;
             };
-            fetchInternetTime();
-        }, []);
+            const [fechaProd, setFechaProd] = useState(getTodayDateString());
 
-        useEffect(() => {
-            const staticLoader = document.getElementById('static-loader');
-            const loaderStatus = document.getElementById('loader-status');
-            const loaderProgress = document.getElementById('loader-progress');
-
-            if (!supabaseClient || !SUPABASE_URL.startsWith('https')) {
-                if (loaderStatus) {
-                    loaderStatus.textContent = 'ERROR: Configura las claves de Supabase en el archivo HTML.';
-                    loaderStatus.className = 'text-xl text-red-400 mb-4 [text-shadow:_1px_1px_2px_rgba(0,0,0,0.5)]';
-                }
-                if (loaderProgress) {
-                    loaderProgress.style.width = '100%';
-                    loaderProgress.classList.remove('bg-amber-400');
-                    loaderProgress.classList.add('bg-red-600');
-                }
-                return;
-            }
-
-            const fetchArticulos = async () => {
+            const [cantidad, setCantidad] = useState('');
+            const [uom, setUom] = useState('Unidad');
+            const [previewPdfUrl, setPreviewPdfUrl] = useState(null);
+            const [isSaving, setIsSaving] = useState(false);
+            const [observacion, setObservacion] = useState('');
+            const articuloInputRef = useRef(null);
+            const loteInputRefs = useRef([]);
+            const [refreshState, setRefreshState] = useState('idle');
+            
+            const handleRefreshPalletNumber = async (isSilent = false) => {
                 if (!supabaseClient) return;
+                if (!isSilent) setRefreshState('loading');
+                
                 try {
-                    const { data, error } = await supabaseClient
-                        .from('articulos')
-                        .select('tiposku, sku, descriciolarga, descripcioncorta');
+                    const { data, error } = await supabaseClient.rpc('get_max_pallet_number');
 
                     if (error) {
-                        console.error("Error fetching articulos:", error);
-                        throw new Error('No se pudo cargar la lista de artículos desde la base de datos.');
+                        console.error("Error RPC get_max_pallet_number:", error);
+                        throw new Error('No se pudo verificar el Nº de pallet desde la DB.');
                     }
 
-                    const parsedArticulos = data.map(item => ({
-                        tipo: item.tiposku?.trim().toUpperCase(),
-                        sku: item.sku?.trim(),
-                        descripcionLarga: item.descriciolarga?.trim(),
-                        descripcionCorta: item.descripcioncorta?.trim()
-                    })).filter(art => art.sku && art.descripcionLarga);
-                    
-                    setArticulos(parsedArticulos);
+                    const numeroBase = data || 0;
+                    const proximoNumero = numeroBase + 1;
+                    const numeroActual = parseInt(numeroDePallet, 10);
+
+                    if (!numeroActual || numeroActual !== proximoNumero) {
+                        setNumeroDePallet(proximoNumero);
+                        if (!isSilent) {
+                            showToast(`Nº de pallet actualizado al siguiente disponible: ${proximoNumero}.`, 'info');
+                        }
+                        if (previewPdfUrl) {
+                            setPreviewPdfUrl(null);
+                            showToast('El Nº de pallet cambió. Por favor, genere una nueva vista previa.', 'info');
+                        }
+                    } else {
+                        if (!isSilent) {
+                             showToast('El número de pallet ya está actualizado.', 'success');
+                        }
+                    }
+                    if (!isSilent) {
+                        setRefreshState('success');
+                        setTimeout(() => setRefreshState('idle'), 2000);
+                    }
+                    return proximoNumero;
                 } catch (error) {
-                    console.error("Error processing articulos:", error);
-                    showToast(error.message, 'error');
-                }
-            };
-
-            const loadingTasks = [
-                { status: "Inicializando...", duration: 300, progress: 20 },
-                { status: "Cargando número de pallet...", duration: 800, progress: 40, action: () => handleRefreshPalletNumber(true) },
-                { status: "Cargando lista de artículos...", duration: 800, progress: 70, action: fetchArticulos },
-                { status: "¡Listo!", duration: 500, progress: 100 }
-            ];
-
-            let currentTask = 0;
-            const runLoadingTask = () => {
-                if (currentTask < loadingTasks.length) {
-                    const task = loadingTasks[currentTask];
-                    if (loaderStatus) loaderStatus.textContent = task.status;
-                    if (loaderProgress) loaderProgress.style.width = `${task.progress}%`;
-                    if (task.action) task.action();
-                    setTimeout(() => {
-                        currentTask++;
-                        runLoadingTask();
-                    }, task.duration);
-                } else {
-                    if (staticLoader) {
-                        staticLoader.classList.add('opacity-0');
-                        setTimeout(() => {
-                            staticLoader.style.display = 'none';
-                            setAppIsLoading(false);
-                        }, 500);
+                    console.error("Error en handleRefreshPalletNumber:", error);
+                    if (!isSilent) {
+                        showToast(error.message, 'error');
+                        setRefreshState('error');
+                        setTimeout(() => setRefreshState('idle'), 3000);
                     }
+                    return null;
                 }
             };
-            runLoadingTask();
-        }, []);
 
-        useEffect(() => {
-            if (!appIsLoading && articuloInputRef.current) {
-                articuloInputRef.current.focus();
-            }
-        }, [appIsLoading]);
-        
-        useEffect(() => {
-            if (selectedArticulo) {
-                const specialTypes = ['TULIPAS', 'PIROTINES', 'MADALENAS', 'FUNDAS'];
-                if (specialTypes.includes(selectedArticulo.tipo)) { setUom('Millar'); } 
-                else { setUom('Unidad'); }
-            }
-        }, [selectedArticulo]);
-        
-        useEffect(() => {
-            const lastLoteIndex = lotesProduccion.length - 1;
-            if (loteInputRefs.current[lastLoteIndex]) {
-                loteInputRefs.current[lastLoteIndex].focus();
-            }
-        }, [lotesProduccion.length]);
-        
-        const handleLoteProdChange = (index, value) => {
-            const regex = /^\d*$/;
-            if (regex.test(value)) {
-                const nuevosLotes = [...lotesProduccion];
-                nuevosLotes[index] = value;
-                setLotesProduccion(nuevosLotes);
-            }
-        };
+            useEffect(() => {
+                if (!supabaseClient || editMode) return;
+                const interval = setInterval(() => {
+                    const now = new Date();
+                    const hour = now.getHours();
+                    if (hour >= 5 && hour < 22) {
+                        console.log("Verificación periódica de número de pallet...");
+                        handleRefreshPalletNumber(true);
+                    }
+                }, Math.floor(Math.random() * (3 * 60 * 1000 - 1 * 60 * 1000 + 1)) + 1 * 60 * 1000);
 
-        const addLoteProdField = () => {
-            if (lotesProduccion.length < 4) {
-                setLotesProduccion([...lotesProduccion, '']);
-            }
-        };
-        
-        const handleCantidadChange = (e) => {
-            let value = e.target.value;
-            value = value.replace(/[^0-9,]/g, '');
-            const parts = value.split(',');
-            if (parts.length > 2) {
-                value = parts[0] + ',' + parts.slice(1).join('');
-            }
-            setCantidad(value);
-        };
-        
-        const formatNumberES = (numStr) => {
-            if (!numStr) return '';
-            const [integerPart, decimalPart] = numStr.split(',');
-            const formattedInteger = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
-            return decimalPart !== undefined ? `${formattedInteger},${decimalPart}` : formattedInteger;
-        };
+                return () => clearInterval(interval);
+            }, [numeroDePallet, previewPdfUrl, editMode]);
 
-        const filteredArticulos = searchTerm ? articulos.filter(art => art.sku.toLowerCase().includes(searchTerm.toLowerCase()) || art.descripcionLarga.toLowerCase().includes(searchTerm.toLowerCase())) : [];
+            useEffect(() => {
+                if (!supabaseClient) return;
+                const fetchInternetTime = async () => {
+                    try {
+                        const response = await fetch('https://worldtimeapi.org/api/timezone/America/Argentina/Buenos_Aires', { cache: "no-store" });
+                        if (!response.ok) throw new Error('No se pudo conectar al servidor de tiempo.');
+                        
+                        const data = await response.json();
+                        const internetDate = data.datetime.substring(0, 10);
+                        setFechaProd(internetDate);
+                        showToast('Fecha sincronizada con hora de internet.', 'info');
+                    } catch (error) {
+                        console.error("Error al obtener la hora de internet:", error);
+                        showToast('Fallo al sincronizar fecha. Usando hora local.', 'error');
+                    }
+                };
+                fetchInternetTime();
+            }, []);
 
-        const drawLabelOnDoc = async (doc, data) => {
-            const pageW = 210;
-            const margin = 8;
-            const contentW = pageW - (margin * 2);
-            let currentY = margin;
+            useEffect(() => {
+                const staticLoader = document.getElementById('static-loader');
+                const loaderStatus = document.getElementById('loader-status');
+                const loaderProgress = document.getElementById('loader-progress');
 
-            doc.setFontSize(24);
-            doc.setFont("helvetica", "bold");
-            doc.text("MOLDERIL S.A.", pageW / 2, currentY + 8, { align: "center" });
-            currentY += 15;
-            doc.line(margin, currentY, pageW - margin, currentY);
-            currentY += 10;
-            
-            doc.setFont("helvetica", "bold");
-            const baseFontSize = 84;
-            doc.setFontSize(baseFontSize);
-            
-            let descLines = doc.splitTextToSize(data.descripcion, contentW);
-            let finalFontSize = baseFontSize;
-
-            if (descLines.length > 3) {
-                finalFontSize = 60;
-            }
-            
-            doc.setFontSize(finalFontSize);
-            const lineHeight = finalFontSize / 3;
-
-            doc.text(descLines, pageW / 2, currentY + lineHeight, { align: "center", lineHeightFactor: 1 });
-            currentY += (descLines.length * lineHeight) + 10;
-
-            doc.line(margin, currentY, pageW - margin, currentY);
-            currentY += 2;
-            doc.setFontSize(20);
-            doc.setFont("helvetica", "bold");
-            doc.text(`SKU: ${data.sku}`, margin, currentY + 12);
-            const lotesProdString = data.lotes.join(' / ');
-            const lotesDisplayString = data.observacion ? `${lotesProdString} (*)` : lotesProdString;
-            if (lotesProdString) {
-                doc.setFontSize(18);
-                doc.setFont("helvetica", "normal");
-                doc.text(`Lotes: ${lotesDisplayString}`, pageW - margin, currentY + 12, { align: "right" });
-            }
-            currentY += 18;
-            doc.line(margin, currentY, pageW - margin, currentY);
-            currentY += 8;
-            const formattedCantidad = formatNumberES(data.cantidad);
-            const uomText = data.uom === 'Unidad' ? 'Unidades' : 'Millares';
-            const cantidadString = `${formattedCantidad} ${uomText}`;
-            doc.setFont("helvetica", "bold");
-            doc.setFontSize(44);
-            const cantidadWidth = doc.getStringUnitWidth(cantidadString) * doc.getFontSize() / doc.internal.scaleFactor;
-            const cantidadX = (pageW - cantidadWidth) / 2;
-            doc.text(cantidadString, cantidadX, currentY + 12);
-            currentY += 20;
-            const qrSize = 90;
-            const qrX = (pageW - qrSize) / 2;
-            const qrY = currentY;
-            const qrImageData = await QRCode.toDataURL(data.qrString, { width: 400, margin: 2, errorCorrectionLevel: 'M' });
-            doc.addImage(qrImageData, 'PNG', qrX, qrY, qrSize, qrSize);
-            currentY += qrSize + 5;
-            doc.line(margin, currentY, pageW - margin, currentY);
-            currentY += 5;
-            doc.setFontSize(22);
-            doc.setFont("helvetica", "bold");
-            doc.text("Nº de Pallet", margin, currentY + 10);
-            doc.text("Fabricación", pageW - margin, currentY + 10, { align: "right" });
-            doc.setFontSize(36);
-            doc.text(String(data.palletId), margin, currentY + 22);
-            doc.setFontSize(22);
-            doc.text(new Date(data.fechaProd + 'T00:00:00').toLocaleDateString('es-ES'), pageW - margin, currentY + 22, { align: "right" });
-        };
-
-        const getLabelData = () => {
-            const formatQrDate = (dateString) => {
-                if (!dateString) return '';
-                const date = new Date(dateString + 'T00:00:00');
-                const day = String(date.getDate()).padStart(2, '0');
-                const month = String(date.getMonth() + 1).padStart(2, '0');
-                const year = date.getFullYear();
-                return `${day}/${month}/${year}`;
-            };
-            const cantidadParaQR = cantidad.replace(',', '.');
-            const lotesProduccionFiltrados = lotesProduccion.filter(lote => lote.trim() !== '');
-            const lotesParaQR = lotesProduccionFiltrados.join('#');
-            const qrString = [
-                selectedArticulo.sku || '',
-                selectedArticulo.descripcionLarga || '',
-                String(numeroDePallet) || '',
-                lotesParaQR,
-                formatQrDate(fechaProd),
-                cantidadParaQR || '',
-                uom || '',
-            ].join(';');
-            return {
-                sku: selectedArticulo.sku,
-                descripcion: selectedArticulo.descripcionCorta || selectedArticulo.descripcionLarga,
-                lotes: lotesProduccionFiltrados,
-                cantidad: cantidad,
-                uom,
-                fechaProd,
-                palletId: numeroDePallet,
-                qrString: qrString,
-                observacion: observacion.trim()
-            };
-        }
-
-        const handleGeneratePreview = async (isRegeneration = false) => {
-            if (!isRegeneration) {
-                const updatedPalletNum = await handleRefreshPalletNumber(true);
-                if (updatedPalletNum && parseInt(numeroDePallet, 10) !== updatedPalletNum) {
+                if (!supabaseClient || !SUPABASE_URL.startsWith('https')) {
+                    if (loaderStatus) {
+                        loaderStatus.textContent = 'ERROR: Configura las claves de Supabase en el archivo HTML.';
+                        loaderStatus.className = 'text-xl text-red-400 mb-4 [text-shadow:_1px_1px_2px_rgba(0,0,0,0.5)]';
+                    }
+                    if (loaderProgress) {
+                        loaderProgress.style.width = '100%';
+                        loaderProgress.classList.remove('bg-amber-400');
+                        loaderProgress.classList.add('bg-red-600');
+                    }
                     return;
                 }
-            }
 
-            const lotesValidos = lotesProduccion.some(lote => lote.trim() !== '');
-            if (!selectedArticulo || !cantidad || !lotesValidos) {
-                showToast("Complete Artículo, Cantidad y al menos un Lote.", 'error');
-                return;
-            }
-            const data = getLabelData();
-            const doc = new jsPDF('p', 'mm', 'a4');
-            await drawLabelOnDoc(doc, data);
-            const pdfDataUrl = doc.output('datauristring');
-            setPreviewPdfUrl(pdfDataUrl);
-        };
-        
-        const handleUpdateAndPrintPDF = async () => {
-            if (isSaving) return;
-            setIsSaving(true);
-
-            const numCopias = parseInt(cantidadCopias, 10);
-            const palletNum = parseInt(numeroDePallet, 10);
-
-            if (isNaN(numCopias) || numCopias < 1 || isNaN(palletNum) || !previewPdfUrl) {
-                showToast("Genere una vista previa y verifique los datos.", 'error');
-                setIsSaving(false);
-                return;
-            }
-
-            try {
-                const data = getLabelData();
-                
-                const { error: updateError } = await supabaseClient.rpc('update_pallet_data', {
-                    p_nropallet: data.palletId,
-                    p_sku: data.sku,
-                    p_cantidad: parseFloat(data.cantidad.replace(',', '.')),
-                    p_lotes_produccion: data.lotes.join('#'),
-                    p_fecha_produccion: data.fechaProd,
-                    p_observacion: data.observacion || null
-                });
-
-                if (updateError) throw updateError;
-                
-                showToast(`Pallet Nº ${palletNum} actualizado correctamente.`, 'success');
-                const doc = new jsPDF('p', 'mm', 'a4');
-                for (let i = 0; i < numCopias; i++) {
-                    if (i > 0) doc.addPage();
-                    await drawLabelOnDoc(doc, data);
-                }
-                
-                const isMobile = /Android|iPhone/i.test(navigator.userAgent);
-
-                doc.save(`etiqueta_pallet_${palletNum}.pdf`);
-
-                if (!isMobile) {
+                const fetchArticulos = async () => {
+                    if (!supabaseClient) return;
                     try {
-                        const pdfBlob = doc.output('blob');
-                        const blobUrl = URL.createObjectURL(pdfBlob);
+                        const { data, error } = await supabaseClient
+                            .from('articulos')
+                            .select('tiposku, sku, descriciolarga, descripcioncorta, rne, rnpa');
+
+                        if (error) {
+                            console.error("Error fetching articulos:", error);
+                            throw new Error('No se pudo cargar la lista de artículos desde la base de datos.');
+                        }
+
+                        const parsedArticulos = data.map(item => ({
+                            tipo: item.tiposku?.trim().toUpperCase(),
+                            sku: item.sku?.trim(),
+                            descripcionLarga: item.descriciolarga?.trim(),
+                            descripcionCorta: item.descripcioncorta?.trim(),
+                            rne: item.rne?.trim(),
+                            rnpa: item.rnpa?.trim()
+                        })).filter(art => art.sku && art.descripcionLarga);
                         
-                        const iframe = document.createElement('iframe');
-                        iframe.style.display = 'none';
-                        iframe.src = blobUrl;
-                        
-                        document.body.appendChild(iframe);
-                        
-                        iframe.onload = () => {
+                        setArticulos(parsedArticulos);
+                    } catch (error) {
+                        console.error("Error processing articulos:", error);
+                        showToast(error.message, 'error');
+                    }
+                };
+
+                const loadingTasks = [
+                    { status: "Inicializando...", duration: 300, progress: 20 },
+                    { status: "Cargando número de pallet...", duration: 800, progress: 40, action: () => handleRefreshPalletNumber(true) },
+                    { status: "Cargando lista de artículos...", duration: 800, progress: 70, action: fetchArticulos },
+                    { status: "¡Listo!", duration: 500, progress: 100 }
+                ];
+
+                let currentTask = 0;
+                const runLoadingTask = () => {
+                    if (currentTask < loadingTasks.length) {
+                        const task = loadingTasks[currentTask];
+                        if (loaderStatus) loaderStatus.textContent = task.status;
+                        if (loaderProgress) loaderProgress.style.width = `${task.progress}%`;
+                        if (task.action) task.action();
+                        setTimeout(() => {
+                            currentTask++;
+                            runLoadingTask();
+                        }, task.duration);
+                    } else {
+                        if (staticLoader) {
+                            staticLoader.classList.add('opacity-0');
                             setTimeout(() => {
-                                try {
-                                    iframe.contentWindow.focus();
-                                    iframe.contentWindow.print();
-                                } catch (e) {
-                                    console.error("No se pudo abrir el diálogo de impresión.", e);
-                                    showToast("No se pudo abrir el diálogo de impresión automáticamente.", "error");
-                                } finally {
-                                    setTimeout(() => {
-                                        document.body.removeChild(iframe);
-                                        URL.revokeObjectURL(blobUrl);
-                                    }, 60000);
-                                }
-                            }, 1);
-                        };
-                    } catch (e) {
-                        console.error("Error al crear el iframe de impresión:", e);
-                        showToast("Error al preparar la impresión automática.", "error");
+                                staticLoader.style.display = 'none';
+                                setAppIsLoading(false);
+                            }, 500);
+                        }
+                    }
+                };
+                runLoadingTask();
+            }, []);
+
+            useEffect(() => {
+                if (!appIsLoading && articuloInputRef.current) {
+                    articuloInputRef.current.focus();
+                }
+            }, [appIsLoading]);
+            
+            useEffect(() => {
+                if (selectedArticulo) {
+                    const specialTypes = ['TULIPAS', 'PIROTINES', 'MADALENAS', 'FUNDAS'];
+                    if (specialTypes.includes(selectedArticulo.tipo)) { setUom('Millar'); } 
+                    else { setUom('Unidad'); }
+                }
+            }, [selectedArticulo]);
+            
+            useEffect(() => {
+                const lastLoteIndex = lotesProduccion.length - 1;
+                if (loteInputRefs.current[lastLoteIndex]) {
+                    loteInputRefs.current[lastLoteIndex].focus();
+                }
+            }, [lotesProduccion.length]);
+            
+            const handleLoteProdChange = (index, value) => {
+                const regex = /^\d*$/;
+                if (regex.test(value)) {
+                    const nuevosLotes = [...lotesProduccion];
+                    nuevosLotes[index] = value;
+                    setLotesProduccion(nuevosLotes);
+                }
+            };
+
+            const addLoteProdField = () => {
+                if (lotesProduccion.length < 4) {
+                    setLotesProduccion([...lotesProduccion, '']);
+                }
+            };
+            
+            const handleCantidadChange = (e) => {
+                let value = e.target.value;
+                value = value.replace(/[^0-9,]/g, '');
+                const parts = value.split(',');
+                if (parts.length > 2) {
+                    value = parts[0] + ',' + parts.slice(1).join('');
+                }
+                setCantidad(value);
+            };
+            
+            const formatNumberES = (numStr) => {
+                if (!numStr) return '';
+                const [integerPart, decimalPart] = numStr.split(',');
+                const formattedInteger = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+                return decimalPart !== undefined ? `${formattedInteger},${decimalPart}` : formattedInteger;
+            };
+
+            const filteredArticulos = searchTerm ? articulos.filter(art => art.sku.toLowerCase().includes(searchTerm.toLowerCase()) || art.descripcionLarga.toLowerCase().includes(searchTerm.toLowerCase())) : [];
+
+            const drawLabelOnDoc = async (doc, data) => {
+                const pageW = 210;
+                const margin = 8;
+                const contentW = pageW - (margin * 2);
+                let currentY = margin;
+
+                doc.setFontSize(24);
+                doc.setFont("helvetica", "bold");
+                doc.text("MOLDERIL S.A.", pageW / 2, currentY + 8, { align: "center" });
+                currentY += 15;
+                doc.line(margin, currentY, pageW - margin, currentY);
+                currentY += 10;
+                
+                doc.setFont("helvetica", "bold");
+                const baseFontSize = 84;
+                doc.setFontSize(baseFontSize);
+                
+                let descLines = doc.splitTextToSize(data.descripcion, contentW);
+                let finalFontSize = baseFontSize;
+
+                if (descLines.length > 3) {
+                    finalFontSize = 60;
+                }
+                
+                doc.setFontSize(finalFontSize);
+                const lineHeight = finalFontSize / 3;
+
+                doc.text(descLines, pageW / 2, currentY + lineHeight, { align: "center", lineHeightFactor: 1 });
+                currentY += (descLines.length * lineHeight) + 10;
+
+                doc.line(margin, currentY, pageW - margin, currentY);
+                currentY += 2;
+                doc.setFontSize(20);
+                doc.setFont("helvetica", "bold");
+                doc.text(`SKU: ${data.sku}`, margin, currentY + 12);
+                const lotesProdString = data.lotes.join(' / ');
+                const lotesDisplayString = data.observacion ? `${lotesProdString} (*)` : lotesProdString;
+                if (lotesProdString) {
+                    doc.setFontSize(18);
+                    doc.setFont("helvetica", "normal");
+                    doc.text(`Lotes: ${lotesDisplayString}`, pageW - margin, currentY + 12, { align: "right" });
+                }
+                currentY += 18;
+                doc.line(margin, currentY, pageW - margin, currentY);
+                currentY += 8;
+                const formattedCantidad = formatNumberES(data.cantidad);
+                const uomText = data.uom === 'Unidad' ? 'Unidades' : 'Millares';
+                const cantidadString = `${formattedCantidad} ${uomText}`;
+                doc.setFont("helvetica", "bold");
+                doc.setFontSize(44);
+                const cantidadWidth = doc.getStringUnitWidth(cantidadString) * doc.getFontSize() / doc.internal.scaleFactor;
+                const cantidadX = (pageW - cantidadWidth) / 2;
+                doc.text(cantidadString, cantidadX, currentY + 12);
+                currentY += 20;
+                const qrSize = 90;
+                const qrX = (pageW - qrSize) / 2;
+                const qrY = currentY;
+                const qrImageData = await QRCode.toDataURL(data.qrString, { width: 400, margin: 2, errorCorrectionLevel: 'M' });
+                doc.addImage(qrImageData, 'PNG', qrX, qrY, qrSize, qrSize);
+                currentY += qrSize + 5;
+                doc.line(margin, currentY, pageW - margin, currentY);
+                currentY += 5;
+                doc.setFontSize(22);
+                doc.setFont("helvetica", "bold");
+                doc.text("Nº de Pallet", margin, currentY + 10);
+                doc.text("Fabricación", pageW - margin, currentY + 10, { align: "right" });
+                doc.setFontSize(36);
+                doc.text(String(data.palletId), margin, currentY + 22);
+                doc.setFontSize(22);
+                doc.text(new Date(data.fechaProd + 'T00:00:00').toLocaleDateString('es-ES'), pageW - margin, currentY + 22, { align: "right" });
+                
+                let yPos = currentY + 30;
+
+                if (data.rnpa && data.rnpa.trim() !== '') {
+                    doc.setFontSize(10);
+                    doc.setFont("helvetica", "normal");
+                    doc.text(`RNPA: ${data.rnpa}`, margin, yPos);
+                }
+
+                if (data.rne && data.rne.trim() !== '') {
+                    doc.setFontSize(10);
+                    doc.setFont("helvetica", "normal");
+                    doc.text(`RNE: ${data.rne}`, pageW - margin, yPos, { align: "right" });
+                }
+            };
+
+            const getLabelData = () => {
+                const formatQrDate = (dateString) => {
+                    if (!dateString) return '';
+                    const date = new Date(dateString + 'T00:00:00');
+                    const day = String(date.getDate()).padStart(2, '0');
+                    const month = String(date.getMonth() + 1).padStart(2, '0');
+                    const year = date.getFullYear();
+                    return `${day}/${month}/${year}`;
+                };
+                const cantidadParaQR = cantidad.replace(',', '.');
+                const lotesProduccionFiltrados = lotesProduccion.filter(lote => lote.trim() !== '');
+                const lotesParaQR = lotesProduccionFiltrados.join('#');
+                const qrString = [
+                    selectedArticulo.sku || '',
+                    selectedArticulo.descripcionLarga || '',
+                    String(numeroDePallet) || '',
+                    lotesParaQR,
+                    formatQrDate(fechaProd),
+                    cantidadParaQR || '',
+                    uom || '',
+                ].join(';');
+                return {
+                    sku: selectedArticulo.sku,
+                    descripcion: selectedArticulo.descripcionCorta || selectedArticulo.descripcionLarga,
+                    lotes: lotesProduccionFiltrados,
+                    cantidad: cantidad,
+                    uom,
+                    fechaProd,
+                    palletId: numeroDePallet,
+                    qrString: qrString,
+                    observacion: observacion.trim(),
+                    rne: selectedArticulo.rne,
+                    rnpa: selectedArticulo.rnpa
+                };
+            }
+
+            const handleGeneratePreview = async (isRegeneration = false) => {
+                if (!isRegeneration) {
+                    const updatedPalletNum = await handleRefreshPalletNumber(true);
+                    if (updatedPalletNum && parseInt(numeroDePallet, 10) !== updatedPalletNum) {
+                        return;
                     }
                 }
 
-                // Redirect to grillaqr.html after updating
-                window.location.href = 'grillaqr.html';
-
-            } catch (error) {
-                showToast(`ERROR CRÍTICO: ${error.message}`, 'error');
-            } finally {
-                setIsSaving(false);
-            }
-        };
-
-        const handleGenerateAndPrintPDF = async () => {
-            if (isSaving) return;
-            setIsSaving(true);
-
-            const numCopias = parseInt(cantidadCopias, 10);
-            let palletNum = parseInt(numeroDePallet, 10);
-
-            if (isNaN(numCopias) || numCopias < 1 || isNaN(palletNum) || !previewPdfUrl) {
-                showToast("Genere una vista previa y verifique los datos.", 'error');
-                setIsSaving(false);
-                return;
-            }
-
-            try {
-                const { data: maxPalletData, error: maxPalletError } = await supabaseClient.rpc('get_max_pallet_number');
-                if (maxPalletError) throw new Error('No se pudo verificar el último número de pallet en la DB.');
-                
-                const ultimoPalletGuardado = maxPalletData || 0;
-
-                if (palletNum <= ultimoPalletGuardado) {
-                    const nuevoNumeroSugerido = ultimoPalletGuardado + 1;
-                    showToast(`¡Conflicto! El Pallet ${palletNum} ya fue usado. Se actualizó al Nº ${nuevoNumeroSugerido}. Por favor, revise la nueva vista previa y guarde de nuevo.`, 'error');
-                    setNumeroDePallet(nuevoNumeroSugerido);
-                    setTimeout(() => handleGeneratePreview(true), 100);
-                    return; 
+                const lotesValidos = lotesProduccion.some(lote => lote.trim() !== '');
+                if (!selectedArticulo || !cantidad || !lotesValidos) {
+                    showToast("Complete Artículo, Cantidad y al menos un Lote.", 'error');
+                    return;
                 }
-
                 const data = getLabelData();
-                
-                const { error: insertError } = await supabaseClient.rpc('crear_nuevo_pallet', {
-                    p_sku: data.sku,
-                    p_descripcion: data.descripcion,
-                    p_numero_pallet: data.palletId,
-                    p_lotes_produccion: data.lotes.join('#'),
-                    p_fecha_produccion: data.fechaProd,
-                    p_cantidad: parseFloat(data.cantidad.replace(',', '.')),
-                    p_unidad_medida: data.uom,
-                    p_observacion: data.observacion || null
-                });
-
-                if (insertError) throw insertError;
-                
-                showToast(`Pallet Nº ${palletNum} guardado correctamente.`, 'success');
-
-                if (isAlreadyTransferred) {
-                    const { error: transferError } = await supabaseClient
-                        .from('nropalettransferidos')
-                        .insert({ nropallet: data.palletId });
-
-                    if (transferError) {
-                        showToast(`Error al marcar como transferido: ${transferError.message}`, 'error');
-                    }
-                }
-
                 const doc = new jsPDF('p', 'mm', 'a4');
-                for (let i = 0; i < numCopias; i++) {
-                    if (i > 0) doc.addPage();
-                    await drawLabelOnDoc(doc, data);
+                await drawLabelOnDoc(doc, data);
+                const pdfDataUrl = doc.output('datauristring');
+                setPreviewPdfUrl(pdfDataUrl);
+            };
+            
+            const handleUpdateAndPrintPDF = async () => {
+                if (isSaving) return;
+                setIsSaving(true);
+
+                const numCopias = parseInt(cantidadCopias, 10);
+                const palletNum = parseInt(numeroDePallet, 10);
+
+                if (isNaN(numCopias) || numCopias < 1 || isNaN(palletNum) || !previewPdfUrl) {
+                    showToast("Genere una vista previa y verifique los datos.", 'error');
+                    setIsSaving(false);
+                    return;
                 }
-                
-                const isMobile = /Android|iPhone/i.test(navigator.userAgent);
 
-                doc.save(`etiqueta_pallet_${palletNum}.pdf`);
+                try {
+                    const data = getLabelData();
+                    
+                    const { error: updateError } = await supabaseClient.rpc('update_pallet_data', {
+                        p_nropallet: data.palletId,
+                        p_sku: data.sku,
+                        p_cantidad: parseFloat(data.cantidad.replace(',', '.')),
+                        p_lotes_produccion: data.lotes.join('#'),
+                        p_fecha_produccion: data.fechaProd,
+                        p_observacion: data.observacion || null
+                    });
 
-                if (!isMobile) {
-                    try {
-                        const pdfBlob = doc.output('blob');
-                        const blobUrl = URL.createObjectURL(pdfBlob);
-                        
-                        const iframe = document.createElement('iframe');
-                        iframe.style.display = 'none';
-                        iframe.src = blobUrl;
-                        
-                        document.body.appendChild(iframe);
-                        
-                        iframe.onload = () => {
-                            setTimeout(() => {
-                                try {
-                                    iframe.contentWindow.focus();
-                                    iframe.contentWindow.print();
-                                } catch (e) {
-                                    console.error("No se pudo abrir el diálogo de impresión.", e);
-                                    showToast("No se pudo abrir el diálogo de impresión automáticamente.", "error");
-                                } finally {
-                                    setTimeout(() => {
-                                        document.body.removeChild(iframe);
-                                        URL.revokeObjectURL(blobUrl);
-                                    }, 60000);
-                                }
-                            }, 1);
-                        };
-                    } catch (e) {
-                        console.error("Error al crear el iframe de impresión:", e);
-                        showToast("Error al preparar la impresión automática.", "error");
+                    if (updateError) throw updateError;
+                    
+                    showToast(`Pallet Nº ${palletNum} actualizado correctamente.`, 'success');
+                    const doc = new jsPDF('p', 'mm', 'a4');
+                    for (let i = 0; i < numCopias; i++) {
+                        if (i > 0) doc.addPage();
+                        await drawLabelOnDoc(doc, data);
                     }
+                    
+                    const isMobile = /Android|iPhone/i.test(navigator.userAgent);
+
+                    doc.save(`etiqueta_pallet_${palletNum}.pdf`);
+
+                    if (!isMobile) {
+                        try {
+                            const pdfBlob = doc.output('blob');
+                            const blobUrl = URL.createObjectURL(pdfBlob);
+                            
+                            const iframe = document.createElement('iframe');
+                            iframe.style.display = 'none';
+                            iframe.src = blobUrl;
+                            
+                            document.body.appendChild(iframe);
+                            
+                            iframe.onload = () => {
+                                setTimeout(() => {
+                                    try {
+                                        iframe.contentWindow.focus();
+                                        iframe.contentWindow.print();
+                                    } catch (e) {
+                                        console.error("No se pudo abrir el diálogo de impresión.", e);
+                                        showToast("No se pudo abrir el diálogo de impresión automáticamente.", "error");
+                                    } finally {
+                                        setTimeout(() => {
+                                            document.body.removeChild(iframe);
+                                            URL.revokeObjectURL(blobUrl);
+                                        }, 60000);
+                                    }
+                                }, 1);
+                            };
+                        } catch (e) {
+                            console.error("Error al crear el iframe de impresión:", e);
+                            showToast("Error al preparar la impresión automática.", "error");
+                        }
+                    }
+
+                    // Redirect to grillaqr.html after updating
+                    window.location.href = 'grillaqr.html';
+
+                } catch (error) {
+                    showToast(`ERROR CRÍTICO: ${error.message}`, 'error');
+                } finally {
+                    setIsSaving(false);
+                }
+            };
+
+            const handleGenerateAndPrintPDF = async () => {
+                if (isSaving) return;
+                setIsSaving(true);
+
+                const numCopias = parseInt(cantidadCopias, 10);
+                let palletNum = parseInt(numeroDePallet, 10);
+
+                if (isNaN(numCopias) || numCopias < 1 || isNaN(palletNum) || !previewPdfUrl) {
+                    showToast("Genere una vista previa y verifique los datos.", 'error');
+                    setIsSaving(false);
+                    return;
                 }
 
-                setNumeroDePallet(palletNum + 1);
-                setSelectedArticulo(null);
-                setSearchTerm('');
-                setLotesProduccion(['']);
-                setCantidad('');
-                setObservacion('');
-                setPreviewPdfUrl(null);
-                setIsAlreadyTransferred(false);
+                try {
+                    const { data: maxPalletData, error: maxPalletError } = await supabaseClient.rpc('get_max_pallet_number');
+                    if (maxPalletError) throw new Error('No se pudo verificar el último número de pallet en la DB.');
+                    
+                    const ultimoPalletGuardado = maxPalletData || 0;
 
-            } catch (error) {
-                showToast(`ERROR CRÍTICO: ${error.message}`, 'error');
-            } finally {
-                setIsSaving(false);
+                    if (palletNum <= ultimoPalletGuardado) {
+                        const nuevoNumeroSugerido = ultimoPalletGuardado + 1;
+                        showToast(`¡Conflicto! El Pallet ${palletNum} ya fue usado. Se actualizó al Nº ${nuevoNumeroSugerido}. Por favor, revise la nueva vista previa y guarde de nuevo.`, 'error');
+                        setNumeroDePallet(nuevoNumeroSugerido);
+                        setTimeout(() => handleGeneratePreview(true), 100);
+                        return; 
+                    }
+
+                    const data = getLabelData();
+                    
+                    const { error: insertError } = await supabaseClient.rpc('crear_nuevo_pallet', {
+                        p_sku: data.sku,
+                        p_descripcion: data.descripcion,
+                        p_numero_pallet: data.palletId,
+                        p_lotes_produccion: data.lotes.join('#'),
+                        p_fecha_produccion: data.fechaProd,
+                        p_cantidad: parseFloat(data.cantidad.replace(',', '.')),
+                        p_unidad_medida: data.uom,
+                        p_observacion: data.observacion || null
+                    });
+
+                    if (insertError) throw insertError;
+                    
+                    showToast(`Pallet Nº ${palletNum} guardado correctamente.`, 'success');
+
+                    if (isAlreadyTransferred) {
+                        const { error: transferError } = await supabaseClient
+                            .from('nropalettransferidos')
+                            .insert({ nropallet: data.palletId });
+
+                        if (transferError) {
+                            showToast(`Error al marcar como transferido: ${transferError.message}`, 'error');
+                        }
+                    }
+
+                    const doc = new jsPDF('p', 'mm', 'a4');
+                    for (let i = 0; i < numCopias; i++) {
+                        if (i > 0) doc.addPage();
+                        await drawLabelOnDoc(doc, data);
+                    }
+                    
+                    const isMobile = /Android|iPhone/i.test(navigator.userAgent);
+
+                    doc.save(`etiqueta_pallet_${palletNum}.pdf`);
+
+                    if (!isMobile) {
+                        try {
+                            const pdfBlob = doc.output('blob');
+                            const blobUrl = URL.createObjectURL(pdfBlob);
+                            
+                            const iframe = document.createElement('iframe');
+                            iframe.style.display = 'none';
+                            iframe.src = blobUrl;
+                            
+                            document.body.appendChild(iframe);
+                            
+                            iframe.onload = () => {
+                                setTimeout(() => {
+                                    try {
+                                        iframe.contentWindow.focus();
+                                        iframe.contentWindow.print();
+                                    } catch (e) {
+                                        console.error("No se pudo abrir el diálogo de impresión.", e);
+                                        showToast("No se pudo abrir el diálogo de impresión automáticamente.", "error");
+                                    } finally {
+                                        setTimeout(() => {
+                                            document.body.removeChild(iframe);
+                                            URL.revokeObjectURL(blobUrl);
+                                        }, 60000);
+                                    }
+                                }, 1);
+                            };
+                        } catch (e) {
+                            console.error("Error al crear el iframe de impresión:", e);
+                            showToast("Error al preparar la impresión automática.", "error");
+                        }
+                    }
+
+                    setNumeroDePallet(palletNum + 1);
+                    setSelectedArticulo(null);
+                    setSearchTerm('');
+                    setLotesProduccion(['']);
+                    setCantidad('');
+                    setObservacion('');
+                    setPreviewPdfUrl(null);
+                    setIsAlreadyTransferred(false);
+
+                } catch (error) {
+                    showToast(`ERROR CRÍTICO: ${error.message}`, 'error');
+                } finally {
+                    setIsSaving(false);
+                }
+            };
+            
+            if (appIsLoading) {
+                return null;
             }
-        };
-        
-        if (appIsLoading) {
-            return null;
-        }
 
-        return (
-            <Fragment>
-                <div className="min-h-screen p-4 flex flex-col" style={{background: 'rgba(243, 244, 246, 0.8)'}}>
-                    <div className="bg-white/30 backdrop-blur-lg border border-white/50 p-6 rounded-xl shadow-lg flex-grow">
-                        <div className="flex justify-between items-center mb-6">
-                            <div className="flex items-center gap-4">
-                                <h1 className="text-3xl font-extrabold text-gray-900">Generar Etiqueta de Pallet</h1>
-                                {editMode && <span className="bg-orange-500 text-white text-sm font-bold px-3 py-1 rounded-full">MODO EDICIÓN</span>}
+            return (
+                <Fragment>
+                    <div className="min-h-screen p-4 flex flex-col" style={{background: 'rgba(243, 244, 246, 0.8)'}}>
+                        <div className="bg-white/30 backdrop-blur-lg border border-white/50 p-6 rounded-xl shadow-lg flex-grow">
+                            <div className="flex justify-between items-center mb-6">
+                                <div className="flex items-center gap-4">
+                                    <h1 className="text-3xl font-extrabold text-gray-900">Generar Etiqueta de Pallet</h1>
+                                    {editMode && <span className="bg-orange-500 text-white text-sm font-bold px-3 py-1 rounded-full">MODO EDICIÓN</span>}
+                                </div>
+                                <a href="index.html" className="bg-green-600 text-white font-semibold py-2 px-4 rounded-md shadow-md border-b-4 border-green-800 hover:bg-green-700 active:translate-y-px active:border-b-2 transition-all duration-150 flex items-center">🏠 Volver</a>
                             </div>
-                            <a href="index.html" className="bg-green-600 text-white font-semibold py-2 px-4 rounded-md shadow-md border-b-4 border-green-800 hover:bg-green-700 active:translate-y-px active:border-b-2 transition-all duration-150 flex items-center">🏠 Volver</a>
-                        </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <div className="space-y-4">
-                                {!editMode && (
-                                    <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                                        <label className="flex items-center space-x-3 cursor-pointer">
-                                            <input
-                                                type="checkbox"
-                                                checked={isAlreadyTransferred}
-                                                onChange={e => setIsAlreadyTransferred(e.target.checked)}
-                                                className="h-5 w-5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-                                            />
-                                            <span className="text-base font-bold text-blue-800">Marcar como ya transferido (Ej: Devolución)</span>
-                                        </label>
-                                    </div>
-                                )}
-                                <div className="relative">
-                                    <label className="block text-base font-bold text-black">Artículo (Buscar por SKU o Descripción)</label>
-                                    <input type="text" ref={articuloInputRef} value={searchTerm} onChange={e => { setSearchTerm(e.target.value); }} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border" />
-                                    {searchTerm && filteredArticulos.length > 0 && (
-                                        <ul className="absolute z-10 w-full bg-white border rounded-md mt-1 max-h-40 overflow-y-auto shadow-lg">
-                                            {filteredArticulos.map(art => (
-                                                <li key={art.sku} className="p-2 hover:bg-indigo-100 cursor-pointer" onClick={() => { setSelectedArticulo(art); setSearchTerm(`${art.sku} - ${art.descripcionLarga}`); setPreviewPdfUrl(null); }}>
-                                                    {art.sku} - {art.descripcionLarga}
-                                                </li>
-                                            ))}
-                                        </ul>
-                                    )}
-                                </div>
-                                <div>
-                                    <label className="block text-base font-bold text-black">Lotes de Producción</label>
-                                    {lotesProduccion.map((lote, index) => (
-                                        <input 
-                                            key={index}
-                                            ref={el => loteInputRefs.current[index] = el}
-                                            type="text" 
-                                            value={lote} 
-                                            onChange={e => handleLoteProdChange(index, e.target.value)} 
-                                            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border" 
-                                        />
-                                    ))}
-                                    {lotesProduccion.length < 4 && (
-                                        <button onClick={addLoteProdField} className="mt-2 text-sm font-semibold text-blue-600 hover:text-blue-800 flex items-center">
-                                            <span className="text-lg mr-1">+</span> Añadir otro lote
-                                        </button>
-                                    )}
-                                </div>
-                                <div>
-                                    <label className="block text-base font-bold text-black">Número de Pallet (Automático)</label>
-                                    <div className="mt-1 flex rounded-md shadow-sm">
-                                        <input type="number" value={numeroDePallet} readOnly={!isPalletNumEditable} onChange={e => setNumeroDePallet(e.target.value)} className={`block w-full rounded-none rounded-l-md border-gray-300 p-2 border ${!isPalletNumEditable ? 'bg-gray-100' : ''}`} />
-                                        <button 
-                                            type="button"
-                                            onClick={() => handleRefreshPalletNumber(false)}
-                                            disabled={refreshState === 'loading' || editMode}
-                                            className="relative -ml-px inline-flex items-center space-x-2 rounded-r-md border border-gray-300 bg-gray-50 px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-100 disabled:opacity-50"
-                                            title="Verificar último número de pallet"
-                                        >
-                                            <i className={`fas fa-sync-alt h-5 w-5 ${ 
-                                                refreshState === 'loading' ? 'animate-spin text-red-500' :
-                                                refreshState === 'success' ? 'text-green-500' :
-                                                refreshState === 'error' ? 'text-red-500' :
-                                                'text-blue-500'
-                                            }`}></i>
-                                            <span>Refrescar</span>
-                                        </button>
-
-                                    </div>
-                                </div>
-                                <div>
-                                    <label className="block text-base font-bold text-black">Cantidad de Copias</label>
-                                    <input type="number" min="1" value={cantidadCopias} onChange={e => setCantidadCopias(e.target.value)} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border" />
-                                </div>
-                                <div>
-                                    <label className="block text-base font-bold text-black">Fecha de Producción</label>
-                                    <input type="date" value={fechaProd} onChange={e => setFechaProd(e.target.value)} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border" />
-                                </div>
-                                <div>
-                                    <label className="block text-base font-bold text-black">Cantidad (por etiqueta)</label>
-                                    <input type="text" value={cantidad} onChange={handleCantidadChange} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border" placeholder="Ej: 1234,56"/>
-                                </div>
-                                <div>
-                                    <label className="block text-base font-bold text-black">Unidad de Medida</label>
-                                    <select value={uom} onChange={e => setUom(e.target.value)} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border">
-                                        <option>Unidad</option>
-                                        <option>Millar</option>
-                                    </select>
-                                </div>
-                                <div>
-                                    <label className="block text-base font-bold text-black">Observaciones (Opcional)</label>
-                                    <textarea
-                                        value={observacion}
-                                        onChange={e => setObservacion(e.target.value)}
-                                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border"
-                                        rows="2"
-                                        placeholder="Información adicional para el registro interno..."
-                                    ></textarea>
-                                </div>
-                                <button onClick={handleGeneratePreview} className="w-full bg-blue-600 text-white font-semibold py-3 px-4 rounded-md shadow-md hover:bg-blue-700 text-xl flex items-center justify-center">
-                                    Generar Vista Previa
-                                </button>
-                            </div>
-                            <div>
-                                <h3 className="text-lg font-medium text-gray-900 mb-2">Vista Previa de Etiqueta</h3>
-                                <div id="preview-container" className="border-2 border-dashed border-gray-400 w-full" style={{height: '65vh'}}>
-                                    {previewPdfUrl ? (
-                                        <iframe id="preview-iframe" src={previewPdfUrl} title="Vista Previa de Etiqueta"></iframe>
-                                    ) : (
-                                        <div className="text-center text-gray-500 flex items-center justify-center h-full">
-                                            <p>Complete el formulario y genere la vista previa</p>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div className="space-y-4">
+                                    {!editMode && (
+                                        <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                                            <label className="flex items-center space-x-3 cursor-pointer">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={isAlreadyTransferred}
+                                                    onChange={e => setIsAlreadyTransferred(e.target.checked)}
+                                                    className="h-5 w-5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                                                />
+                                                <span className="text-base font-bold text-blue-800">Marcar como ya transferido (Ej: Devolución)</span>
+                                            </label>
                                         </div>
                                     )}
-                                </div>
-                                {previewPdfUrl && (
-                                    <button 
-                                        onClick={editMode ? handleUpdateAndPrintPDF : handleGenerateAndPrintPDF} 
-                                        disabled={isSaving} 
-                                        className={`w-full mt-4 text-white font-semibold py-3 px-4 rounded-md shadow-md text-xl flex items-center justify-center disabled:opacity-60 disabled:cursor-wait ${editMode ? 'bg-orange-600 hover:bg-orange-700' : 'bg-green-600 hover:bg-green-700'}`}
-                                    >
-                                        {isSaving && <span className="spinner"></span>}
-                                        {isSaving 
-                                            ? (editMode ? 'Actualizando...' : 'Guardando...') 
-                                            : (editMode ? '💾 Actualizar e Imprimir' : '🖨️ Imprimir y Guardar')
-                                        }
+                                    <div className="relative">
+                                        <label className="block text-base font-bold text-black">Artículo (Buscar por SKU o Descripción)</label>
+                                        <input type="text" ref={articuloInputRef} value={searchTerm} onChange={e => { setSearchTerm(e.target.value); }} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border" />
+                                        {searchTerm && filteredArticulos.length > 0 && (
+                                            <ul className="absolute z-10 w-full bg-white border rounded-md mt-1 max-h-40 overflow-y-auto shadow-lg">
+                                                {filteredArticulos.map(art => (
+                                                    <li key={art.sku} className="p-2 hover:bg-indigo-100 cursor-pointer" onClick={() => { setSelectedArticulo(art); setSearchTerm(`${art.sku} - ${art.descripcionLarga}`); setPreviewPdfUrl(null); }}>
+                                                        {art.sku} - {art.descripcionLarga}
+                                                    </li>
+                                                ))}
+                                            </ul>
+                                        )}
+                                    </div>
+                                    <div>
+                                        <label className="block text-base font-bold text-black">Lotes de Producción</label>
+                                        {lotesProduccion.map((lote, index) => (
+                                            <input 
+                                                key={index}
+                                                ref={el => loteInputRefs.current[index] = el}
+                                                type="text" 
+                                                value={lote} 
+                                                onChange={e => handleLoteProdChange(index, e.target.value)} 
+                                                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border" 
+                                            />
+                                        ))}
+                                        {lotesProduccion.length < 4 && (
+                                            <button onClick={addLoteProdField} className="mt-2 text-sm font-semibold text-blue-600 hover:text-blue-800 flex items-center">
+                                                <span className="text-lg mr-1">+</span> Añadir otro lote
+                                            </button>
+                                        )}
+                                    </div>
+                                    <div>
+                                        <label className="block text-base font-bold text-black">Número de Pallet (Automático)</label>
+                                        <div className="mt-1 flex rounded-md shadow-sm">
+                                            <input type="number" value={numeroDePallet} readOnly={!isPalletNumEditable} onChange={e => setNumeroDePallet(e.target.value)} className={`block w-full rounded-none rounded-l-md border-gray-300 p-2 border ${!isPalletNumEditable ? 'bg-gray-100' : ''}`} />
+                                            <button 
+                                                type="button"
+                                                onClick={() => handleRefreshPalletNumber(false)}
+                                                disabled={refreshState === 'loading' || editMode}
+                                                className="relative -ml-px inline-flex items-center space-x-2 rounded-r-md border border-gray-300 bg-gray-50 px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-100 disabled:opacity-50"
+                                                title="Verificar último número de pallet"
+                                            >
+                                                <i className={`fas fa-sync-alt h-5 w-5 ${ 
+                                                    refreshState === 'loading' ? 'animate-spin text-red-500' :
+                                                    refreshState === 'success' ? 'text-green-500' :
+                                                    refreshState === 'error' ? 'text-red-500' :
+                                                    'text-blue-500'
+                                                }`}></i>
+                                                <span>Refrescar</span>
+                                            </button>
+
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label className="block text-base font-bold text-black">Cantidad de Copias</label>
+                                        <input type="number" min="1" value={cantidadCopias} onChange={e => setCantidadCopias(e.target.value)} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border" />
+                                    </div>
+                                    <div>
+                                        <label className="block text-base font-bold text-black">Fecha de Producción</label>
+                                        <input type="date" value={fechaProd} onChange={e => setFechaProd(e.target.value)} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border" />
+                                    </div>
+                                    <div>
+                                        <label className="block text-base font-bold text-black">Cantidad (por etiqueta)</label>
+                                        <input type="text" value={cantidad} onChange={handleCantidadChange} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border" placeholder="Ej: 1234,56"/>
+                                    </div>
+                                    <div>
+                                        <label className="block text-base font-bold text-black">Unidad de Medida</label>
+                                        <select value={uom} onChange={e => setUom(e.target.value)} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border">
+                                            <option>Unidad</option>
+                                            <option>Millar</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-base font-bold text-black">Observaciones (Opcional)</label>
+                                        <textarea
+                                            value={observacion}
+                                            onChange={e => setObservacion(e.target.value)}
+                                            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border"
+                                            rows="2"
+                                            placeholder="Información adicional para el registro interno..."
+                                        ></textarea>
+                                    </div>
+                                    <button onClick={handleGeneratePreview} className="w-full bg-blue-600 text-white font-semibold py-3 px-4 rounded-md shadow-md hover:bg-blue-700 text-xl flex items-center justify-center">
+                                        Generar Vista Previa
                                     </button>
-                                )}
+                                </div>
+                                <div>
+                                    <h3 className="text-lg font-medium text-gray-900 mb-2">Vista Previa de Etiqueta</h3>
+                                    <div id="preview-container" className="border-2 border-dashed border-gray-400 w-full" style={{height: '65vh'}}>
+                                        {previewPdfUrl ? (
+                                            <iframe id="preview-iframe" src={previewPdfUrl} title="Vista Previa de Etiqueta"></iframe>
+                                        ) : (
+                                            <div className="text-center text-gray-500 flex items-center justify-center h-full">
+                                                <p>Complete el formulario y genere la vista previa</p>
+                                            </div>
+                                        )}
+                                    </div>
+                                    {previewPdfUrl && (
+                                        <button 
+                                            onClick={editMode ? handleUpdateAndPrintPDF : handleGenerateAndPrintPDF} 
+                                            disabled={isSaving} 
+                                            className={`w-full mt-4 text-white font-semibold py-3 px-4 rounded-md shadow-md text-xl flex items-center justify-center disabled:opacity-60 disabled:cursor-wait ${editMode ? 'bg-orange-600 hover:bg-orange-700' : 'bg-green-600 hover:bg-green-700'}`}
+                                        >
+                                            {isSaving && <span className="spinner"></span>}
+                                            {isSaving 
+                                                ? (editMode ? 'Actualizando...' : 'Guardando...') 
+                                                : (editMode ? '💾 Actualizar e Imprimir' : '🖨️ Imprimir y Guardar')
+                                            }
+                                        </button>
+                                    )}
+                                </div>
                             </div>
                         </div>
                     </div>
-                </div>
-            </Fragment>
-        );
-    };
+                </Fragment>
+            );
+        };
 
-    const root = createRoot(document.getElementById('root'));
-    root.render(<AppWrapper />);
+        const root = createRoot(document.getElementById('root'));
+        root.render(<AppWrapper />);
 
-</script>
-</body>
+    </script></body>
 </html>

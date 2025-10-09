@@ -640,12 +640,26 @@
                 doc.setFontSize(22);
                 const [day, month, year] = data.fechaProd.split('/');
                 doc.text(new Date(year, month - 1, day).toLocaleDateString('es-ES'), pageW - margin, currentY + 22, { align: "right" });
+                
+                let yPos = currentY + 30;
+
+                if (data.rnpa && data.rnpa.trim() !== '') {
+                    doc.setFontSize(10);
+                    doc.setFont("helvetica", "normal");
+                    doc.text(`RNPA: ${data.rnpa}`, margin, yPos);
+                }
+
+                if (data.rne && data.rne.trim() !== '') {
+                    doc.setFontSize(10);
+                    doc.setFont("helvetica", "normal");
+                    doc.text(`RNE: ${data.rne}`, pageW - margin, yPos, { align: "right" });
+                }
             };
 
             const handleReprint = async (item) => {
-                const { data: articles, error } = await supabaseClient.from('articulos').select('descripcioncorta').eq('sku', item.sku).single();
+                const { data: articles, error } = await supabaseClient.from('articulos').select('descripcioncorta, rne, rnpa').eq('sku', item.sku).single();
                 if(error) {
-                    alert("No se pudo obtener la descripción corta del artículo para la reimpresión.");
+                    alert("No se pudo obtener la descripción corta, RNE y RNPA del artículo para la reimpresión.");
                     console.error(error);
                     return;
                 }
@@ -655,7 +669,19 @@
                 
                 const descripcionParaEtiqueta = articles.descripcioncorta || item.descripcion;
 
-                const data = { sku: item.sku, descripcion: descripcionParaEtiqueta, lotes: item.lotesProduccion.split('#').filter(Boolean), cantidad: String(item.cantidad), uom: item.unidadMedida, fechaProd: item.fechaProduccion, palletId: item.numeroDePallet, qrString: qrString, hasNote: item.hasNote };
+                const data = { 
+                    sku: item.sku, 
+                    descripcion: descripcionParaEtiqueta, 
+                    lotes: item.lotesProduccion.split('#').filter(Boolean), 
+                    cantidad: String(item.cantidad), 
+                    uom: item.unidadMedida, 
+                    fechaProd: item.fechaProduccion, 
+                    palletId: item.numeroDePallet, 
+                    qrString: qrString, 
+                    hasNote: item.hasNote,
+                    rne: articles.rne,
+                    rnpa: articles.rnpa
+                };
                 const previewDoc = new jsPDF('p', 'mm', 'a4'); await drawLabelOnDoc(previewDoc, data);
                 const printDoc = new jsPDF('p', 'mm', 'a4'); await drawLabelOnDoc(printDoc, data);
                 printDoc.autoPrint();
