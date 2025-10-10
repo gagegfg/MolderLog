@@ -1,19 +1,6 @@
-
-        const { useState, useEffect, useRef, useCallback } = React;
+const { useState, useEffect, useRef, useCallback } = React;
         const { createRoot } = ReactDOM;
         const { jsPDF } = window.jspdf;
-
-        let supabaseClient;
-        let supabaseInitializationError = null;
-
-        try {
-            if (typeof SUPABASE_URL === 'undefined' || typeof SUPABASE_KEY === 'undefined') {
-                throw new Error("Las variables SUPABASE_URL o SUPABASE_KEY no están definidas. Revisa config.js.");
-            }
-            supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-        } catch (error) {
-            supabaseInitializationError = error;
-        }
 
         const useLocalStorage = (key, initialValue) => {
             const [storedValue, setStoredValue] = useState(() => {
@@ -44,7 +31,6 @@
 
             useEffect(() => {
                 if (isOpen) {
-                    // When modal opens, sync internal state with prop and focus
                     setCurrentText(text || '');
                     setTimeout(() => {
                         textareaRef.current?.focus();
@@ -79,300 +65,255 @@
         };
 
         const App = () => {
+            const [supabaseClient, setSupabaseClient] = useState(null);
+            const [appIsLoading, setAppIsLoading] = useState(true);
             const [allData, setAllData] = useState([]);
-                        const [isLoading, setIsLoading] = useState(true);
-                        const [isSaving, setIsSaving] = useState(false);
+            const [isSaving, setIsSaving] = useState(false);
             
-                        // State for pagination
-                        const [currentPage, setCurrentPage] = useState(1);
-                        const [recordsPerPage, setRecordsPerPage] = useLocalStorage('grillaqr_recordsPerPage', 400);
-                        const [totalRecords, setTotalRecords] = useState(0);
-            
-                        const [modalState, setModalState] = useState({ isOpen: false, type: null, title: '', message: '', onConfirm: null });
-                        const [noteModal, setNoteModal] = useState({ isOpen: false, item: null, text: '' });
-                        const [observationModal, setObservationModal] = useState({ isOpen: false, text: '' });
-                        const [reprintModal, setReprintModal] = useState({ isOpen: false, pdfUrl: null, printablePdfUrl: null, palletId: null });
-                        const [showHelpModal, setShowHelpModal] = useState(false);
-                        const [showPendingModal, setShowPendingModal] = useState(false);
-                        const [activeActionMenu, setActiveActionMenu] = useState(null);
-                        const actionMenuRef = useRef(null);
-            
-                        const [isTransferMode, setIsTransferMode] = useState(false);
-                        const [transferSelection, setTransferSelection] = useState({});
-                        
-                        const [columnFilters, setColumnFilters] = useLocalStorage('grillaqr_columnFilters_v3', {
-                            sku: '',
-                            descripcion: '',
-                            numeroDePallet: '',
-                            lotesProduccion: '',
-                            despachado: '',
-                            cliente: ''
-                        });
-                        const [fechaDesde, setFechaDesde] = useLocalStorage('grillaqr_fechaDesde', '');
-                        const [fechaHasta, setFechaHasta] = useLocalStorage('grillaqr_fechaHasta', '');
-                        const [autoRefreshEnabled, setAutoRefreshEnabled] = useLocalStorage('grillaqr_autoRefresh', true);
-                        const [newDataAvailable, setNewDataAvailable] = useState(false);
-                        const [latestKnownUpdate, setLatestKnownUpdate] = useState(null);
-                        
-                        const [sortConfig, setSortConfig] = useState({ key: 'numeroDePallet', direction: 'descending' });
-            
-                        const requestSort = (key) => {
-                            let direction = 'ascending';
-                            if (sortConfig.key === key && sortConfig.direction === 'ascending') {
-                                direction = 'descending';
-                            }
-                            setSortConfig({ key, direction });
-                        };
-            
-                        // Data is now sorted by the server. This const is for semantic clarity in the render method.
-                        const sortedData = allData;
-            
-                        const [isExportOpen, setIsExportOpen] = useState(false);
-                        const exportMenuRef = useRef(null);
-                        
-                        const longPressTimer = useRef(null);
-                        const touchDuration = 500; 
-            
-                        const handlePressStart = (callback) => {
-                            longPressTimer.current = setTimeout(() => {
-                                callback();
-                            }, touchDuration);
-                        };
-            
-                        const handlePressEnd = () => {
-                            clearTimeout(longPressTimer.current);
-                        };
-            
-                        const loadData = useCallback(async (isManualRefresh = false) => {
-                            const loaderStatus = document.getElementById('loader-status');
-                            const isInitialLoad = loaderStatus && !document.getElementById('root').offsetParent;
+            const [currentPage, setCurrentPage] = useState(1);
+            const [recordsPerPage, setRecordsPerPage] = useLocalStorage('grillaqr_recordsPerPage', 400);
+            const [totalRecords, setTotalRecords] = useState(0);
 
-                            if (isManualRefresh) {
-                                setNewDataAvailable(false);
-                            }
-            
-                            if (isInitialLoad) {
-                                loaderStatus.textContent = "Ejecutando consulta a la base de datos...";
-                            }
-                            setIsLoading(true);
-            
-                            try {
-                                if (isInitialLoad || isManualRefresh) {
-                                    const { data: maxDateData, error: maxDateError } = await supabaseClient
-                                        .from('vista_detallelotes_completa')
-                                        .select('updated_at')
-                                        .order('updated_at', { ascending: false })
-                                        .limit(1)
-                                        .single();
-                                    
-                                    if (maxDateError) {
-                                        console.error("Error fetching latest update timestamp:", maxDateError);
-                                    } else if (maxDateData) {
-                                        setLatestKnownUpdate(maxDateData.updated_at);
-                                    }
-                                }
+            const [modalState, setModalState] = useState({ isOpen: false, type: null, title: '', message: '', onConfirm: null });
+            const [noteModal, setNoteModal] = useState({ isOpen: false, item: null, text: '' });
+            const [observationModal, setObservationModal] = useState({ isOpen: false, text: '' });
+            const [reprintModal, setReprintModal] = useState({ isOpen: false, pdfUrl: null, printablePdfUrl: null, palletId: null });
+            const [showHelpModal, setShowHelpModal] = useState(false);
+            const [showPendingModal, setShowPendingModal] = useState(false);
+            const [activeActionMenu, setActiveActionMenu] = useState(null);
+            const actionMenuRef = useRef(null);
 
-                                let query = supabaseClient.from('vista_detallelotes_completa').select('*', { count: 'exact' });
+            const [isTransferMode, setIsTransferMode] = useState(false);
+            const [transferSelection, setTransferSelection] = useState({});
             
-                                // Server-side filtering
-                                Object.keys(columnFilters).forEach(key => {
-                                    const filterValue = columnFilters[key] ? columnFilters[key].trim() : '';
-                                    if (filterValue) {
-                                        const dbKey = key === 'numeroDePallet' ? 'nropallet' : key;
-                                        if (key === 'despachado') {
-                                            if ('sí'.startsWith(filterValue.toLowerCase())) query = query.eq('despachado', true);
-                                            else if ('no'.startsWith(filterValue.toLowerCase())) query = query.eq('despachado', false);
-                                        } else {
-                                            query = query.ilike(dbKey, `%${filterValue}%`);
-                                        }
-                                    }
-                                });
+            const [columnFilters, setColumnFilters] = useLocalStorage('grillaqr_columnFilters_v3', {
+                sku: '',
+                descripcion: '',
+                numeroDePallet: '',
+                lotesProduccion: '',
+                despachado: '',
+                cliente: ''
+            });
+            const [fechaDesde, setFechaDesde] = useLocalStorage('grillaqr_fechaDesde', '');
+            const [fechaHasta, setFechaHasta] = useLocalStorage('grillaqr_fechaHasta', '');
+            const [autoRefreshEnabled, setAutoRefreshEnabled] = useLocalStorage('grillaqr_autoRefresh', true);
+            const [newDataAvailable, setNewDataAvailable] = useState(false);
+            const [latestKnownUpdate, setLatestKnownUpdate] = useState(null);
             
-                                if (fechaDesde && !isTransferMode) {
-                                    query = query.gte('fechaproduccion', fechaDesde);
-                                }
-                                if (fechaHasta && !isTransferMode) {
-                                    query = query.lte('fechaproduccion', fechaHasta);
-                                }
-                                if (isTransferMode) {
-                                    query = query.eq('is_transferred', false);
-                                }
-            
-                                // Sorting
-                                const sortKey = sortConfig.key === 'numeroDePallet' ? 'nropallet' : sortConfig.key;
-                                query = query.order(sortKey, { ascending: sortConfig.direction === 'ascending' });
-                                
-                                // Pagination
-                                const page = isManualRefresh ? 1 : currentPage;
-                                if (isManualRefresh && currentPage !== 1) {
-                                    setCurrentPage(1);
-                                    setIsLoading(false);
-                                    return;
-                                }
-            
-                                const rangeFrom = (page - 1) * recordsPerPage;
-                                const rangeTo = rangeFrom + recordsPerPage - 1;
-                                query = query.range(rangeFrom, rangeTo);
-            
-                                const { data, error, count } = await query;
-            
-                                if (error) throw error;
-            
-                                if (isInitialLoad) {
-                                    loaderStatus.textContent = `Se recibieron ${data.length} registros. Procesando...`;
-                                    await new Promise(res => setTimeout(res, 200));
-                                }
-            
-                                const parsedLotes = data.map(item => ({
-                                    id: item.id,
-                                    sku: item.sku,
-                                    descripcion: item.descripcion,
-                                    numeroDePallet: item.nropallet,
-                                    lotesProduccion: item.lotesproduccion,
-                                    fechaProduccion: new Date(item.fechaproduccion).toLocaleDateString('es-AR'),
-                                    cantidad: item.cantidad,
-                                    unidadMedida: item.unidadmedida,
-                                    despachado: item.despachado ? 'TRUE' : 'FALSE',
-                                    cliente: item.cliente,
-                                    hasNote: item.has_note,
-                                    noteText: item.notatext || '',
-                                    isStored: item.is_transferred,
-                                    updated_at: item.updated_at
-                                }));
-                                
-                                setAllData(parsedLotes);
-                                setTotalRecords(count || 0);
-            
-                            } catch (error) {
-                                console.error("Error cargando datos:", error);
-                                setModalState({ isOpen: true, type: 'alert', title: 'Error de Carga', message: `No se pudieron cargar los datos: ${error.message}` });
-                            } finally {
-                                setIsLoading(false);
-                            }
-                        }, [columnFilters, fechaDesde, fechaHasta, sortConfig, currentPage, recordsPerPage, isTransferMode, supabaseClient]);
-                        
-                        useEffect(() => {
-                            const initializeApp = async () => {
-                                const loaderStatus = document.getElementById('loader-status');
-                                const loaderProgress = document.getElementById('loader-progress');
-                                const staticLoader = document.getElementById('static-loader');
-            
-                                const setLoaderError = (message) => {
-                                    loaderStatus.textContent = message;
-                                    loaderProgress.style.width = '100%';
-                                    loaderProgress.classList.remove('bg-amber-400');
-                                    loaderProgress.classList.add('bg-red-500');
-                                    console.error(message);
-                                };
-            
-                                loaderStatus.textContent = "Iniciando aplicación...";
-                                loaderProgress.style.width = '10%';
-                                await new Promise(res => setTimeout(res, 200));
-            
-                                if (supabaseInitializationError) {
-                                    setLoaderError(`Error al inicializar Supabase: ${supabaseInitializationError.message}`);
-                                    return;
-                                }
-                                if (!supabaseClient) {
-                                    setLoaderError("Error: El cliente de Supabase no se pudo crear.");
-                                    return;
-                                }
-            
-                                loaderStatus.textContent = "Conexión con Supabase establecida.";
-                                loaderProgress.style.width = '25%';
-                                await new Promise(res => setTimeout(res, 200));
-            
-                                loaderStatus.textContent = "Cargando datos de la grilla...";
-                                loaderProgress.style.width = '50%';
-                                
-                                if (!fechaDesde && !fechaHasta) {
-                                    const today = new Date();
-                                    const firstDayOfLastMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1);
-                                    setFechaHasta(today.toISOString().split('T')[0]);
-                                    setFechaDesde(firstDayOfLastMonth.toISOString().split('T')[0]);
-                                } else {
-                                    loadData(true); // Force initial load to set timestamp
-                                }
-            
-                                loaderStatus.textContent = "¡Listo!";
-                                loaderProgress.style.width = '100%';
-                                
-                                setTimeout(() => {
-                                     if (staticLoader) {
-                                        staticLoader.classList.add('opacity-0');
-                                        setTimeout(() => staticLoader.remove(), 500);
-                                    }
-                                }, 500);
-                            };
-                            initializeApp();
-                        }, []); // This should only run once on mount
+            const [sortConfig, setSortConfig] = useState({ key: 'numeroDePallet', direction: 'descending' });
 
-                        // Background sync checker
-                        useEffect(() => {
-                            const interval = setInterval(async () => {
-                                if (document.hidden) return; // Don't check if the tab is not visible
-
-                                const { data: maxDateData, error: maxDateError } = await supabaseClient
-                                    .from('vista_detallelotes_completa')
-                                    .select('updated_at')
-                                    .order('updated_at', { ascending: false })
-                                    .limit(1)
-                                    .single();
-
-                                if (maxDateError) {
-                                    console.error("Error checking for new data:", maxDateError);
-                                } else if (maxDateData && latestKnownUpdate) {
-                                    const remoteTimestamp = new Date(maxDateData.updated_at).getTime();
-                                    const localTimestamp = new Date(latestKnownUpdate).getTime();
-                                    if (remoteTimestamp > localTimestamp) {
-                                        setNewDataAvailable(true);
-                                    }
-                                }
-                            }, 60000); // Check every 60 seconds
-
-                            return () => clearInterval(interval);
-                        }, [latestKnownUpdate, supabaseClient]);
+            const [isExportOpen, setIsExportOpen] = useState(false);
+            const exportMenuRef = useRef(null);
             
-                        // Debounce effect for column filters
-                        useEffect(() => {
-                            if (!autoRefreshEnabled) return;
+            const longPressTimer = useRef(null);
+            const touchDuration = 500; 
+
+            const requestSort = (key) => {
+                let direction = 'ascending';
+                if (sortConfig.key === key && sortConfig.direction === 'ascending') {
+                    direction = 'descending';
+                }
+                setSortConfig({ key, direction });
+            };
+            
+            const loadData = useCallback(async (isManualRefresh = false) => {
+                if (!supabaseClient) return;
                 
-                            const handler = setTimeout(() => {
-                                setCurrentPage(1);
-                            }, 300); // 300ms delay
-                
-                            return () => {
-                                clearTimeout(handler);
-                            };
-                        }, [columnFilters, autoRefreshEnabled]);
+                setAppIsLoading(true);
 
-                        // This effect resets the page to 1 when filters change (dates, records per page, etc.)
-                        useEffect(() => {
-                            if (!autoRefreshEnabled) return;
-                            const isInitialMount = currentPage === 1;
-                            if (!isInitialMount) {
-                                setCurrentPage(1);
+                try {
+                    if (isManualRefresh) {
+                        setNewDataAvailable(false);
+                        const { data: maxDateData, error: maxDateError } = await supabaseClient
+                            .from('vista_detallelotes_completa')
+                            .select('updated_at')
+                            .order('updated_at', { ascending: false })
+                            .limit(1)
+                            .single();
+                        
+                        if (maxDateError) {
+                            console.error("Error fetching latest update timestamp:", maxDateError);
+                        } else if (maxDateData) {
+                            setLatestKnownUpdate(maxDateData.updated_at);
+                        }
+                    }
+
+                    let query = supabaseClient.from('vista_detallelotes_completa').select('*', { count: 'exact' });
+
+                    Object.keys(columnFilters).forEach(key => {
+                        const filterValue = columnFilters[key] ? columnFilters[key].trim() : '';
+                        if (filterValue) {
+                            const dbKey = key === 'numeroDePallet' ? 'nropallet' : key;
+                            if (key === 'despachado') {
+                                if ('sí'.startsWith(filterValue.toLowerCase())) query = query.eq('despachado', true);
+                                else if ('no'.startsWith(filterValue.toLowerCase())) query = query.eq('despachado', false);
+                            } else {
+                                query = query.ilike(dbKey, `%${filterValue}%`);
                             }
-                        }, [fechaDesde, fechaHasta, recordsPerPage, sortConfig, autoRefreshEnabled]);
-            
-                        // This is the main data loading trigger.
-                        useEffect(() => {
-                            loadData();
-                        }, [loadData]); // The loadData useCallback has all the necessary dependencies.
-            
-                        useEffect(() => {
-                            const handleClickOutside = (event) => {
-                                if (exportMenuRef.current && !exportMenuRef.current.contains(event.target)) setIsExportOpen(false);
-                                if (actionMenuRef.current && !actionMenuRef.current.parentElement.contains(event.target)) setActiveActionMenu(null);
-                            };
-                            document.addEventListener("mousedown", handleClickOutside);
-                            return () => document.removeEventListener("mousedown", handleClickOutside);
-                        }, []);
-            const handleColumnFilterChange = (columnId, value) => setColumnFilters(prev => ({ ...prev, [columnId]: value }));
+                        }
+                    });
+
+                    if (fechaDesde && !isTransferMode) query = query.gte('fechaproduccion', fechaDesde);
+                    if (fechaHasta && !isTransferMode) query = query.lte('fechaproduccion', fechaHasta);
+                    if (isTransferMode) query = query.eq('is_transferred', false);
+
+                    const sortKey = sortConfig.key === 'numeroDePallet' ? 'nropallet' : sortConfig.key;
+                    query = query.order(sortKey, { ascending: sortConfig.direction === 'ascending' });
+                    
+                    const page = isManualRefresh ? 1 : currentPage;
+                    if (isManualRefresh && currentPage !== 1) setCurrentPage(1);
+
+                    const rangeFrom = (page - 1) * recordsPerPage;
+                    const rangeTo = rangeFrom + recordsPerPage - 1;
+                    query = query.range(rangeFrom, rangeTo);
+
+                    const { data, error, count } = await query;
+
+                    if (error) throw error;
+
+                    const parsedLotes = data.map(item => ({
+                        id: item.id,
+                        sku: item.sku,
+                        descripcion: item.descripcion,
+                        numeroDePallet: item.nropallet,
+                        lotesProduccion: item.lotesproduccion,
+                        fechaProduccion: new Date(item.fechaproduccion).toLocaleDateString('es-AR'),
+                        cantidad: item.cantidad,
+                        unidadMedida: item.unidadmedida,
+                        despachado: item.despachado ? 'TRUE' : 'FALSE',
+                        cliente: item.cliente,
+                        hasNote: item.has_note,
+                        noteText: item.notatext || '',
+                        isStored: item.is_transferred,
+                        updated_at: item.updated_at
+                    }));
+                    
+                    setAllData(parsedLotes);
+                    setTotalRecords(count || 0);
+
+                } catch (error) {
+                    console.error("Error cargando datos:", error);
+                    setModalState({ isOpen: true, type: 'alert', title: 'Error de Carga', message: `No se pudieron cargar los datos: ${error.message}` });
+                } finally {
+                    setAppIsLoading(false);
+                }
+            }, [supabaseClient, columnFilters, fechaDesde, fechaHasta, sortConfig, currentPage, recordsPerPage, isTransferMode]);
+
+            useEffect(() => {
+                const staticLoader = document.getElementById('static-loader');
+                const loaderStatus = document.getElementById('loader-status');
+                const loaderProgress = document.getElementById('loader-progress');
+
+                const setLoaderError = (message) => {
+                    if (loaderStatus) {
+                        loaderStatus.textContent = message;
+                        loaderStatus.className = 'text-xl text-red-400 mb-4 [text-shadow:_1px_1px_2px_rgba(0,0,0,0.5)]';
+                    }
+                    if (loaderProgress) {
+                        loaderProgress.style.width = '100%';
+                        loaderProgress.classList.remove('bg-amber-400');
+                        loaderProgress.classList.add('bg-red-600');
+                    }
+                    console.error(message);
+                };
+
+                if (typeof SUPABASE_URL === 'undefined' || typeof SUPABASE_KEY === 'undefined' || !SUPABASE_URL.startsWith('https')) {
+                    setLoaderError('ERROR: Revisa la configuración de Supabase en config.js.');
+                    return;
+                }
+
+                const client = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+                setSupabaseClient(client);
+
+                const loadingTasks = [
+                    { status: "Inicializando...", duration: 300, progress: 20 },
+                    { status: "Conectando a la base de datos...", duration: 500, progress: 40 },
+                    { status: "Cargando datos...", duration: 1000, progress: 80, action: () => {
+                        if (!fechaDesde && !fechaHasta) {
+                            const today = new Date();
+                            const firstDayOfLastMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+                            setFechaHasta(today.toISOString().split('T')[0]);
+                            setFechaDesde(firstDayOfLastMonth.toISOString().split('T')[0]);
+                        }
+                    }},
+                    { status: "¡Listo!", duration: 500, progress: 100 }
+                ];
+
+                let currentTask = 0;
+                const runLoadingTask = () => {
+                    if (currentTask < loadingTasks.length) {
+                        const task = loadingTasks[currentTask];
+                        if (loaderStatus) loaderStatus.textContent = task.status;
+                        if (loaderProgress) loaderProgress.style.width = `${task.progress}%`;
+                        if (task.action) task.action();
+                        
+                        setTimeout(() => {
+                            currentTask++;
+                            runLoadingTask();
+                        }, task.duration);
+                    } else {
+                        if (staticLoader) {
+                            staticLoader.classList.add('opacity-0');
+                            setTimeout(() => {
+                                staticLoader.style.display = 'none';
+                                setAppIsLoading(false);
+                            }, 500);
+                        }
+                    }
+                };
+                runLoadingTask();
+            }, []);
+
+            useEffect(() => {
+                if (supabaseClient) {
+                    loadData(true);
+                }
+            }, [supabaseClient, currentPage, recordsPerPage, sortConfig, columnFilters, fechaDesde, fechaHasta, isTransferMode]);
+
+            useEffect(() => {
+                if (!supabaseClient) return;
+                const interval = setInterval(async () => {
+                    if (document.hidden) return;
+
+                    const { data: maxDateData, error: maxDateError } = await supabaseClient
+                        .from('vista_detallelotes_completa')
+                        .select('updated_at')
+                        .order('updated_at', { ascending: false })
+                        .limit(1)
+                        .single();
+
+                    if (maxDateError) {
+                        console.error("Error checking for new data:", maxDateError);
+                    } else if (maxDateData && latestKnownUpdate) {
+                        const remoteTimestamp = new Date(maxDateData.updated_at).getTime();
+                        const localTimestamp = new Date(latestKnownUpdate).getTime();
+                        if (remoteTimestamp > localTimestamp) {
+                            setNewDataAvailable(true);
+                        }
+                    }
+                }, 60000);
+
+                return () => clearInterval(interval);
+            }, [latestKnownUpdate, supabaseClient]);
+
+            useEffect(() => {
+                const handleClickOutside = (event) => {
+                    if (exportMenuRef.current && !exportMenuRef.current.contains(event.target)) setIsExportOpen(false);
+                    if (actionMenuRef.current && !actionMenuRef.current.parentElement.contains(event.target)) setActiveActionMenu(null);
+                };
+                document.addEventListener("mousedown", handleClickOutside);
+                return () => document.removeEventListener("mousedown", handleClickOutside);
+            }, []);
+
+            const handleColumnFilterChange = (columnId, value) => {
+                setColumnFilters(prev => ({ ...prev, [columnId]: value }));
+                setCurrentPage(1);
+            };
             const clearFilters = () => {
                 setColumnFilters({ sku: '', descripcion: '', numeroDePallet: '', lotesProduccion: '', despachado: '', cliente: '' });
                 setFechaDesde('');
                 setFechaHasta('');
+                setCurrentPage(1);
             };
 
             const handleDeleteRow = (rowId) => {
@@ -388,7 +329,7 @@
                             alert(`Error al eliminar: ${error.message}`);
                         } else {
                             alert("Pallet eliminado correctamente.");
-                            loadData();
+                            loadData(true);
                         }
                     }
                 });
@@ -417,11 +358,9 @@
                 if (error) {
                     alert(`Error al guardar la nota: ${error.message}`);
                 } else {
-                    loadData();
+                    loadData(true);
                 }
             };
-
-
 
             const handleEnterTransferMode = () => {
                 setIsTransferMode(true);
@@ -458,7 +397,7 @@
                         } else {
                             await generateTransferPDF(selectedItems);
                             handleCancelTransferMode();
-                            loadData();
+                            loadData(true);
                         }
                     }
                 });
@@ -467,7 +406,7 @@
             const loadImageAsDataURI = (url) => {
                 return new Promise((resolve, reject) => {
                     const image = new Image();
-                    image.crossOrigin = "Anonymous"; // In case it's hosted differently
+                    image.crossOrigin = "Anonymous";
                     image.onload = () => {
                         const canvas = document.createElement('canvas');
                         canvas.width = image.width;
@@ -478,7 +417,7 @@
                     };
                     image.onerror = (error) => {
                         console.error("Error loading image for PDF:", error);
-                        resolve(null); // Resolve null to not break PDF generation
+                        resolve(null);
                     };
                     image.src = url;
                 });
@@ -490,10 +429,8 @@
                 const pageHeight = doc.internal.pageSize.getHeight();
                 const margin = 14;
 
-                // Load logo
                 const logoDataUri = await loadImageAsDataURI('logo.jpg');
 
-                // Header
                 if (logoDataUri) {
                     doc.addImage(logoDataUri, 'JPEG', margin, margin, 40, 15);
                 }
@@ -504,7 +441,6 @@
                 doc.setFont('helvetica', 'normal');
                 doc.text(`Fecha de Generación: ${new Date().toLocaleString('es-AR')}`, pageWidth - margin, margin + 10, { align: 'right' });
 
-                // --- Detail Table ---
                 doc.setFont('helvetica', 'bold');
                 doc.setFontSize(12);
                 doc.text('Detalle de Pallets Transferidos', margin, 45);
@@ -530,7 +466,6 @@
                     margin: { left: margin, right: margin }
                 });
 
-                // --- Summary Table ---
                 const summary = transferredPallets.reduce((acc, item) => {
                     if (!acc[item.sku]) {
                         acc[item.sku] = {
@@ -553,7 +488,7 @@
                 ]);
 
                 let finalY = doc.lastAutoTable.finalY || 80;
-                if (finalY > pageHeight - 50) { // Check if there's enough space, otherwise add new page
+                if (finalY > pageHeight - 50) {
                     doc.addPage();
                     finalY = margin;
                 }
@@ -571,7 +506,6 @@
                     margin: { left: margin, right: margin }
                 });
 
-                // Filename and Save
                 const now = new Date();
                 const dateStr = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
                 const timeStr = String(now.getHours()).padStart(2, '0') + '-' + String(now.getMinutes()).padStart(2, '0') + '-' + String(now.getSeconds()).padStart(2, '0');
@@ -593,7 +527,6 @@
 
                         let query = supabaseClient.from('vista_detallelotes_completa').select('*');
 
-                        // Apply same filters as loadData
                         Object.keys(columnFilters).forEach(key => {
                             const filterValue = columnFilters[key] ? columnFilters[key].trim() : '';
                             if (filterValue) {
@@ -611,7 +544,6 @@
                         if (fechaHasta && !isTransferMode) query = query.lte('fechaproduccion', fechaHasta);
                         if (isTransferMode) query = query.eq('is_transferred', false);
                         
-                        // Apply same sorting
                         const sortKey = sortConfig.key === 'numeroDePallet' ? 'nropallet' : sortConfig.key;
                         query = query.order(sortKey, { ascending: sortConfig.direction === 'ascending' });
 
@@ -627,7 +559,6 @@
 
                     } while (lastBatchLength === BATCH_SIZE);
                     
-                    // We need to parse the data just like in loadData
                     return allResults.map(item => ({
                         id: item.id,
                         sku: item.sku,
@@ -891,7 +822,6 @@
             );
 
             const handleSelectAll = () => {
-                // Toggles selection for all items on the CURRENT page
                 const allVisibleIds = allData.map(item => item.id);
                 const allSelectedOnPage = allVisibleIds.length > 0 && allVisibleIds.every(id => transferSelection[id]);
                 
@@ -935,6 +865,10 @@
                     </div>
                 );
             };
+            
+            if (appIsLoading && !totalRecords) {
+                return null; 
+            }
 
             return (
                 <div className="min-h-screen p-4 sm:p-6 bg-black bg-opacity-50">
@@ -1017,19 +951,19 @@
                                 </div>
 
                                 <div className="flex items-center space-x-1">
-                                    <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1 || isLoading} className="bg-white text-gray-700 border border-gray-300 font-semibold py-2 px-3 rounded-lg shadow-sm hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed">
+                                    <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1 || appIsLoading} className="bg-white text-gray-700 border border-gray-300 font-semibold py-2 px-3 rounded-lg shadow-sm hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed">
                                         <i className="fas fa-chevron-left"></i>
                                     </button>
                                     <span className="text-sm font-medium text-gray-700 px-2">
                                         Página {currentPage} de {totalRecords > 0 ? Math.ceil(totalRecords / recordsPerPage) : 1}
                                     </span>
-                                    <button onClick={() => setCurrentPage(p => p + 1)} disabled={currentPage * recordsPerPage >= totalRecords || isLoading} className="bg-white text-gray-700 border border-gray-300 font-semibold py-2 px-3 rounded-lg shadow-sm hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed">
+                                    <button onClick={() => setCurrentPage(p => p + 1)} disabled={currentPage * recordsPerPage >= totalRecords || appIsLoading} className="bg-white text-gray-700 border border-gray-300 font-semibold py-2 px-3 rounded-lg shadow-sm hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed">
                                         <i className="fas fa-chevron-right"></i>
                                     </button>
                                 </div>
 
-                                <button onClick={() => loadData(true)} disabled={isLoading || isSaving} className="bg-gray-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-gray-700 disabled:opacity-50 flex items-center"><i className={`fas fa-sync-alt ${isLoading ? 'animate-spin' : ''} mr-2`}></i>Refrescar</button>
-                                <div className="relative" ref={exportMenuRef">
+                                <button onClick={() => loadData(true)} disabled={appIsLoading || isSaving} className="bg-gray-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-gray-700 disabled:opacity-50 flex items-center"><i className={`fas fa-sync-alt ${appIsLoading ? 'animate-spin' : ''} mr-2`}></i>Refrescar</button>
+                                <div className="relative" ref={exportMenuRef}>
                                     <button onClick={() => setIsExportOpen(prev => !prev)} disabled={totalRecords === 0} className="bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-blue-700 disabled:opacity-50 flex items-center"><i className="fas fa-download mr-2"></i>Exportar<i className={`fas fa-chevron-down ml-2 transition-transform ${isExportOpen ? 'rotate-180' : ''}`}></i></button>
                                     {isExportOpen && (
                                         <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg border z-20">
@@ -1141,10 +1075,10 @@
                                     </tr>
                                 </thead>
                                 <tbody class="bg-white divide-y divide-gray-200">
-                                    {isLoading ? (
+                                    {appIsLoading ? (
                                         <tr><td colSpan="11" class="p-8 text-center text-gray-500">Cargando datos...</td></tr>
                                     ) : (
-                                        sortedData.length > 0 ? sortedData.map((item) => {
+                                        allData.length > 0 ? allData.map((item) => {
                                             const isDespachado = item.despachado && item.despachado.toUpperCase() === 'TRUE';
                                             const clients = item.cliente ? item.cliente.split('#').filter(Boolean) : [];
 
@@ -1255,4 +1189,3 @@
         };
         const root = createRoot(document.getElementById('root'));
         root.render(<App />);
-    
