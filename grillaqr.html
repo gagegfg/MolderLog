@@ -870,27 +870,31 @@
 
                         <div class="flex justify-between items-center mb-4 p-4 border rounded-lg bg-gray-50">
                             <div class="flex items-center space-x-4">
-                                <div class="flex items-center space-x-2">
-                                    <label class="text-sm font-medium text-gray-700">Desde:</label>
-                                    <input type="date" value={fechaDesde} onChange={e => setFechaDesde(e.target.value)} className={`rounded-md border-gray-300 shadow-sm p-2 border ${isTransferMode ? 'bg-gray-200 cursor-not-allowed' : ''}`} disabled={isTransferMode}/>
-                                </div>
-                                <div class="flex items-center space-x-2">
-                                    <label class="text-sm font-medium text-gray-700">Hasta:</label>
-                                    <input type="date" value={fechaHasta} onChange={e => setFechaHasta(e.target.value)} className={`rounded-md border-gray-300 shadow-sm p-2 border ${isTransferMode ? 'bg-gray-200 cursor-not-allowed' : ''}`} disabled={isTransferMode}/>
-                                </div>
-                                <button onClick={clearFilters} className="bg-white text-gray-700 border border-gray-300 font-semibold py-2 px-4 rounded-lg shadow-sm hover:bg-gray-50 flex items-center"><i class="fas fa-times-circle mr-2"></i>Limpiar</button>
+                                {!isTransferMode && (
+                                    <>
+                                        <div class="flex items-center space-x-2">
+                                            <label className="text-sm font-medium text-gray-700">Desde:</label>
+                                            <input type="date" value={fechaDesde} onChange={e => setFechaDesde(e.target.value)} className="rounded-md border-gray-300 shadow-sm p-2 border"/>
+                                        </div>
+                                        <div className="flex items-center space-x-2">
+                                            <label className="text-sm font-medium text-gray-700">Hasta:</label>
+                                            <input type="date" value={fechaHasta} onChange={e => setFechaHasta(e.target.value)} className="rounded-md border-gray-300 shadow-sm p-2 border"/>
+                                        </div>
+                                    </>
+                                )}
+                                <button onClick={clearFilters} className="bg-white text-gray-700 border border-gray-300 font-semibold py-2 px-4 rounded-lg shadow-sm hover:bg-gray-50 flex items-center"><i className="fas fa-times-circle mr-2"></i>Limpiar Filtros</button>
                             </div>
 
-                            <div class="flex items-center space-x-4">
-                                <p class="text-gray-600 font-semibold">{filteredData.length} registro(s) encontrado(s)</p>
+                            <div className="flex items-center space-x-4">
+                                <p className="text-gray-600 font-semibold">{filteredData.length} registro(s) encontrado(s)</p>
                                 <button onClick={loadData} disabled={isLoading || isSaving} className="bg-gray-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-gray-700 disabled:opacity-50 flex items-center"><i className={`fas fa-sync-alt ${isLoading ? 'animate-spin' : ''} mr-2`}></i>Refrescar</button>
-                                <div class="relative" ref={exportMenuRef}>
-                                    <button onClick={() => setIsExportOpen(prev => !prev)} disabled={filteredData.length === 0} className="bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-blue-700 disabled:opacity-50 flex items-center"><i class="fas fa-download mr-2"></i>Exportar<i className={`fas fa-chevron-down ml-2 transition-transform ${isExportOpen ? 'rotate-180' : ''}`}></i></button>
+                                <div className="relative" ref={exportMenuRef}>
+                                    <button onClick={() => setIsExportOpen(prev => !prev)} disabled={filteredData.length === 0} className="bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-blue-700 disabled:opacity-50 flex items-center"><i className="fas fa-download mr-2"></i>Exportar<i className={`fas fa-chevron-down ml-2 transition-transform ${isExportOpen ? 'rotate-180' : ''}`}></i></button>
                                     {isExportOpen && (
-                                        <div class="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg border z-20">
-                                            <ul class="text-gray-700">
-                                                <li><button onClick={exportToPDF} className="w-full text-left hover:bg-gray-100 p-3 flex items-center"><i class="fas fa-file-pdf w-6 mr-2 text-red-500"></i>Exportar a PDF</button></li>
-                                                <li><button onClick={exportToExcel} className="w-full text-left hover:bg-gray-100 p-3 flex items-center"><i class="fas fa-file-excel w-6 mr-2 text-green-500"></i>Exportar a Excel</button></li>
+                                        <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg border z-20">
+                                            <ul className="text-gray-700">
+                                                <li><button onClick={exportToPDF} className="w-full text-left hover:bg-gray-100 p-3 flex items-center"><i className="fas fa-file-pdf w-6 mr-2 text-red-500"></i>Exportar a PDF</button></li>
+                                                <li><button onClick={exportToExcel} className="w-full text-left hover:bg-gray-100 p-3 flex items-center"><i className="fas fa-file-excel w-6 mr-2 text-green-500"></i>Exportar a Excel</button></li>
                                             </ul>
                                         </div>
                                     )}
