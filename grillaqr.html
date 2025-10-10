@@ -114,6 +114,7 @@
         const App = () => {
             const [supabaseClient, setSupabaseClient] = useState(null);
             const [appIsLoading, setAppIsLoading] = useState(true);
+            const [isGridLoading, setIsGridLoading] = useState(false);
             const [allData, setAllData] = useState([]);
             const [isSaving, setIsSaving] = useState(false);
             
@@ -167,7 +168,7 @@
             const loadData = useCallback(async (isManualRefresh = false) => {
                 if (!supabaseClient) return;
                 
-                setAppIsLoading(true);
+                setIsGridLoading(true);
 
                 try {
                     if (isManualRefresh) {
@@ -243,7 +244,7 @@
                     console.error("Error cargando datos:", error);
                     setModalState({ isOpen: true, type: 'alert', title: 'Error de Carga', message: `No se pudieron cargar los datos: ${error.message}` });
                 } finally {
-                    setAppIsLoading(false);
+                    setIsGridLoading(false);
                 }
             }, [supabaseClient, columnFilters, fechaDesde, fechaHasta, sortConfig, currentPage, recordsPerPage, isTransferMode]);
 
@@ -1044,8 +1045,16 @@
                             </div>
                         </div>
 
-                        <div className="overflow-auto rounded-lg shadow-md border" style={{ height: '60vh', minHeight: '60vh', resize: 'vertical' }}>
-                            <table className="min-w-full divide-y divide-gray-200">
+                        <div className="relative overflow-auto rounded-lg shadow-md border" style={{ height: '60vh', minHeight: '60vh', resize: 'vertical' }}>
+                            {isGridLoading && (
+                                <div className="absolute inset-0 bg-black bg-opacity-20 flex items-center justify-center z-20">
+                                    <div className="flex items-center space-x-3 text-xl font-semibold text-gray-700 bg-white p-4 rounded-lg shadow-lg">
+                                        <i className="fas fa-sync-alt animate-spin"></i>
+                                        <span>Filtrando...</span>
+                                    </div>
+                                </div>
+                            )}
+                            <table className={`min-w-full divide-y divide-gray-200 ${isGridLoading ? 'opacity-50' : ''}`}>
                                 <thead className="bg-gray-800 text-white sticky top-0 z-10">
                                     <tr>
                                         <th className="px-1 py-3 text-left text-xs font-medium uppercase tracking-wider">
@@ -1142,10 +1151,7 @@
                                     </tr>
                                 </thead>
                                 <tbody class="bg-white divide-y divide-gray-200">
-                                    {appIsLoading ? (
-                                        <tr><td colSpan="11" class="p-8 text-center text-gray-500">Cargando datos...</td></tr>
-                                    ) : (
-                                        allData.length > 0 ? allData.map((item) => {
+                                    {allData.length > 0 ? allData.map((item) => {
                                             const isDespachado = item.despachado && item.despachado.toUpperCase() === 'TRUE';
                                             const clients = item.cliente ? item.cliente.split('#').filter(Boolean) : [];
 
@@ -1246,10 +1252,20 @@
                                         }) : (
                                             <tr><td colSpan="11" className="px-4 py-8 text-center text-sm text-gray-500">No se encontraron registros con los filtros aplicados.</td></tr>
                                         )
-                                    )}
+                                    }
                                 </tbody>
                             </table>
                         </div>
+                    </div>
+                </div>
+            );
+        };
+        const root = createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
+
                     </div>
                 </div>
             );
