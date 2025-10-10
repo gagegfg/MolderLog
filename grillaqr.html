@@ -141,6 +141,7 @@
                 despachado: '',
                 cliente: ''
             });
+            const [internalColumnFilters, setInternalColumnFilters] = useState(columnFilters);
             const [fechaDesde, setFechaDesde] = useLocalStorage('grillaqr_fechaDesde', '');
             const [fechaHasta, setFechaHasta] = useLocalStorage('grillaqr_fechaHasta', '');
             const [autoRefreshEnabled, setAutoRefreshEnabled] = useLocalStorage('grillaqr_autoRefresh', true);
@@ -352,9 +353,28 @@
                 return () => document.removeEventListener("mousedown", handleClickOutside);
             }, []);
 
+            // Debounce for column filters
+            useEffect(() => {
+                const handler = setTimeout(() => {
+                    // Only update if the filters have actually changed
+                    if (JSON.stringify(internalColumnFilters) !== JSON.stringify(columnFilters)) {
+                        setColumnFilters(internalColumnFilters);
+                        setCurrentPage(1);
+                    }
+                }, 300); // 300ms delay
+
+                return () => {
+                    clearTimeout(handler);
+                };
+            }, [internalColumnFilters]);
+
+            // Sync internal filters if external filters change (e.g., on clear)
+            useEffect(() => {
+                setInternalColumnFilters(columnFilters);
+            }, [columnFilters]);
+
             const handleColumnFilterChange = (columnId, value) => {
-                setColumnFilters(prev => ({ ...prev, [columnId]: value }));
-                setCurrentPage(1);
+                setInternalColumnFilters(prev => ({ ...prev, [columnId]: value }));
             };
             const clearFilters = () => {
                 setColumnFilters({ sku: '', descripcion: '', numeroDePallet: '', lotesProduccion: '', despachado: '', cliente: '' });
@@ -1110,14 +1130,14 @@
                                         </th>
                                         <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Acciones</th>
                                     </tr>
-                                    <tr className="bg-gray-200">
+                                    <tr class="bg-gray-200">
                                         <th className="p-1"></th>
-                                        <th className="p-1"><input type="text" placeholder="Filtrar..." value={columnFilters.sku} onChange={e => handleColumnFilterChange('sku', e.target.value)} className="w-full p-1 text-sm text-gray-700 border rounded" /></th>
-                                        <th className="p-1"><input type="text" placeholder="Filtrar..." value={columnFilters.descripcion} onChange={e => handleColumnFilterChange('descripcion', e.target.value)} className="w-full p-1 text-sm text-gray-700 border rounded" /></th>
-                                        <th className="p-1"><input type="text" placeholder="Filtrar..." value={columnFilters.numeroDePallet} onChange={e => handleColumnFilterChange('numeroDePallet', e.target.value)} className="w-full p-1 text-sm text-gray-700 border rounded" /></th>
-                                        <th className="p-1"><input type="text" placeholder="Filtrar..." value={columnFilters.lotesProduccion} onChange={e => handleColumnFilterChange('lotesProduccion', e.target.value)} className="w-full p-1 text-sm text-gray-700 border rounded" /></th>
-                                        <th className="p-1"><input type="text" placeholder="Sí / No" value={columnFilters.despachado} onChange={e => handleColumnFilterChange('despachado', e.target.value)} className="w-full p-1 text-sm text-gray-700 border rounded" /></th>
-                                        <th className="p-1"><input type="text" placeholder="Filtrar..." value={columnFilters.cliente} onChange={e => handleColumnFilterChange('cliente', e.target.value)} className="w-full p-1 text-sm text-gray-700 border rounded" /></th>
+                                        <th className="p-1"><input type="text" placeholder="Filtrar..." value={internalColumnFilters.sku} onChange={e => handleColumnFilterChange('sku', e.target.value)} className="w-full p-1 text-sm text-gray-700 border rounded" /></th>
+                                        <th className="p-1"><input type="text" placeholder="Filtrar..." value={internalColumnFilters.descripcion} onChange={e => handleColumnFilterChange('descripcion', e.target.value)} className="w-full p-1 text-sm text-gray-700 border rounded" /></th>
+                                        <th className="p-1"><input type="text" placeholder="Filtrar..." value={internalColumnFilters.numeroDePallet} onChange={e => handleColumnFilterChange('numeroDePallet', e.target.value)} className="w-full p-1 text-sm text-gray-700 border rounded" /></th>
+                                        <th className="p-1"><input type="text" placeholder="Filtrar..." value={internalColumnFilters.lotesProduccion} onChange={e => handleColumnFilterChange('lotesProduccion', e.target.value)} className="w-full p-1 text-sm text-gray-700 border rounded" /></th>
+                                        <th className="p-1"><input type="text" placeholder="Sí / No" value={internalColumnFilters.despachado} onChange={e => handleColumnFilterChange('despachado', e.target.value)} className="w-full p-1 text-sm text-gray-700 border rounded" /></th>
+                                        <th className="p-1"><input type="text" placeholder="Filtrar..." value={internalColumnFilters.cliente} onChange={e => handleColumnFilterChange('cliente', e.target.value)} className="w-full p-1 text-sm text-gray-700 border rounded" /></th>
                                         <th colSpan="4" className="p-1"></th>
                                     </tr>
                                 </thead>
