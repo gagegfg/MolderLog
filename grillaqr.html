@@ -189,14 +189,19 @@
 
                     let query = supabaseClient.from('vista_detallelotes_completa').select('*', { count: 'exact' });
 
+                    const keyMap = {
+                        numeroDePallet: 'nropallet',
+                        lotesProduccion: 'lotesproduccion'
+                    };
+
                     Object.keys(columnFilters).forEach(key => {
                         const filterValue = columnFilters[key] ? columnFilters[key].trim() : '';
                         if (filterValue) {
-                            const dbKey = key === 'numeroDePallet' ? 'nropallet' : key;
                             if (key === 'despachado') {
                                 if ('sí'.startsWith(filterValue.toLowerCase())) query = query.eq('despachado', true);
                                 else if ('no'.startsWith(filterValue.toLowerCase())) query = query.eq('despachado', false);
                             } else {
+                                const dbKey = keyMap[key] || key;
                                 query = query.ilike(dbKey, `%${filterValue}%`);
                             }
                         }
@@ -206,7 +211,7 @@
                     if (fechaHasta && !isTransferMode) query = query.lte('fechaproduccion', fechaHasta);
                     if (isTransferMode) query = query.eq('is_transferred', false);
 
-                    const sortKey = sortConfig.key === 'numeroDePallet' ? 'nropallet' : sortConfig.key;
+                    const sortKey = keyMap[sortConfig.key] || sortConfig.key;
                     query = query.order(sortKey, { ascending: sortConfig.direction === 'ascending' });
                     
                     const page = isManualRefresh ? 1 : currentPage;
@@ -595,10 +600,15 @@
 
                         let query = supabaseClient.from('vista_detallelotes_completa').select('*');
 
+                        const keyMap = {
+                            numeroDePallet: 'nropallet',
+                            lotesProduccion: 'lotesproduccion'
+                        };
+
                         Object.keys(columnFilters).forEach(key => {
                             const filterValue = columnFilters[key] ? columnFilters[key].trim() : '';
                             if (filterValue) {
-                                const dbKey = key === 'numeroDePallet' ? 'nropallet' : key;
+                                const dbKey = keyMap[key] || key;
                                 if (key === 'despachado') {
                                     if ('sí'.startsWith(filterValue.toLowerCase())) query = query.eq('despachado', true);
                                     else if ('no'.startsWith(filterValue.toLowerCase())) query = query.eq('despachado', false);
@@ -612,7 +622,7 @@
                         if (fechaHasta && !isTransferMode) query = query.lte('fechaproduccion', fechaHasta);
                         if (isTransferMode) query = query.eq('is_transferred', false);
                         
-                        const sortKey = sortConfig.key === 'numeroDePallet' ? 'nropallet' : sortConfig.key;
+                        const sortKey = keyMap[sortConfig.key] || sortConfig.key;
                         query = query.order(sortKey, { ascending: sortConfig.direction === 'ascending' });
 
                         query = query.range(rangeFrom, rangeTo);
@@ -785,8 +795,8 @@
                         <div className="bg-white p-6 rounded-xl shadow-lg w-full max-w-sm">
                             <h3 className="text-lg font-bold text-gray-800 mb-4">{title}</h3>
                             <p className="text-sm text-gray-600 mb-4">{message}</p>
-                            {type !== 'confirm' && (
-                                <input ref={inputRef} type={type === 'password' ? 'password' : 'text'} value={inputValue} onChange={e => setInputValue(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleConfirm()} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border" autoComplete="off" />
+                            {(type === 'text' || type === 'password') && (
+                                <input ref={inputRef} type={type} value={inputValue} onChange={e => setInputValue(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleConfirm()} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border" autoComplete="off" />
                             )}
                             <div className="flex justify-end space-x-3 mt-6">
                                 <button onClick={onClose} className="bg-gray-200 text-gray-800 font-semibold py-2 px-4 rounded-lg hover:bg-gray-300">Cancelar</button>
