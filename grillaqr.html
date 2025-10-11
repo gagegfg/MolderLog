@@ -143,9 +143,8 @@
                 cliente: ''
             });
             const [internalColumnFilters, setInternalColumnFilters] = useState(columnFilters);
-            const [fechaDesde, setFechaDesde] = useLocalStorage('grillaqr_fechaDesde', '');
-            const [fechaHasta, setFechaHasta] = useLocalStorage('grillaqr_fechaHasta', '');
-            const [autoRefreshEnabled, setAutoRefreshEnabled] = useLocalStorage('grillaqr_autoRefresh', true);
+            const [fechaDesde, setFechaDesde] = useState('');
+            const [fechaHasta, setFechaHasta] = useState('');
             const [newDataAvailable, setNewDataAvailable] = useState(false);
             const [latestKnownUpdate, setLatestKnownUpdate] = useState(null);
             
@@ -163,6 +162,38 @@
                     direction = 'descending';
                 }
                 setSortConfig({ key, direction });
+            };
+
+            const applyFiltersToQuery = (query) => {
+                const keyMap = {
+                    numeroDePallet: 'nropallet',
+                    lotesProduccion: 'lotesproduccion',
+                    fechaProduccion: 'fechaproduccion',
+                    unidadMedida: 'unidadmedida',
+                    isStored: 'is_transferred'
+                };
+
+                Object.keys(columnFilters).forEach(key => {
+                    const filterValue = columnFilters[key] ? columnFilters[key].trim() : '';
+                    if (filterValue) {
+                        if (key === 'despachado') {
+                            if ('sí'.startsWith(filterValue.toLowerCase())) query = query.eq('despachado', true);
+                            else if ('no'.startsWith(filterValue.toLowerCase())) query = query.eq('despachado', false);
+                        } else {
+                            const dbKey = keyMap[key] || key;
+                            query = query.ilike(dbKey, `%${filterValue}%`);
+                        }
+                    }
+                });
+
+                if (fechaDesde && !isTransferMode) query = query.gte('fechaproduccion', fechaDesde);
+                if (fechaHasta && !isTransferMode) query = query.lte('fechaproduccion', fechaHasta);
+                if (isTransferMode) query = query.eq('is_transferred', false);
+
+                const sortKey = keyMap[sortConfig.key] || sortConfig.key;
+                query = query.order(sortKey, { ascending: sortConfig.direction === 'ascending' });
+                
+                return query;
             };
             
             const loadData = useCallback(async (isManualRefresh = false) => {
@@ -189,36 +220,9 @@
 
                     let query = supabaseClient.from('vista_detallelotes_completa').select('*', { count: 'exact' });
 
-                    const keyMap = {
-                        numeroDePallet: 'nropallet',
-                        lotesProduccion: 'lotesproduccion',
-                        fechaProduccion: 'fechaproduccion',
-                        unidadMedida: 'unidadmedida',
-                        isStored: 'is_transferred'
-                    };
-
-                    Object.keys(columnFilters).forEach(key => {
-                        const filterValue = columnFilters[key] ? columnFilters[key].trim() : '';
-                        if (filterValue) {
-                            if (key === 'despachado') {
-                                if ('sí'.startsWith(filterValue.toLowerCase())) query = query.eq('despachado', true);
-                                else if ('no'.startsWith(filterValue.toLowerCase())) query = query.eq('despachado', false);
-                            } else {
-                                const dbKey = keyMap[key] || key;
-                                query = query.ilike(dbKey, `%${filterValue}%`);
-                            }
-                        }
-                    });
-
-                    if (fechaDesde && !isTransferMode) query = query.gte('fechaproduccion', fechaDesde);
-                    if (fechaHasta && !isTransferMode) query = query.lte('fechaproduccion', fechaHasta);
-                    if (isTransferMode) query = query.eq('is_transferred', false);
-
-                    const sortKey = keyMap[sortConfig.key] || sortConfig.key;
-                    query = query.order(sortKey, { ascending: sortConfig.direction === 'ascending' });
+                    query = applyFiltersToQuery(query);
                     
                     const page = isManualRefresh ? 1 : currentPage;
-                    if (isManualRefresh && currentPage !== 1) setCurrentPage(1);
 
                     const rangeFrom = (page - 1) * recordsPerPage;
                     const rangeTo = rangeFrom + recordsPerPage - 1;
@@ -285,24 +289,42 @@
                 const loadingTasks = [
                     { status: "Inicializando...", duration: 300, progress: 20 },
                     { status: "Conectando a la base de datos...", duration: 500, progress: 40 },
-                    { status: "Cargando datos...", duration: 1000, progress: 80, action: () => {
-                        if (!fechaDesde && !fechaHasta) {
-                            const today = new Date();
-                            const firstDayOfLastMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1);
-                            setFechaHasta(today.toISOString().split('T')[0]);
-                            setFechaDesde(firstDayOfLastMonth.toISOString().split('T')[0]);
+                    { 
+                        status: "Calculando rango de fechas...", 
+                        duration: 500,
+                        progress: 60, 
+                        action: async () => {
+                            const today = new Date().toISOString().split('T')[0];
+                            setFechaHasta(today);
+
+                            const currentYear = new Date().getFullYear();
+                            const startOfYear = `${currentYear}-01-01`;
+
+                            const { data, error } = await client
+                              .from('vista_detallelotes_completa')
+                              .select('fechaproduccion')
+                              .eq('despachado', false)
+                              .gte('fechaproduccion', startOfYear)
+                              .order('fechaproduccion', { ascending: true })
+                              .limit(1)
+                              .single();
+                            
+                            if (error) console.error("Error fetching min date:", error);
+                            
+                            setFechaDesde(data?.fechaproduccion || today);
                         }
-                    }},
+                    },
+                    { status: "Cargando datos...", duration: 1000, progress: 80 },
                     { status: "¡Listo!", duration: 500, progress: 100 }
                 ];
 
                 let currentTask = 0;
-                const runLoadingTask = () => {
+                const runLoadingTask = async () => {
                     if (currentTask < loadingTasks.length) {
                         const task = loadingTasks[currentTask];
                         if (loaderStatus) loaderStatus.textContent = task.status;
                         if (loaderProgress) loaderProgress.style.width = `${task.progress}%`;
-                        if (task.action) task.action();
+                        if (task.action) await task.action();
                         
                         setTimeout(() => {
                             currentTask++;
@@ -321,11 +343,29 @@
                 runLoadingTask();
             }, []);
 
+            const prevFilterDeps = useRef();
             useEffect(() => {
-                if (supabaseClient) {
-                    loadData(true);
+                const currentFilterDeps = JSON.stringify({
+                    columnFilters, fechaDesde, fechaHasta, isTransferMode, sortConfig, recordsPerPage
+                });
+
+                let filtersHaveChanged = false;
+                if (prevFilterDeps.current !== undefined) {
+                    filtersHaveChanged = prevFilterDeps.current !== currentFilterDeps;
                 }
-            }, [supabaseClient, currentPage, recordsPerPage, sortConfig, columnFilters, fechaDesde, fechaHasta, isTransferMode]);
+                prevFilterDeps.current = currentFilterDeps;
+
+                if (filtersHaveChanged) {
+                    if (currentPage !== 1) {
+                        setCurrentPage(1);
+                        return; 
+                    }
+                }
+
+                if (supabaseClient && fechaDesde && fechaHasta) {
+                    loadData(currentPage === 1);
+                }
+            }, [currentPage, columnFilters, fechaDesde, fechaHasta, isTransferMode, sortConfig, recordsPerPage, supabaseClient]);
 
             useEffect(() => {
                 if (!supabaseClient) return;
@@ -347,6 +387,8 @@
                         if (remoteTimestamp > localTimestamp) {
                             setNewDataAvailable(true);
                         }
+                    } else if (maxDateData && !latestKnownUpdate) {
+                        setNewDataAvailable(true);
                     }
                 }, 60000);
 
@@ -365,22 +407,19 @@
             // Debounce for column filters
             useEffect(() => {
                 const handler = setTimeout(() => {
-                    // Only update if the filters have actually changed
                     if (JSON.stringify(internalColumnFilters) !== JSON.stringify(columnFilters)) {
                         setColumnFilters(internalColumnFilters);
-                        setCurrentPage(1);
                     }
-                }, 300); // 300ms delay
-
-                return () => {
-                    clearTimeout(handler);
-                };
-            }, [internalColumnFilters]);
+                }, 300);
+                return () => { clearTimeout(handler); };
+            }, [internalColumnFilters, columnFilters]);
 
             // Sync internal filters if external filters change (e.g., on clear)
             useEffect(() => {
                 setInternalColumnFilters(columnFilters);
             }, [columnFilters]);
+
+
 
             const handleColumnFilterChange = (columnId, value) => {
                 setInternalColumnFilters(prev => ({ ...prev, [columnId]: value }));
@@ -602,34 +641,8 @@
                         const rangeTo = rangeFrom + BATCH_SIZE - 1;
 
                         let query = supabaseClient.from('vista_detallelotes_completa').select('*');
-
-                        const keyMap = {
-                            numeroDePallet: 'nropallet',
-                            lotesProduccion: 'lotesproduccion',
-                            fechaProduccion: 'fechaproduccion',
-                            unidadMedida: 'unidadmedida',
-                            isStored: 'is_transferred'
-                        };
-
-                        Object.keys(columnFilters).forEach(key => {
-                            const filterValue = columnFilters[key] ? columnFilters[key].trim() : '';
-                            if (filterValue) {
-                                const dbKey = keyMap[key] || key;
-                                if (key === 'despachado') {
-                                    if ('sí'.startsWith(filterValue.toLowerCase())) query = query.eq('despachado', true);
-                                    else if ('no'.startsWith(filterValue.toLowerCase())) query = query.eq('despachado', false);
-                                } else {
-                                    query = query.ilike(dbKey, `%${filterValue}%`);
-                                }
-                            }
-                        });
-
-                        if (fechaDesde && !isTransferMode) query = query.gte('fechaproduccion', fechaDesde);
-                        if (fechaHasta && !isTransferMode) query = query.lte('fechaproduccion', fechaHasta);
-                        if (isTransferMode) query = query.eq('is_transferred', false);
                         
-                        const sortKey = keyMap[sortConfig.key] || sortConfig.key;
-                        query = query.order(sortKey, { ascending: sortConfig.direction === 'ascending' });
+                        query = applyFiltersToQuery(query);
 
                         query = query.range(rangeFrom, rangeTo);
 
@@ -1009,16 +1022,7 @@
                                     </>
                                 )}
                                 <button onClick={clearFilters} className="bg-white text-gray-700 border border-gray-300 font-semibold py-2 px-4 rounded-lg shadow-sm hover:bg-gray-50 flex items-center"><i className="fas fa-times-circle mr-2"></i>Limpiar Filtros</button>
-                                <div className="flex items-center space-x-2 pl-4">
-                                    <input
-                                        type="checkbox"
-                                        id="autoRefresh"
-                                        checked={autoRefreshEnabled}
-                                        onChange={e => setAutoRefreshEnabled(e.target.checked)}
-                                        className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-                                    />
-                                    <label htmlFor="autoRefresh" className="text-sm font-medium text-gray-700">Refrescar automáticamente</label>
-                                </div>
+
                             </div>
 
                             <div className="flex items-center space-x-4">
