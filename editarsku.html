@@ -8,6 +8,8 @@
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="config.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <style>
         body {
@@ -42,14 +44,9 @@
         const { createRoot } = ReactDOM;
 
         // =================================================================
-        // ### CONFIGURACIÓN Y SISTEMA DE BLOQUEO ###
+        // ### CONFIGURACIÓN DE SUPABASE ###
         // =================================================================
-        const USUARIO_GITHUB = 'gagegfg';
-        const REPO_NOMBRE = 'Molderil_ListaEmpaque';
-        const RUTA_ARTICULOS_CSV = 'articulos.csv';
-        const LOCK_FILE_PATH = 'lock.json';
-        const LOCK_TIMEOUT = 45 * 1000; // 45 segundos
-        const SESSION_ID = Date.now().toString(36) + Math.random().toString(36).substr(2);
+        const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
         // =================================================================
 
         // Hook personalizado para manejar el estado con localStorage
@@ -77,51 +74,29 @@
         };
 
         const App = () => {
-            const [isAuthenticated, setIsAuthenticated] = useState(false);
-            const [password, setPassword] = useState('');
-            const [error, setError] = useState('');
             const [isLoading, setIsLoading] = useState(true);
             const [isAppReady, setIsAppReady] = useState(false);
-            const [apiToken, setApiToken] = useState(null);
-            
             const [allData, setAllData] = useState([]);
             const [filteredData, setFilteredData] = useState([]);
-            const [hasChanges, setHasChanges] = useState(false);
 
             const [columnFilters, setColumnFilters] = useLocalStorage('editarsku_columnFilters', {
-                tipo: '',
+                tiposku: '',
                 sku: '',
-                descLarga: ''
+                descriciolarga: ''
             });
 
             const [isModalOpen, setIsModalOpen] = useState(false);
             const [editingArticle, setEditingArticle] = useState(null);
 
-            const passwordInputRef = useRef(null);
-
-            // --- Carga inicial y autenticación ---
+            // --- Carga inicial ---
             useEffect(() => {
                 const staticLoader = document.getElementById('static-loader');
                 const loaderStatus = document.getElementById('loader-status');
                 const loaderProgress = document.getElementById('loader-progress');
 
-                const fetchToken = async () => {
-                    try {
-                        const response = await fetch('cls.txt');
-                        if (!response.ok) {
-                            console.warn('Advertencia: No se pudo cargar el archivo de clave (cls.txt).');
-                            return;
-                        }
-                        let rawToken = await response.text();
-                        rawToken = rawToken.replace(/aaaa/g, '').replace(/bbbb/g, '').replace(/cccc/g, '');
-                        setApiToken(rawToken.trim());
-                    } catch (error) {
-                        console.error("Error al obtener el token:", error);
-                    }
-                };
-
                 const loadingTasks = [
-                    { status: "Inicializando...", duration: 500, progress: 50, action: fetchToken },
+                    { status: "Inicializando...", duration: 500, progress: 50 },
+                    { status: "Cargando artículos...", duration: 1000, progress: 90, action: fetchData },
                     { status: "¡Listo!", duration: 500, progress: 100 }
                 ];
 
@@ -142,7 +117,6 @@
                             setTimeout(() => {
                                 staticLoader.remove();
                                 setIsAppReady(true);
-                                setTimeout(() => passwordInputRef.current?.focus(), 100);
                             }, 500);
                         }
                     }
@@ -154,17 +128,23 @@
             const fetchData = async () => {
                 setIsLoading(true);
                 try {
-                    const url = `https://raw.githubusercontent.com/${USUARIO_GITHUB}/${REPO_NOMBRE}/main/${RUTA_ARTICULOS_CSV}?timestamp=${new Date().getTime()}`;
-                    const response = await fetch(url);
-                    if (!response.ok) throw new Error('No se pudo cargar el archivo de artículos.');
-                    const text = await response.text();
-                    const rows = text.split('\n').filter(Boolean);
-                    const parsedData = rows.map((row, index) => {
-                        const [tipo, sku, descLarga, descCorta] = row.split(';');
-                        return { id: sku || `temp-${index}`, tipo, sku, descLarga, descCorta: descCorta || '' };
-                    });
+                    const { data, error } = await supabaseClient
+                        .from('articulos')
+                        .select('idsku, tiposku, sku, descriciolarga, descripcioncorta, rne, rnpa');
+
+                    if (error) throw error;
+
+                    const parsedData = data.map(item => ({
+                        id: item.idsku,
+                        tiposku: item.tiposku,
+                        sku: item.sku,
+                        descriciolarga: item.descriciolarga,
+                        descripcioncorta: item.descripcioncorta || '',
+                        rne: item.rne,
+                        rnpa: item.rnpa
+                    }));
+
                     setAllData(parsedData);
-                    setHasChanges(false);
                 } catch (e) {
                     alert(`Error al cargar artículos: ${e.message}`);
                 } finally {
@@ -173,10 +153,8 @@
             };
 
             useEffect(() => {
-                if (isAuthenticated) {
-                    fetchData();
-                }
-            }, [isAuthenticated]);
+                fetchData();
+            }, []);
 
             useEffect(() => {
                 let data = [...allData];
@@ -192,166 +170,66 @@
             }, [columnFilters, allData]);
             
             // --- Manejo de cambios y guardado ---
-            const handleDescriptionChange = (sku, newDescription) => {
-                setAllData(prevData => prevData.map(item => 
-                    item.sku === sku ? { ...item, descCorta: newDescription } : item
-                ));
-                setHasChanges(true);
-            };
-
-            const handleSaveArticle = (article) => {
-                if (editingArticle && editingArticle.id) { // Editando
-                    setAllData(prev => prev.map(item => item.id === article.id ? article : item));
-                } else { // Agregando
-                    const newArticle = { ...article, id: article.sku };
-                    setAllData(prev => [...prev, newArticle]);
-                }
-                setHasChanges(true);
-                setIsModalOpen(false);
-                setEditingArticle(null);
-            };
-
-            // --- FUNCIONES DEL SISTEMA DE BLOQUEO ---
-            const acquireLock = async (operationName) => {
-                const url = `https://api.github.com/repos/${USUARIO_GITHUB}/${REPO_NOMBRE}/contents/${LOCK_FILE_PATH}`;
-                let currentSha = null;
+            const handleDescriptionChange = async (sku, newDescription) => {
                 try {
-                    const response = await fetch(`${url}?t=${new Date().getTime()}`, {
-                        headers: { 'Authorization': `token ${apiToken}` }, cache: 'no-store'
-                    });
+                    const { data, error } = await supabaseClient
+                        .from('articulos')
+                        .update({ descripcioncorta: newDescription })
+                        .eq('sku', sku);
 
-                    if (response.ok) {
-                        const fileData = await response.json();
-                        currentSha = fileData.sha;
-                        const content = atob(fileData.content);
+                    if (error) throw error;
 
-                        if (content && content.trim()) {
-                            const lock = JSON.parse(content);
-                            const isLockedByOther = lock.sessionId && lock.sessionId !== SESSION_ID;
-                            const isExpired = Date.now() - lock.timestamp > LOCK_TIMEOUT;
-
-                            if (isLockedByOther && !isExpired) {
-                                return { success: false, error: `Sistema bloqueado por otra sesión. Operación en curso: ${lock.operation || 'N/A'}` };
-                            }
-                        }
-                    } else if (response.status !== 404) {
-                        throw new Error(`Error al leer el archivo de bloqueo: ${response.statusText}`);
-                    }
-
-                    const lockContent = { sessionId: SESSION_ID, timestamp: Date.now(), operation: operationName };
-                    const updateResponse = await fetch(url, {
-                        method: 'PUT',
-                        headers: { 'Authorization': `token ${apiToken}`, 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            message: `Locking for operation: ${operationName}`,
-                            content: btoa(JSON.stringify(lockContent)),
-                            sha: currentSha,
-                        }),
-                    });
-
-                    if (!updateResponse.ok) throw new Error(`No se pudo adquirir el bloqueo: ${updateResponse.statusText}`);
-                    
-                    return { success: true };
-
-                } catch (error) {
-                    if (error instanceof SyntaxError) {
-                        console.warn("lock.json contenía JSON inválido, se procederá a sobreescribir.");
-                        return { success: true };
-                    }
-                    console.error("Error en acquireLock:", error);
-                    return { success: false, error: error.message };
-                }
-            };
-
-            const releaseLock = async () => {
-                const url = `https://api.github.com/repos/${USUARIO_GITHUB}/${REPO_NOMBRE}/contents/${LOCK_FILE_PATH}`;
-                try {
-                    const response = await fetch(`${url}?t=${new Date().getTime()}`, {
-                        headers: { 'Authorization': `token ${apiToken}` }, cache: 'no-store'
-                    });
-            
-                    if (response.ok) {
-                        const fileData = await response.json();
-                        const content = atob(fileData.content);
-                        if (content) {
-                            const lock = JSON.parse(content);
-                            if (lock.sessionId && lock.sessionId !== SESSION_ID) {
-                                console.warn("Intento de liberar un bloqueo que no pertenece a esta sesión. Se omite.");
-                                return;
-                            }
-                        }
-
-                        const updateResponse = await fetch(url, {
-                            method: 'PUT',
-                            headers: { 'Authorization': `token ${apiToken}`, 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                                message: 'Releasing lock',
-                                content: btoa(''),
-                                sha: fileData.sha,
-                            }),
-                        });
-                        if (!updateResponse.ok) console.error("Error al liberar el bloqueo, puede expirar automáticamente.");
-                    }
-                } catch (error) {
-                    console.error("Error en releaseLock:", error);
-                }
-            };
-
-            const saveToGitHub = async () => {
-                if (!apiToken) {
-                    alert("Error: El token de API no está disponible. No se puede guardar.");
-                    return;
-                }
-                if (!hasChanges) {
-                    alert("No hay cambios para guardar.");
-                    return;
-                }
-                if (!confirm("¿Estás seguro de que quieres guardar todos los cambios en GitHub? Esta acción sobrescribirá el archivo de artículos.")) {
-                    return;
-                }
-
-                const lock = await acquireLock('updateArticles');
-                if (!lock.success) {
-                    alert(`No se pudo guardar. ${lock.error}. Intente de nuevo.`);
-                    return;
-                }
-                
-                setIsLoading(true);
-                try {
-                    const csvContent = allData.map(item => `${item.tipo};${item.sku};${item.descLarga};${item.descCorta || ''}`).join('\n');
-                    const url = `https://api.github.com/repos/${USUARIO_GITHUB}/${REPO_NOMBRE}/contents/${RUTA_ARTICULOS_CSV}`;
-                    
-                    const fileResponse = await fetch(url, { headers: { 'Authorization': `token ${apiToken}` }, cache: 'no-store' });
-                    if (!fileResponse.ok) throw new Error(`Error ${fileResponse.status}: No se pudo obtener info del archivo.`);
-                    const fileData = await fileResponse.json();
-
-                    const updateResponse = await fetch(url, {
-                        method: 'PUT',
-                        headers: { 'Authorization': `token ${apiToken}`, 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            message: 'Actualización de maestro de artículos',
-                            content: btoa(unescape(encodeURIComponent(csvContent))),
-                            sha: fileData.sha,
-                        }),
-                    });
-
-                    if (!updateResponse.ok) throw new Error(`Error ${updateResponse.status}: Falló la actualización.`);
-                    alert("¡Archivo de artículos guardado correctamente en GitHub!");
-                    setHasChanges(false);
+                    setAllData(prevData => prevData.map(item => 
+                        item.sku === sku ? { ...item, descripcioncorta: newDescription } : item
+                    ));
                 } catch (e) {
-                    alert(`ERROR al guardar en GitHub: ${e.message}`);
-                } finally {
-                    await releaseLock();
-                    setIsLoading(false);
+                    alert(`Error al guardar la descripción: ${e.message}`);
+                }
+            };
+
+            const handleSaveArticle = async (article) => {
+                try {
+                    if (editingArticle && editingArticle.id) { // Editando
+                        const { data, error } = await supabaseClient
+                            .from('articulos')
+                            .update({
+                                tiposku: article.tiposku,
+                                descriciolarga: article.descriciolarga,
+                                descripcioncorta: article.descripcioncorta,
+                                rne: article.rne,
+                                rnpa: article.rnpa
+                            })
+                            .eq('idsku', article.id);
+
+                        if (error) throw error;
+                        
+                        setAllData(prev => prev.map(item => item.id === article.id ? article : item));
+
+                    } else { // Agregando
+                        const { data, error } = await supabaseClient
+                            .from('articulos')
+                            .insert([{
+                                sku: article.sku,
+                                tiposku: article.tiposku,
+                                descriciolarga: article.descriciolarga,
+                                descripcioncorta: article.descripcioncorta,
+                                rne: article.rne,
+                                rnpa: article.rnpa
+                            }])
+                            .select();
+
+                        if (error) throw error;
+
+                        fetchData(); // Refetch to get the new ID
+                    }
+                    setIsModalOpen(false);
+                    setEditingArticle(null);
+                } catch (e) {
+                    alert(`Error al guardar el artículo: ${e.message}`);
                 }
             };
             
             const handleRefresh = () => {
-                if (hasChanges) {
-                    if (!confirm("Tienes cambios sin guardar. ¿Estás seguro de que quieres refrescar y perder los cambios?")) {
-                        return;
-                    }
-                }
                 fetchData();
             };
 
@@ -360,71 +238,11 @@
             };
 
             const clearFilters = () => {
-                setColumnFilters({ tipo: '', sku: '', descLarga: '' });
+                setColumnFilters({ tiposku: '', sku: '', descriciolarga: '' });
             };
-
-            // --- Autenticación ---
-            const handleLogin = async () => {
-                try {
-                    const response = await fetch('pswsku.txt');
-                    if (!response.ok) throw new Error('No se encontró el archivo de contraseña.');
-                    const correctPassword = await response.text();
-                    if (password.trim() === correctPassword.trim()) {
-                        setIsAuthenticated(true);
-                    } else {
-                        setError("Contraseña incorrecta.");
-                    }
-                } catch (e) {
-                    setError(`Error: ${e.message}`);
-                }
-            };
-            
-            // --- Aviso de cambios sin guardar ---
-            useEffect(() => {
-                const handleBeforeUnload = (e) => {
-                    if (hasChanges) {
-                        e.preventDefault();
-                        e.returnValue = '';
-                    }
-                };
-                window.addEventListener('beforeunload', handleBeforeUnload);
-                return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-            }, [hasChanges]);
-
 
             // --- Renderizado ---
             if (!isAppReady) return null;
-
-            if (!isAuthenticated) {
-                return (
-                    <div className="min-h-screen flex items-center justify-center bg-black bg-opacity-50 p-4">
-                        <div className="relative bg-[#D2B48C]/20 backdrop-blur-lg border border-[#D2B48C]/30 p-8 rounded-xl shadow-2xl w-full max-w-sm text-center">
-                            <img src="logo.jpg" alt="Logo Molderil" className="mx-auto mb-6 h-32 [filter:drop-shadow(2px_2px_4px_rgba(0,0,0,0.4))_drop_shadow(-2px_-2px_4px_rgba(255,255,255,0.6))]"/>
-                            <h2 className="text-3xl font-bold text-white mb-6 [text-shadow:_1px_1px_4px_rgba(0,0,0,0.7)]">Acceso Restringido</h2>
-                            <div className="space-y-4 text-left">
-                                <div>
-                                    <label className="block text-xl font-medium text-white [text-shadow:_1px_1px_2px_rgba(0,0,0,0.5)]">Contraseña</label>
-                                    <input 
-                                        type="password"
-                                        ref={passwordInputRef}
-                                        value={password}
-                                        onChange={e => setPassword(e.target.value)}
-                                        onKeyDown={e => { if (e.key === 'Enter') handleLogin(); }}
-                                        className="mt-1 block w-full rounded-md bg-white/10 border-white/30 text-white placeholder-white/50 shadow-sm p-2 border text-2xl focus:ring-amber-400 focus:border-amber-400"
-                                    />
-                                </div>
-                                {error && <p className="text-red-400 text-sm mt-1 [text-shadow:_1px_1px_2px_rgba(0,0,0,0.7)]">{error}</p>}
-                                <button onClick={handleLogin} className="w-full bg-blue-600 text-white font-semibold py-3 px-4 rounded-md shadow-md hover:bg-blue-700 text-xl transition-transform transform hover:scale-105">
-                                    Ingresar
-                                </button>
-                                <a href="index.html" className="w-full block text-center bg-gray-600 text-white font-semibold py-3 px-4 rounded-md shadow-md hover:bg-gray-700 text-xl transition-transform transform hover:scale-105">
-                                    Volver al Menú
-                                </a>
-                            </div>
-                        </div>
-                    </div>
-                );
-            }
 
             return (
                 <div className="min-h-screen p-4 sm:p-6 bg-black bg-opacity-50">
@@ -451,10 +269,6 @@
                                     <button onClick={() => { setEditingArticle(null); setIsModalOpen(true); }} className="bg-green-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-green-700 flex items-center">
                                         <i className="fas fa-plus mr-2"></i>Añadir
                                     </button>
-                                    <button onClick={saveToGitHub} disabled={isLoading} className={`font-semibold py-2 px-4 rounded-lg shadow-md flex items-center ${hasChanges ? 'bg-orange-500 hover:bg-orange-600 text-white' : 'bg-gray-600 text-white'} disabled:opacity-50 disabled:cursor-wait`}>
-                                        {isLoading && hasChanges ? <i className="fas fa-spinner animate-spin mr-2"></i> : <i className="fab fa-github mr-2"></i>}
-                                        {isLoading && hasChanges ? 'Guardando...' : 'Guardar'}
-                                    </button>
                                 </div>
                             </div>
                         </div>
@@ -470,9 +284,9 @@
                                         <th className="px-4 py-3 text-center text-xs font-medium uppercase tracking-wider">Acción</th>
                                     </tr>
                                     <tr className="bg-gray-200">
-                                        <th className="p-1"><input type="text" placeholder="Filtrar..." value={columnFilters.tipo} onChange={e => handleColumnFilterChange('tipo', e.target.value)} className="w-full p-1 text-sm text-gray-700 border rounded"/></th>
+                                        <th className="p-1"><input type="text" placeholder="Filtrar..." value={columnFilters.tiposku} onChange={e => handleColumnFilterChange('tiposku', e.target.value)} className="w-full p-1 text-sm text-gray-700 border rounded"/></th>
                                         <th className="p-1"><input type="text" placeholder="Filtrar..." value={columnFilters.sku} onChange={e => handleColumnFilterChange('sku', e.target.value)} className="w-full p-1 text-sm text-gray-700 border rounded"/></th>
-                                        <th className="p-1"><input type="text" placeholder="Filtrar..." value={columnFilters.descLarga} onChange={e => handleColumnFilterChange('descLarga', e.target.value)} className="w-full p-1 text-sm text-gray-700 border rounded"/></th>
+                                        <th className="p-1"><input type="text" placeholder="Filtrar..." value={columnFilters.descriciolarga} onChange={e => handleColumnFilterChange('descriciolarga', e.target.value)} className="w-full p-1 text-sm text-gray-700 border rounded"/></th>
                                         <th className="p-1"></th>
                                         <th className="p-1"></th>
                                     </tr>
@@ -499,29 +313,28 @@
             );
         };
         
-        // --- NUEVO: Componente de Fila para solucionar problema de cursor ---
         const ArticleRow = ({ item, isEven, onDescriptionChange, onEditClick }) => {
-            const [descCorta, setDescCorta] = useState(item.descCorta || '');
+            const [descCorta, setDescCorta] = useState(item.descripcioncorta || '');
 
             useEffect(() => {
-                setDescCorta(item.descCorta || '');
-            }, [item.descCorta]);
+                setDescCorta(item.descripcioncorta || '');
+            }, [item.descripcioncorta]);
 
             const handleLocalChange = (e) => {
                 setDescCorta(e.target.value);
             };
 
             const handleBlur = () => {
-                if (descCorta !== item.descCorta) {
+                if (descCorta !== item.descripcioncorta) {
                     onDescriptionChange(item.sku, descCorta);
                 }
             };
             
             return (
                 <tr className={isEven ? 'bg-white' : 'bg-gray-50'}>
-                    <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-600">{item.tipo}</td>
+                    <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-600">{item.tiposku}</td>
                     <td className="px-4 py-2 whitespace-nowrap text-sm font-medium text-gray-900">{item.sku}</td>
-                    <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-600">{item.descLarga}</td>
+                    <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-600">{item.descriciolarga}</td>
                     <td className="px-4 py-2 text-sm text-gray-600">
                         <input 
                             type="text"
@@ -541,7 +354,13 @@
         };
 
         const ArticleModal = ({ article, onSave, onClose }) => {
-            const [formData, setFormData] = useState(article || { tipo: '', sku: '', descLarga: '', descCorta: '' });
+            const [formData, setFormData] = useState(article || { tiposku: '', sku: '', descriciolarga: '', descripcioncorta: '', rne: '', rnpa: '' });
+
+            useEffect(() => {
+                if (article) {
+                    setFormData(article);
+                }
+            }, [article]);
 
             const handleChange = (e) => {
                 const { name, value } = e.target;
@@ -560,7 +379,7 @@
                         <form onSubmit={handleSubmit} className="space-y-4">
                             <div>
                                 <label className="block text-sm font-medium text-gray-700">Tipo de Artículo</label>
-                                <input type="text" name="tipo" value={formData.tipo} onChange={handleChange} className="mt-1 block w-full p-2 border border-gray-300 rounded-md" required />
+                                <input type="text" name="tiposku" value={formData.tiposku} onChange={handleChange} className="mt-1 block w-full p-2 border border-gray-300 rounded-md" required />
                             </div>
                             <div>
                                 <label className="block text-sm font-medium text-gray-700">SKU</label>
@@ -568,11 +387,19 @@
                             </div>
                             <div>
                                 <label className="block text-sm font-medium text-gray-700">Descripción Larga</label>
-                                <input type="text" name="descLarga" value={formData.descLarga} onChange={handleChange} className="mt-1 block w-full p-2 border border-gray-300 rounded-md" required />
+                                <input type="text" name="descriciolarga" value={formData.descriciolarga} onChange={handleChange} className="mt-1 block w-full p-2 border border-gray-300 rounded-md" required />
                             </div>
                             <div>
                                 <label className="block text-sm font-medium text-gray-700">Descripción Corta</label>
-                                <input type="text" name="descCorta" value={formData.descCorta} onChange={handleChange} className="mt-1 block w-full p-2 border border-gray-300 rounded-md" />
+                                <input type="text" name="descripcioncorta" value={formData.descripcioncorta} onChange={handleChange} className="mt-1 block w-full p-2 border border-gray-300 rounded-md" />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700">RNE</label>
+                                <input type="text" name="rne" value={formData.rne || ''} onChange={handleChange} className="mt-1 block w-full p-2 border border-gray-300 rounded-md" />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700">RNPA</label>
+                                <input type="text" name="rnpa" value={formData.rnpa || ''} onChange={handleChange} className="mt-1 block w-full p-2 border border-gray-300 rounded-md" />
                             </div>
                             <div className="flex justify-end space-x-4 pt-4">
                                 <button type="button" onClick={onClose} className="bg-gray-200 text-gray-800 font-semibold py-2 px-4 rounded-lg hover:bg-gray-300">Cancelar</button>
