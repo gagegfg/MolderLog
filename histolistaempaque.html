@@ -188,7 +188,7 @@
                     }
                 });
 
-                const dateColumn = headers.find(h => h.toLowerCase() === 'fecha creacion lista');
+                const dateColumn = headers.find(h => h === 'Fecha Creacion lista');
                 if (dateColumn && (fechaDesde || fechaHasta)) {
                     const desde = fechaDesde ? new Date(fechaDesde) : null;
                     const hasta = fechaHasta ? new Date(fechaHasta) : null;
@@ -198,8 +198,12 @@
                     data = data.filter(item => {
                         const dateValue = item[dateColumn];
                         if (!dateValue) return false;
-                        // Supabase returns ISO 8601 format (YYYY-MM-DDTHH:mm:ss.sssZ)
-                        const itemDate = new Date(dateValue);
+                        
+                        const parts = dateValue.split('/');
+                        if (parts.length !== 3) return false;
+                        const [day, month, year] = parts;
+                        const itemDate = new Date(`${year}-${month}-${day}`);
+                        
                         return (!desde || itemDate >= desde) && (!hasta || itemDate <= hasta);
                     });
                 }
