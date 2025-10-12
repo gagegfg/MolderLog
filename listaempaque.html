@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>MOLDERIL - Escáner de Inventario (Despacho)</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="config.js"></script>
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -45,19 +47,15 @@
     const { createRoot } = ReactDOM;
 
     // =================================================================
-    // ### CONFIGURACIÓN: DATOS DEL REPOSITORIO DE GITHUB ###
+    // ### CONFIGURACIÓN DE SUPABASE - CARGADA DESDE config.js ###
     // =================================================================
-    const USUARIO_GITHUB = 'gagegfg';
-    const REPO_NOMBRE = 'Molderil_ListaEmpaque';
-    const RUTA_HISTORICO_CSV = 'detallelotes.csv';
-    const RUTA_LISTAEMPAQUE_CSV = 'listaempaque.csv';
-    const RUTA_CLS_TXT = 'cls.txt';
-    
-    // --- CONFIGURACIÓN DEL SISTEMA DE BLOQUEO ---
-    const LOCK_FILE_PATH = 'lock.json';
-    const LOCK_TIMEOUT = 45 * 1000; // 45 segundos
-    const SESSION_ID = Date.now().toString(36) + Math.random().toString(36).substr(2);
+    // Las variables SUPABASE_URL y SUPABASE_KEY se cargan desde config.js,
+    // un archivo que se genera en el build de Vercel o se crea
+    // manualmente para el desarrollo local.
     // =================================================================
+
+    // Inicializa el cliente de Supabase.
+    const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 
     // --- QR SCANNER COMPONENT ---
@@ -210,22 +208,7 @@
       const suggestionsRef = useRef(null);
 
 
-      async function getApiToken() {
-        try {
-            const url = `https://raw.githubusercontent.com/${USUARIO_GITHUB}/${REPO_NOMBRE}/main/${RUTA_CLS_TXT}`;
-            const response = await fetch(url, { cache: "no-store" });
-            if (!response.ok) {
-                console.warn(`Advertencia: No se pudo cargar ${RUTA_CLS_TXT}. La función de guardado estará deshabilitada.`);
-                return null;
-            }
-            let rawToken = await response.text();
-            rawToken = rawToken.replace(/aaaa/g, '').replace(/bbbb/g, '').replace(/cccc/g, '');
-            return rawToken.trim();
-        } catch (error) {
-            console.error("Error al obtener el token de GitHub:", error);
-            return null;
-        }
-      }
+
 
       useEffect(() => {
         const staticLoader = document.getElementById('static-loader');
@@ -239,54 +222,56 @@
         const loadingTasks = [
             { status: "Inicializando aplicación...", duration: 200, progress: 10, action: () => Promise.resolve() },
             { status: "Cargando librerías...", duration: 400, progress: 20, action: () => { setIsPdfLibLoaded(!!window.jspdf); return Promise.resolve(); } },
-            { status: "Verificando acceso a GitHub...", duration: 500, progress: 35, action: async () => {
-                const token = await getApiToken();
-                setApiToken(token);
-              }
-            },
+
             { status: "Cargando lista de clientes...", duration: 500, progress: 50, action: async () => {
                 try {
-                  const response = await fetch('clientes.txt');
-                   if (!response.ok) throw new Error(`No se pudo cargar clientes.txt (Estado: ${response.status})`);
-                  const text = await response.text();
-                  const clients = text.split('\n').map(client => client.trim().toUpperCase()).filter(Boolean);
+                  const { data, error } = await supabaseClient
+                    .from('clientes')
+                    .select('razonsocial');
+
+                  if (error) throw new Error(`No se pudo cargar la lista de clientes (Supabase)`);
+
+                  const clients = data.map(item => item.razonsocial.trim().toUpperCase()).filter(Boolean);
                   setClientList(clients);
                 } catch (error) {
                   console.error("Fallo al cargar la lista de clientes:", error);
-                  setModalContent({ title: 'Error', message: 'No se pudo cargar la lista de clientes (clientes.txt).' });
+                  setModalContent({ title: 'Error', message: error.message });
                   setShowInfoModal(true);
                 }
               }
             },
             { status: "Cargando lista de artículos...", duration: 500, progress: 65, action: async () => {
                 try {
-                  const response = await fetch('articulos.csv');
-                   if (!response.ok) throw new Error(`No se pudo cargar articulos.csv (Estado: ${response.status})`);
-                  const text = await response.text();
-                  const skus = text.split('\n').map(line => {
-                      const columns = line.split(';');
-                      return columns.length > 1 ? columns[1].trim() : null;
-                  }).filter(Boolean);
+                  const { data, error } = await supabaseClient
+                    .from('articulos')
+                    .select('sku');
+
+                  if (error) throw new Error(`No se pudo cargar la lista de articulos (Supabase)`);
+
+                  const skus = data.map(item => item.sku.trim()).filter(Boolean);
                   setSkuList(skus);
                 } catch (error) {
                   console.error("Fallo al cargar la lista de SKUs:", error);
-                  setModalContent({ title: 'Error', message: 'No se pudo cargar la lista de artículos (articulos.csv).' });
+                  setModalContent({ title: 'Error', message: error.message });
                   setShowInfoModal(true);
                 }
               }
             },
             { status: "Cargando notas de pallets...", duration: 500, progress: 85, action: async () => {
                 try {
-                  const response = await fetch('notasskulote.csv');
-                   if (!response.ok) {
-                       console.warn("No se encontró el archivo notasskulote.csv. La funcionalidad de notas estará deshabilitada.");
-                       return;
-                   }
-                  const text = await response.text();
-                  const notes = text.split('\n').map(line => {
-                      const [sku, nroPallet, nota] = line.split(';');
-                      return sku && nroPallet && nota ? { sku: sku.trim(), nroPallet: nroPallet.trim(), nota: nota.trim() } : null;
-                  }).filter(Boolean);
+                  const { data, error } = await supabaseClient
+                    .from('notasskulote')
+                    .select('nropallet, nota');
+
+                  if (error) {
+                    console.warn("No se pudo cargar la tabla de notas desde Supabase.");
+                    return;
+                  }
+
+                  const notes = data.map(item => ({ 
+                    nroPallet: String(item.nropallet).trim(), 
+                    nota: item.nota.trim() 
+                  })).filter(Boolean);
                   setNotesList(notes);
                 } catch (error) {
                   console.error("Fallo al cargar el archivo de notas:", error);
@@ -349,227 +334,66 @@
         }
       }, [highlightedIndex]);
 
-        // --- FUNCIONES DEL SISTEMA DE BLOQUEO ---
-        const acquireLock = async (operationName) => {
-            const url = `https://api.github.com/repos/${USUARIO_GITHUB}/${REPO_NOMBRE}/contents/${LOCK_FILE_PATH}`;
-            let currentSha = null;
-            try {
-                const response = await fetch(`${url}?t=${new Date().getTime()}`, { 
-                    headers: { 'Authorization': `token ${apiToken}` }, cache: 'no-store'
-                });
 
-                if (response.ok) {
-                    const fileData = await response.json();
-                    currentSha = fileData.sha;
-                    const content = atob(fileData.content);
 
-                    if (content && content.trim()) {
-                        const lock = JSON.parse(content);
-                        const isLockedByOther = lock.sessionId && lock.sessionId !== SESSION_ID;
-                        const isExpired = Date.now() - lock.timestamp > LOCK_TIMEOUT;
-
-                        if (isLockedByOther && !isExpired) {
-                            return { success: false, error: `Sistema bloqueado por otra sesión. Operación en curso: ${lock.operation || 'N/A'}` };
-                        }
-                    }
-                } else if (response.status !== 404) {
-                    throw new Error(`Error al leer el archivo de bloqueo: ${response.statusText}`);
-                }
-
-                const lockContent = { sessionId: SESSION_ID, timestamp: Date.now(), operation: operationName };
-                const updateResponse = await fetch(url, {
-                    method: 'PUT',
-                    headers: { 'Authorization': `token ${apiToken}`, 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        message: `Locking for operation: ${operationName}`,
-                        content: btoa(JSON.stringify(lockContent)),
-                        sha: currentSha,
-                    }),
-                });
-
-                if (!updateResponse.ok) throw new Error(`No se pudo adquirir el bloqueo: ${updateResponse.statusText}`);
-                
-                return { success: true };
-
-            } catch (error) {
-                if (error instanceof SyntaxError) {
-                    console.warn("lock.json contenía JSON inválido, se procederá a sobreescribir.");
-                    return { success: true };
-                }
-                console.error("Error en acquireLock:", error);
-                return { success: false, error: error.message };
-            }
-        };
-
-        const releaseLock = async () => {
-            const url = `https://api.github.com/repos/${USUARIO_GITHUB}/${REPO_NOMBRE}/contents/${LOCK_FILE_PATH}`;
-            try {
-                const response = await fetch(`${url}?t=${new Date().getTime()}`, { 
-                    headers: { 'Authorization': `token ${apiToken}` }, cache: 'no-store'
-                });
-        
-                if (response.ok) {
-                    const fileData = await response.json();
-                    const content = atob(fileData.content);
-                    if (content) {
-                        const lock = JSON.parse(content);
-                        if (lock.sessionId && lock.sessionId !== SESSION_ID) {
-                            console.warn("Intento de liberar un bloqueo que no pertenece a esta sesión. Se omite.");
-                            return;
-                        }
-                    }
-
-                    const updateResponse = await fetch(url, {
-                        method: 'PUT',
-                        headers: { 'Authorization': `token ${apiToken}`, 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            message: 'Releasing lock',
-                            content: btoa(''),
-                            sha: fileData.sha,
-                        }),
-                    });
-                    if (!updateResponse.ok) console.error("Error al liberar el bloqueo, puede expirar automáticamente.");
-                }
-            } catch (error) {
-                console.error("Error en releaseLock:", error);
-            }
-        };
-
-      // --- LÓGICA DE GUARDADO ATÓMICO EN GITHUB ---
       const ejecutarProcesoDeGuardado = async (itemsScaneados, cliente, legajo) => {
-        if (!apiToken) throw new Error("No hay token de API para conectar con GitHub.");
         if (itemsScaneados.length === 0) {
             console.log("No hay items para actualizar.");
             return true;
         }
 
-        const lock = await acquireLock('guardadoListaEmpaque');
-        if (!lock.success) {
-            throw new Error(`No se pudo registrar. ${lock.error}. Intente de nuevo.`);
-        }
-
         setIsGenerating(true);
         
         try {
-            // TAREA 1: Actualizar detallelotes.csv
-            const urlDetalle = `https://api.github.com/repos/${USUARIO_GITHUB}/${REPO_NOMBRE}/contents/${RUTA_HISTORICO_CSV}`;
-            const fileResponseDetalle = await fetch(urlDetalle, { headers: { 'Authorization': `token ${apiToken}` }, cache: 'no-store' });
-            if (!fileResponseDetalle.ok) throw new Error(`Error ${fileResponseDetalle.status}: No se pudo obtener ${RUTA_HISTORICO_CSV}.`);
-            
-            const fileDataDetalle = await fileResponseDetalle.json();
-            let contenidoCsvDetalle = atob(fileDataDetalle.content);
-            let lineasDetalle = contenidoCsvDetalle.split('\n');
-            let cambiosRealizados = 0;
+            // 1. Obtener el ID del cliente
+            const { data: clienteData, error: clienteError } = await supabaseClient
+                .from('clientes')
+                .select('idcli')
+                .eq('razonsocial', cliente)
+                .single();
 
-            itemsScaneados.forEach(item => {
-                const indiceLinea = lineasDetalle.findIndex(linea => {
-                    const columnas = linea.split(';');
-                    return columnas.length > 2 && columnas[0] === item.sku && columnas[2] === item.numeroDePallet;
-                });
-                if (indiceLinea !== -1) {
-                    let columnas = lineasDetalle[indiceLinea].split(';');
-                    while (columnas.length < 9) columnas.push('');
-                    columnas[7] = 'TRUE';
-                    const clientesExistentes = columnas[8] ? columnas[8].trim().split('#').filter(Boolean) : [];
-                    if (!clientesExistentes.includes(cliente.toUpperCase())) {
-                        clientesExistentes.push(cliente.toUpperCase());
-                        columnas[8] = clientesExistentes.join('#');
-                    }
-                    lineasDetalle[indiceLinea] = columnas.join(';');
-                    cambiosRealizados++;
-                }
-            });
+            if (clienteError || !clienteData) throw new Error(`Cliente "${cliente}" no encontrado en la base de datos.`);
 
-            if (cambiosRealizados > 0) {
-                const nuevoContenidoCsvDetalle = lineasDetalle.join('\n');
-                const nuevoContenidoBase64Detalle = btoa(unescape(encodeURIComponent(nuevoContenidoCsvDetalle)));
-                const updateResponseDetalle = await fetch(urlDetalle, {
-                    method: 'PUT',
-                    headers: { 'Authorization': `token ${apiToken}`, 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        message: `Registro de despacho para ${cambiosRealizados} pallet(s) al cliente ${cliente}`,
-                        content: nuevoContenidoBase64Detalle,
-                        sha: fileDataDetalle.sha,
-                    }),
-                });
-                if (!updateResponseDetalle.ok) {
-                  const errorData = await updateResponseDetalle.json();
-                  throw new Error(`Error al actualizar ${RUTA_HISTORICO_CSV}: ${errorData.message}`);
-                }
-            }
+            // 2. Crear la entrada en la tabla `listaempaque`
+            const { data: listaData, error: listaError } = await supabaseClient
+                .from('listaempaque')
+                .insert({
+                    idcliente: clienteData.idcli,
+                    legajo: legajo
+                })
+                .select('idlista')
+                .single();
 
-            // TAREA 2: Actualizar listaempaque.csv
-            const urlLista = `https://api.github.com/repos/${USUARIO_GITHUB}/${REPO_NOMBRE}/contents/${RUTA_LISTAEMPAQUE_CSV}`;
-            let shaLista = null;
-            let contenidoCsvLista = "";
-            let maxId = 0;
-            
-            try {
-                const fileResponseLista = await fetch(urlLista, { headers: { 'Authorization': `token ${apiToken}` }, cache: 'no-store' });
-                if (fileResponseLista.ok) {
-                    const fileDataLista = await fileResponseLista.json();
-                    shaLista = fileDataLista.sha;
-                    contenidoCsvLista = atob(fileDataLista.content);
-                    const lineasLista = contenidoCsvLista.split('\n').filter(Boolean);
-                    if (lineasLista.length > 1) {
-                        maxId = Math.max(...lineasLista.slice(1).map(line => parseInt(line.split(';')[0], 10) || 0));
-                    }
-                } else if (fileResponseLista.status !== 404) {
-                    throw new Error(`Error ${fileResponseLista.status}: No se pudo obtener ${RUTA_LISTAEMPAQUE_CSV}.`);
-                }
-            } catch (error) {
-                console.warn("No se pudo leer listaempaque.csv, se creará uno nuevo.", error);
-            }
+            if (listaError) throw new Error(`Error al crear la lista de empaque: ${listaError.message}`);
+            const idListaNueva = listaData.idlista;
 
-            const newIdLista = maxId + 1;
-            const now = new Date();
-            const fechaCreacion = `${now.getDate().toString().padStart(2, '0')}/${(now.getMonth() + 1).toString().padStart(2, '0')}/${now.getFullYear()}`;
-            
-            let nuevasLineas = itemsScaneados.map(item => {
-                const campos = [
-                    newIdLista, cliente, legajo, item.sku, item.descripcion, item.numeroDePallet,
-                    item.lotesProduccion.join('#'), item.fechaProduccion,
-                    item.cantidad.replace(/\./g, '').replace(',', '.'),
-                    item.unidadMedida, fechaCreacion
-                ];
-                return campos.join(';');
-            });
+            // 3. Preparar y crear las entradas en `detallelistaempaque`
+            const detallesParaInsertar = itemsScaneados.map(item => ({
+                idlista: idListaNueva,
+                nropallet: item.numeroDePallet,
+                lotesproduccion: item.lotesProduccion.join('#'),
+                cantidad: parseSpanishNumber(item.cantidad)
+            }));
 
-            let nuevoContenidoCsvLista;
-            if (contenidoCsvLista.trim() === "") {
-                const cabecera = "idlista;Cliente;Legajo;Sku;descripcion sku;nro de pallet;Lotes de produccion;Fecha de produccion;cantidad;unnidad de medida;Fecha Creacion lista";
-                nuevoContenidoCsvLista = cabecera + '\n' + nuevasLineas.join('\n');
-            } else {
-                nuevoContenidoCsvLista = contenidoCsvLista.trim() + '\n' + nuevasLineas.join('\n');
-            }
+            const { error: detallesError } = await supabaseClient
+                .from('detallelistaempaque')
+                .insert(detallesParaInsertar);
 
-            const nuevoContenidoBase64Lista = btoa(unescape(encodeURIComponent(nuevoContenidoCsvLista)));
-            const updateResponseLista = await fetch(urlLista, {
-                method: 'PUT',
-                headers: { 'Authorization': `token ${apiToken}`, 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    message: `Agrega lista de empaque ID ${newIdLista} para cliente ${cliente}`,
-                    content: nuevoContenidoBase64Lista,
-                    sha: shaLista,
-                }),
-            });
+            if (detallesError) throw new Error(`Error al guardar los detalles de la lista: ${detallesError.message}`);
 
-            if (!updateResponseLista.ok) {
-                const errorData = await updateResponseLista.json();
-                throw new Error(`Error al actualizar ${RUTA_LISTAEMPAQUE_CSV}: ${errorData.message}`);
-            }
+            // 4. (Opcional) Marcar pallets como transferidos en `nropalettransferidos`
+            // Esta lógica puede adaptarse de la original si es necesario.
 
-            console.log(`¡Éxito! Se guardaron todos los registros.`);
-            showFeedback('¡Despacho registrado en GitHub!');
+            console.log(`¡Éxito! Se guardó la lista de empaque ID ${idListaNueva} con ${detallesParaInsertar.length} items.`);
+            showFeedback('¡Despacho registrado en Supabase!');
             return true;
 
         } catch (error) {
-            console.error("FALLO el proceso de guardado en GitHub:", error);
-            setModalContent({ title: 'Error de Sincronización', message: `No se pudo registrar la operación en GitHub.\n\nDetalle: ${error.message}` });
+            console.error("FALLO el proceso de guardado en Supabase:", error);
+            setModalContent({ title: 'Error de Sincronización', message: `No se pudo registrar la operación en la base de datos.\n\nDetalle: ${error.message}` });
             setShowInfoModal(true);
             return false;
         } finally {
-            await releaseLock();
             setIsGenerating(false);
         }
       };
