@@ -65,7 +65,7 @@
 
       useEffect(() => {
         qrCodeScanner.current = new Html5Qrcode(readerId);
-        const config = { fps: 10, qrbox: { width: 250, height: 250 } };
+        const config = { fps: 10, qrbox: { width: 350, height: 350 } };
 
         qrCodeScanner.current.start(
           { facingMode: "environment" },
@@ -1458,3 +1458,4 @@
   </script>
 </body>
 </ht
+
