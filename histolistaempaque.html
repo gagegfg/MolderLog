@@ -64,18 +64,45 @@
             supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
         }
 
+        const useLocalStorage = (key, initialValue) => {
+            const [storedValue, setStoredValue] = useState(() => {
+                try {
+                    const item = window.localStorage.getItem(key);
+                    return item ? JSON.parse(item) : initialValue;
+                } catch (error) {
+                    console.log(error);
+                    return initialValue;
+                }
+            });
+
+            const setValue = (value) => {
+                try {
+                    const valueToStore = value instanceof Function ? value(storedValue) : value;
+                    setStoredValue(valueToStore);
+                    window.localStorage.setItem(key, JSON.stringify(valueToStore));
+                } catch (error) {
+                    console.log(error);
+                }
+            };
+            return [storedValue, setValue];
+        };
+
         const App = () => {
-            const [allData, setAllData] = useState([]);
-            const [filteredData, setFilteredData] = useState([]);
+            const [data, setData] = useState([]);
             const [headers, setHeaders] = useState([]);
             const [isLoading, setIsLoading] = useState(true);
+            const [isGridLoading, setIsGridLoading] = useState(false);
 
             const [columnFilters, setColumnFilters] = useState({});
-            const [globalFilter, setGlobalFilter] = useState('');
+            const [internalColumnFilters, setInternalColumnFilters] = useState({});
             const [fechaDesde, setFechaDesde] = useState('');
             const [fechaHasta, setFechaHasta] = useState('');
             const [sortConfig, setSortConfig] = useState({ key: 'idlista', direction: 'descending' });
             
+            const [currentPage, setCurrentPage] = useState(1);
+            const [recordsPerPage, setRecordsPerPage] = useLocalStorage('histo_recordsPerPage', 100);
+            const [totalRecords, setTotalRecords] = useState(0);
+
             const [isExportOpen, setIsExportOpen] = useState(false);
             const exportMenuRef = useRef(null);
             
@@ -89,10 +116,8 @@
                 ];
                 
                 return [...headers].sort((a, b) => {
-                    const lowerA = a;
-                    const lowerB = b;
-                    const indexA = preferredOrder.indexOf(lowerA);
-                    const indexB = preferredOrder.indexOf(lowerB);
+                    const indexA = preferredOrder.indexOf(a);
+                    const indexB = preferredOrder.indexOf(b);
                     if (indexA === -1 && indexB === -1) return 0;
                     if (indexA === -1) return 1;
                     if (indexB === -1) return -1;
@@ -100,43 +125,83 @@
                 });
             }, [headers]);
 
-            const loadData = useCallback(async () => {
+            const applyFiltersToQuery = (query) => {
+                Object.keys(columnFilters).forEach(key => {
+                    const filterValue = columnFilters[key] ? columnFilters[key].trim() : '';
+                    if (filterValue) {
+                         // Convert JS key to DB key if necessary
+                        const dbKey = key.replace(/ /g, ''); 
+                        if (key === 'idlista' || key === 'Legajo' || key === 'nro de pallet' || key === 'cantidad') {
+                             query = query.filter(`${dbKey}::text`, 'ilike', `%${filterValue}%`);
+                        } else {
+                             query = query.ilike(dbKey, `%${filterValue}%`);
+                        }
+                    }
+                });
+
+                if (fechaDesde) query = query.gte('FechaCreacionlista', fechaDesde);
+                if (fechaHasta) query = query.lte('FechaCreacionlista', fechaHasta);
+
+                const sortKey = sortConfig.key.replace(/ /g, '');
+                query = query.order(sortKey, { ascending: sortConfig.direction === 'ascending' });
+                
+                return query;
+            };
+
+            const loadData = useCallback(async (isManualRefresh = false) => {
                 if (!supabaseClient) {
                     alert("La configuración de Supabase no está disponible.");
                     setIsLoading(false);
                     return;
                 }
-                setIsLoading(true);
-                const { data, error } = await supabaseClient
-                    .from('vista_historial_listas_empaque')
-                    .select('*');
+                setIsGridLoading(true);
 
-                if (error) {
+                try {
+                    let query = supabaseClient.from('vista_historial_listas_empaque').select('*', { count: 'exact' });
+                    query = applyFiltersToQuery(query);
+                    
+                    const page = isManualRefresh ? 1 : currentPage;
+                    const rangeFrom = (page - 1) * recordsPerPage;
+                    const rangeTo = rangeFrom + recordsPerPage - 1;
+                    query = query.range(rangeFrom, rangeTo);
+
+                    const { data: resultData, error, count } = await query;
+
+                    if (error) throw error;
+
+                    if (resultData && resultData.length > 0 && headers.length === 0) {
+                        const parsedHeaders = Object.keys(resultData[0]);
+                        setHeaders(parsedHeaders);
+                        const initialFilters = {};
+                        parsedHeaders.forEach(h => initialFilters[h] = '');
+                        setColumnFilters(initialFilters);
+                        setInternalColumnFilters(initialFilters);
+                    }
+                    
+                    setData(resultData.map((row, index) => ({...row, uniqueId: `row-${page}-${index}`})));
+                    setTotalRecords(count || 0);
+
+                } catch (error) {
                     console.error('Error cargando datos desde Supabase:', error);
                     alert(`Error al cargar el historial: ${error.message}`);
-                    setIsLoading(false);
-                    return;
+                } finally {
+                    setIsGridLoading(false);
+                    if (isLoading) setIsLoading(false);
                 }
+            }, [supabaseClient, columnFilters, fechaDesde, fechaHasta, sortConfig, currentPage, recordsPerPage, headers]);
 
-                if (data && data.length > 0) {
-                    const parsedHeaders = Object.keys(data[0]);
-                    setHeaders(parsedHeaders);
-
-                    const initialFilters = {};
-                    parsedHeaders.forEach(h => initialFilters[h] = '');
-                    setColumnFilters(initialFilters);
-
-                    const parsedData = data.map((row, index) => ({
-                        ...row,
-                        id: `row-${index}`
-                    }));
-                    setAllData(parsedData);
-                } else {
-                    setAllData([]);
-                    setHeaders([]);
+            // Initial load and dependency-driven reloads
+            useEffect(() => {
+                if (!isLoading) {
+                     loadData(true); // Force reset to page 1 on filter change
                 }
-                setIsLoading(false);
-            }, []);
+            }, [columnFilters, fechaDesde, fechaHasta, sortConfig, recordsPerPage]);
+
+            useEffect(() => {
+                if (!isLoading) {
+                    loadData(false); // Load specific page
+                }
+            }, [currentPage]);
 
             useEffect(() => {
                 const initializeApp = async () => {
@@ -144,7 +209,7 @@
                     document.getElementById('loader-status').textContent = "Cargando histórico...";
                     document.getElementById('loader-progress').style.width = '66%';
                     
-                    await loadData();
+                    await loadData(true);
                     
                     document.getElementById('loader-status').textContent = "¡Listo!";
                     document.getElementById('loader-progress').style.width = '100%';
@@ -159,70 +224,9 @@
                 if (supabaseClient) {
                     initializeApp();
                 } else {
-                    const loaderStatus = document.getElementById('loader-status');
-                    if(loaderStatus) {
-                        loaderStatus.textContent = "Error: Configuración de Supabase no encontrada.";
-                        document.getElementById('loader-progress').classList.add('bg-red-500');
-                        alert("Error: No se pudo encontrar la configuración de Supabase. Asegúrate de que 'config.js' está presente y es correcto.");
-                    }
+                    // Handle missing supabase config
                 }
-            }, [loadData]);
-
-            useEffect(() => {
-                let data = [...allData];
-                if (globalFilter) {
-                    const lowercasedFilter = globalFilter.toLowerCase();
-                    data = data.filter(item => 
-                        headers.some(header => 
-                            item[header] && item[header].toString().toLowerCase().includes(lowercasedFilter)
-                        )
-                    );
-                }
-
-                Object.keys(columnFilters).forEach(key => {
-                    const filterValue = columnFilters[key] ? columnFilters[key].toLowerCase() : '';
-                    if (filterValue) {
-                        data = data.filter(item => 
-                            item[key] && item[key].toString().toLowerCase().includes(filterValue)
-                        );
-                    }
-                });
-
-                const dateColumn = headers.find(h => h === 'Fecha Creacion lista');
-                if (dateColumn && (fechaDesde || fechaHasta)) {
-                    const desde = fechaDesde ? new Date(fechaDesde) : null;
-                    const hasta = fechaHasta ? new Date(fechaHasta) : null;
-                    if(desde) desde.setMinutes(desde.getMinutes() + desde.getTimezoneOffset());
-                    if(hasta) hasta.setMinutes(hasta.getMinutes() + hasta.getTimezoneOffset());
-                    
-                    data = data.filter(item => {
-                        const dateValue = item[dateColumn];
-                        if (!dateValue) return false;
-                        
-                        const parts = dateValue.split('/');
-                        if (parts.length !== 3) return false;
-                        const [day, month, year] = parts;
-                        const itemDate = new Date(`${year}-${month}-${day}`);
-                        
-                        return (!desde || itemDate >= desde) && (!hasta || itemDate <= hasta);
-                    });
-                }
-                setFilteredData(data);
-            }, [columnFilters, fechaDesde, fechaHasta, globalFilter, allData, headers]);
-
-            const sortedData = useMemo(() => {
-                let sortableItems = [...filteredData];
-                if (sortConfig.key) {
-                    sortableItems.sort((a, b) => {
-                        const valA = a[sortConfig.key] || '';
-                        const valB = b[sortConfig.key] || '';
-                        if (valA < valB) return sortConfig.direction === 'ascending' ? -1 : 1;
-                        if (valA > valB) return sortConfig.direction === 'ascending' ? 1 : -1;
-                        return 0;
-                    });
-                }
-                return sortableItems;
-            }, [filteredData, sortConfig]);
+            }, []);
 
             useEffect(() => {
                 const handleClickOutside = (event) => {
@@ -232,7 +236,19 @@
                 return () => document.removeEventListener("mousedown", handleClickOutside);
             }, []);
 
-            const handleColumnFilterChange = (columnId, value) => setColumnFilters(prev => ({ ...prev, [columnId]: value }));
+            // Debounce for column filters
+            useEffect(() => {
+                const handler = setTimeout(() => {
+                    if (JSON.stringify(internalColumnFilters) !== JSON.stringify(columnFilters)) {
+                        setColumnFilters(internalColumnFilters);
+                    }
+                }, 500);
+                return () => { clearTimeout(handler); };
+            }, [internalColumnFilters, columnFilters]);
+
+            const handleColumnFilterChange = (columnId, value) => {
+                setInternalColumnFilters(prev => ({ ...prev, [columnId]: value }));
+            };
             
             const handleSort = (key) => {
                 let direction = 'ascending';
@@ -246,21 +262,42 @@
                 const clearedFilters = {};
                 headers.forEach(h => clearedFilters[h] = '');
                 setColumnFilters(clearedFilters);
-                setGlobalFilter('');
+                setInternalColumnFilters(clearedFilters);
                 setFechaDesde('');
                 setFechaHasta('');
+                if (currentPage !== 1) setCurrentPage(1);
             };
 
-            const exportToPDF = () => {
+            const fetchAllFilteredData = async () => {
+                setIsGridLoading(true);
+                try {
+                    let query = supabaseClient.from('vista_historial_listas_empaque').select('*');
+                    query = applyFiltersToQuery(query);
+                    const { data, error } = await query;
+                    if (error) throw error;
+                    return data;
+                } catch (error) {
+                    alert(`Error al preparar la exportación: ${error.message}`);
+                    return null;
+                } finally {
+                    setIsGridLoading(false);
+                }
+            };
+
+            const exportToPDF = async () => {
+                const allExportData = await fetchAllFilteredData();
+                if (!allExportData) return;
                 const doc = new jsPDF({ orientation: 'landscape' });
                 doc.text("Histórico de Listas de Empaque", 14, 16);
-                doc.autoTable({ head: [displayHeaders], body: sortedData.map(item => displayHeaders.map(header => item[header] || '')), startY: 22 });
+                doc.autoTable({ head: [displayHeaders], body: allExportData.map(item => displayHeaders.map(header => item[header] || '')), startY: 22 });
                 doc.save("historico_listas_empaque.pdf");
                 setIsExportOpen(false);
             };
 
-            const exportToExcel = () => {
-                const excelData = sortedData.map(item => {
+            const exportToExcel = async () => {
+                const allExportData = await fetchAllFilteredData();
+                if (!allExportData) return;
+                const excelData = allExportData.map(item => {
                     const rowObject = {};
                     displayHeaders.forEach(header => { rowObject[header] = item[header]; });
                     return rowObject;
@@ -290,7 +327,7 @@
 
             return (
                 <div className="min-h-screen p-4 sm:p-6 bg-black bg-opacity-50">
-                    <div className="bg-white p-6 rounded-2xl shadow-xl">
+                    <div className="bg-white p-6 rounded-2xl shadow-xl flex flex-col flex-grow">
                         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 border-b pb-4 border-gray-200">
                             <h1 className="text-3xl font-extrabold text-gray-800">Histórico de Listas de Empaque</h1>
                             <div className="flex items-center space-x-3 mt-4 sm:mt-0">
@@ -299,32 +336,47 @@
                             </div>
                         </div>
                         
-                        <div className="mb-6 p-4 border rounded-lg bg-gray-50">
-                            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Búsqueda Global</label>
-                                    <input type="text" placeholder="Buscar en toda la tabla..." value={globalFilter} onChange={e => setGlobalFilter(e.target.value)} className="w-full rounded-md border-gray-300 shadow-sm p-2 border"/>
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Fecha Desde</label>
-                                    <input type="date" value={fechaDesde} onChange={e => setFechaDesde(e.target.value)} className="w-full rounded-md border-gray-300 shadow-sm p-2 border"/>
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Fecha Hasta</label>
-                                    <input type="date" value={fechaHasta} onChange={e => setFechaHasta(e.target.value)} className="w-full rounded-md border-gray-300 shadow-sm p-2 border"/>
-                                </div>
-                                <div className="flex items-end">
-                                    <button onClick={clearFilters} className="w-full bg-white text-gray-700 border border-gray-300 font-semibold py-2 px-4 rounded-lg shadow-sm hover:bg-gray-50 flex items-center justify-center"><i className="fas fa-times-circle mr-2"></i>Limpiar Filtros</button>
-                                </div>
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6 p-4 border rounded-lg bg-gray-50">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Fecha Desde</label>
+                                <input type="date" value={fechaDesde} onChange={e => setFechaDesde(e.target.value)} className="w-full rounded-md border-gray-300 shadow-sm p-2 border"/>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Fecha Hasta</label>
+                                <input type="date" value={fechaHasta} onChange={e => setFechaHasta(e.target.value)} className="w-full rounded-md border-gray-300 shadow-sm p-2 border"/>
+                            </div>
+                            <div className="flex items-end">
+                                <button onClick={clearFilters} className="w-full bg-white text-gray-700 border border-gray-300 font-semibold py-2 px-4 rounded-lg shadow-sm hover:bg-gray-50 flex items-center justify-center"><i className="fas fa-times-circle mr-2"></i>Limpiar Filtros</button>
                             </div>
                         </div>
 
                         <div className="flex flex-col sm:flex-row justify-between items-center mb-4">
-                            <p className="text-gray-600 font-semibold">{sortedData.length} registro(s) encontrado(s)</p>
-                            <div className="flex space-x-2 mt-4 sm:mt-0">
-                                <button onClick={loadData} disabled={isLoading} className="bg-gray-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-gray-700 disabled:opacity-50 flex items-center"><i className={`fas fa-sync-alt ${isLoading ? 'animate-spin' : ''} mr-2`}></i>Refrescar</button>
+                            <p className="text-gray-600 font-semibold">{totalRecords} registro(s) encontrado(s)</p>
+                            <div className="flex items-center space-x-2 mt-4 sm:mt-0">
+                                <div className="flex items-center space-x-2">
+                                    <label htmlFor="recordsPerPage" className="text-sm font-medium text-gray-700">Ver:</label>
+                                    <select id="recordsPerPage" value={recordsPerPage} onChange={e => { setRecordsPerPage(Number(e.target.value)); }} className="rounded-md border-gray-300 shadow-sm p-2 border text-sm">
+                                        <option value={50}>50</option>
+                                        <option value={100}>100</option>
+                                        <option value={200}>200</option>
+                                        <option value={400}>400</option>
+                                    </select>
+                                </div>
+                                <div className="flex items-center space-x-1">
+                                    <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1 || isGridLoading} className="bg-white text-gray-700 border border-gray-300 font-semibold py-2 px-3 rounded-lg shadow-sm hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed">
+                                        <i className="fas fa-chevron-left"></i>
+                                    </button>
+                                    <span className="text-sm font-medium text-gray-700 px-2">
+                                        Página {currentPage} de {totalRecords > 0 ? Math.ceil(totalRecords / recordsPerPage) : 1}
+                                    </span>
+                                    <button onClick={() => setCurrentPage(p => p + 1)} disabled={currentPage * recordsPerPage >= totalRecords || isGridLoading} className="bg-white text-gray-700 border border-gray-300 font-semibold py-2 px-3 rounded-lg shadow-sm hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed">
+                                        <i className="fas fa-chevron-right"></i>
+                                    </button>
+                                </div>
+
+                                <button onClick={() => loadData(true)} disabled={isGridLoading} className="bg-gray-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-gray-700 disabled:opacity-50 flex items-center"><i className={`fas fa-sync-alt ${isGridLoading ? 'animate-spin' : ''} mr-2`}></i>Refrescar</button>
                                 <div className="relative" ref={exportMenuRef}>
-                                    <button onClick={() => setIsExportOpen(prev => !prev)} disabled={sortedData.length === 0} className="bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-blue-700 disabled:opacity-50 flex items-center"><i className="fas fa-download mr-2"></i>Exportar<i className={`fas fa-chevron-down ml-2 transition-transform ${isExportOpen ? 'rotate-180' : ''}`}></i></button>
+                                    <button onClick={() => setIsExportOpen(prev => !prev)} disabled={data.length === 0} className="bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-blue-700 disabled:opacity-50 flex items-center"><i className="fas fa-download mr-2"></i>Exportar<i className={`fas fa-chevron-down ml-2 transition-transform ${isExportOpen ? 'rotate-180' : ''}`}></i></button>
                                     {isExportOpen && (
                                         <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg border z-20"><ul className="text-gray-700">
                                             <li><button onClick={exportToPDF} className="w-full text-left hover:bg-gray-100 p-3 flex items-center"><i className="fas fa-file-pdf w-6 mr-2 text-red-500"></i>a PDF</button></li>
@@ -335,51 +387,63 @@
                             </div>
                         </div>
 
-                        <div className="overflow-x-auto rounded-lg shadow-md border" style={{ maxHeight: '65vh' }}>
-                            <table className="min-w-full divide-y divide-gray-200 table-auto">
+                        <div className="overflow-x-auto rounded-lg shadow-md border flex-grow min-h-0">
+                             {isGridLoading && (
+                                <div className="absolute inset-0 bg-black bg-opacity-20 flex items-center justify-center z-20">
+                                    <div className="flex items-center space-x-3 text-xl font-semibold text-gray-700 bg-white p-4 rounded-lg shadow-lg">
+                                        <i className="fas fa-sync-alt animate-spin"></i>
+                                        <span>Cargando...</span>
+                                    </div>
+                                </div>
+                            )}
+                            <table className={`min-w-full divide-y divide-gray-200 table-auto ${isGridLoading ? 'opacity-50' : ''}`}>
                                 <thead className="bg-gray-800 text-white sticky top-0 z-10">
                                     <tr>{displayHeaders.map(header => (<th key={header} className="px-3 py-3 text-left text-xs font-medium uppercase tracking-wider" onClick={() => handleSort(header)}>
                                         <div className="flex items-center">{header}<i className={`fas ${sortConfig.key === header ? (sortConfig.direction === 'ascending' ? 'fa-sort-up' : 'fa-sort-down') : 'fa-sort'} ml-2 sort-icon`}></i></div>
                                     </th>))}</tr>
                                     <tr className="bg-gray-200">
-                                        {displayHeaders.map(header => (<th key={`filter-${header}`} className="p-1"><input type="text" placeholder="Filtrar..." value={columnFilters[header] || ''} onChange={e => handleColumnFilterChange(header, e.target.value)} className="w-full p-1 text-sm text-gray-700 border rounded"/></th>
+                                        {displayHeaders.map(header => (<th key={`filter-${header}`} className="p-1"><input type="text" placeholder="Filtrar..." value={internalColumnFilters[header] || ''} onChange={e => handleColumnFilterChange(header, e.target.value)} className="w-full p-1 text-sm text-gray-700 border rounded"/></th>
                                         ))}
                                     </tr>
                                 </thead>
                                 <tbody className="bg-white divide-y divide-gray-200">
-                                    {isLoading ? (<tr><td colSpan={displayHeaders.length} className="p-8 text-center text-gray-500">Cargando datos...</td></tr>) 
-                                    : ( sortedData.length > 0 ? sortedData.map((item) => (
-                                        <tr key={item.id} className="hover:bg-blue-50">
-                                            {displayHeaders.map(header => {
-                                                const content = item[header];
-                                                
-                                                const lowerCaseHeader = header.toLowerCase();
-                                                const isLotesColumn = lowerCaseHeader === 'lotes de produccion';
+                                    {isLoading ? (<tr><td colSpan={displayHeaders.length} className="p-8 text-center text-gray-500">Cargando...</td></tr>) 
+                                    : ( data.length > 0 ? data.map((item, index) => {
+                                        const prevItem = index > 0 ? data[index - 1] : null;
+                                        const isNewList = !prevItem || prevItem.idlista !== item.idlista;
+                                        const rowClasses = `hover:bg-blue-50 ${isNewList && index > 0 ? 'border-t-2 border-blue-300' : ''}`;
 
-                                                if (isLotesColumn && content) {
-                                                    const values = String(content).split('#');
+                                        return (
+                                            <tr key={item.uniqueId} className={rowClasses}>
+                                                {displayHeaders.map(header => {
+                                                    const content = item[header];
+                                                    const lowerCaseHeader = header.toLowerCase();
+                                                    const isLotesColumn = lowerCaseHeader === 'lotes de produccion';
+
+                                                    if (isLotesColumn && content) {
+                                                        const values = String(content).split('#');
+                                                        return (
+                                                            <td key={`${item.uniqueId}-${header}`} className={getColumnClasses(header)}>
+                                                                <div className="flex flex-wrap gap-1">
+                                                                    {values.filter(value => value && value.trim() !== '').map((value, i) => (
+                                                                        <span key={`${item.uniqueId}-${header}-${i}`} className='px-2 py-0.5 text-xs font-semibold rounded-full bg-gray-200 text-gray-800'>
+                                                                            {value.trim()}
+                                                                        </span>
+                                                                    ))}
+                                                                </div>
+                                                            </td>
+                                                        );
+                                                    }
                                                     
                                                     return (
-                                                        <td key={`${item.id}-${header}`} className={getColumnClasses(header)}>
-                                                            <div className="flex flex-wrap gap-1">
-                                                                {values.filter(value => value && value.trim() !== '').map((value, i) => (
-                                                                    <span key={`${item.id}-${header}-${i}`} className='px-2 py-0.5 text-xs font-semibold rounded-full bg-gray-200 text-gray-800'>
-                                                                        {value.trim()}
-                                                                    </span>
-                                                                ))}
-                                                            </div>
+                                                        <td key={`${item.uniqueId}-${header}`} className={getColumnClasses(header)}>
+                                                            {content}
                                                         </td>
                                                     );
-                                                }
-                                                
-                                                return (
-                                                    <td key={`${item.id}-${header}`} className={getColumnClasses(header)}>
-                                                        {content}
-                                                    </td>
-                                                );
-                                            })}
-                                        </tr>
-                                    )) : (<tr><td colSpan={displayHeaders.length} className="p-8 text-center text-gray-500">No se encontraron registros.</td></tr>)
+                                                })}
+                                            </tr>
+                                        );
+                                    }) : (<tr><td colSpan={displayHeaders.length} className="p-8 text-center text-gray-500">No se encontraron registros.</td></tr>)
                                     )}
                                 </tbody>
                             </table>
