@@ -181,11 +181,7 @@
                             else if ('no'.startsWith(filterValue.toLowerCase())) query = query.eq('despachado', false);
                         } else {
                             const dbKey = keyMap[key] || key;
-                            if (key === 'numeroDePallet') {
-                                query = query.filter(dbKey + '::text', 'ilike', `%${filterValue}%`);
-                            } else {
-                                query = query.ilike(dbKey, `%${filterValue}%`);
-                            }
+                            query = query.filter(dbKey + '::text', 'ilike', `%${filterValue}%`);
                         }
                     }
                 });
