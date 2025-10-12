@@ -181,7 +181,11 @@
                             else if ('no'.startsWith(filterValue.toLowerCase())) query = query.eq('despachado', false);
                         } else {
                             const dbKey = keyMap[key] || key;
-                            query = query.filter(dbKey + '::text', 'ilike', `%${filterValue}%`);
+                            if (key === 'numeroDePallet' || key === 'nropallet') {
+                                query = query.filter(dbKey + '::text', 'ilike', `%${filterValue}%`);
+                            } else {
+                                query = query.ilike(dbKey, `%${filterValue}%`);
+                            }
                         }
                     }
                 });
@@ -362,10 +366,10 @@
                     }
                 }
 
-                if (supabaseClient && fechaDesde && fechaHasta) {
+                if (!appIsLoading) {
                     loadData(currentPage === 1);
                 }
-            }, [currentPage, columnFilters, fechaDesde, fechaHasta, isTransferMode, sortConfig, recordsPerPage, supabaseClient]);
+            }, [currentPage, columnFilters, fechaDesde, fechaHasta, isTransferMode, sortConfig, recordsPerPage, supabaseClient, appIsLoading]);
 
             useEffect(() => {
                 if (!supabaseClient) return;
