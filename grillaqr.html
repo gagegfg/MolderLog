@@ -182,7 +182,7 @@
                         } else {
                             const dbKey = keyMap[key] || key;
                             if (key === 'numeroDePallet') {
-                                query = query.eq(dbKey, filterValue);
+                                query = query.ilike(`${dbKey}::text`, `%${filterValue}%`);
                             } else {
                                 query = query.ilike(dbKey, `%${filterValue}%`);
                             }
