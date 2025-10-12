@@ -83,14 +83,14 @@
                 if (headers.length === 0) return [];
                 
                 const preferredOrder = [
-                    'idlista', 'legajo', 'fecha creacion lista', 'cliente', 
-                    'transporte', 'lotes de produccion', 'bultos', 'remito', 
-                    'orden de compra'
+                    'idlista', 'Legajo', 'Fecha Creacion lista', 'Cliente', 
+                    'Lotes de produccion', 'Sku', 'descripcion sku', 'nro de pallet', 
+                    'Fecha de produccion', 'cantidad', 'U.M.'
                 ];
                 
                 return [...headers].sort((a, b) => {
-                    const lowerA = a.toLowerCase();
-                    const lowerB = b.toLowerCase();
+                    const lowerA = a;
+                    const lowerB = b;
                     const indexA = preferredOrder.indexOf(lowerA);
                     const indexB = preferredOrder.indexOf(lowerB);
                     if (indexA === -1 && indexB === -1) return 0;
@@ -270,14 +270,14 @@
             
             const getColumnClasses = (header) => {
                 let classes = 'px-3 py-2 text-sm text-gray-700 align-middle';
-                switch(header.toLowerCase()) { // Usar toLowerCase para consistencia
+                switch(header.toLowerCase()) {
                     case 'idlista':
                     case 'legajo':
                         return `${classes} w-20 font-semibold text-gray-900 whitespace-nowrap`;
                     case 'fecha creacion lista':
                         return `${classes} w-40 whitespace-nowrap`;
-                    case 'bultos':
                     case 'cantidad':
+                    case 'u.m.':
                         return `${classes} w-24 text-center`;
                     default:
                         return classes;
@@ -351,20 +351,15 @@
                                                 
                                                 const lowerCaseHeader = header.toLowerCase();
                                                 const isLotesColumn = lowerCaseHeader === 'lotes de produccion';
-                                                const isClienteColumn = lowerCaseHeader === 'cliente';
 
-                                                if ((isLotesColumn || isClienteColumn) && content) {
-                                                    const values = isLotesColumn ? String(content).split('#') : [content];
+                                                if (isLotesColumn && content) {
+                                                    const values = String(content).split('#');
                                                     
                                                     return (
                                                         <td key={`${item.id}-${header}`} className={getColumnClasses(header)}>
                                                             <div className="flex flex-wrap gap-1">
                                                                 {values.filter(value => value && value.trim() !== '').map((value, i) => (
-                                                                    <span key={`${item.id}-${header}-${i}`} className={`px-2 py-0.5 text-xs font-semibold rounded-full ${
-                                                                        isLotesColumn 
-                                                                        ? 'bg-gray-200 text-gray-800' 
-                                                                        : 'bg-indigo-100 text-indigo-800'
-                                                                    }`}>
+                                                                    <span key={`${item.id}-${header}-${i}`} className='px-2 py-0.5 text-xs font-semibold rounded-full bg-gray-200 text-gray-800'>
                                                                         {value.trim()}
                                                                     </span>
                                                                 ))}
