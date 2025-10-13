@@ -117,19 +117,22 @@
                     'Fecha de produccion', 'cantidad', 'U.M.'
                 ];
                 
-                return [...headers].sort((a, b) => {
-                    const indexA = preferredOrder.indexOf(a);
-                    const indexB = preferredOrder.indexOf(b);
-                    if (indexA === -1 && indexB === -1) return 0;
-                    if (indexA === -1) return 1;
-                    if (indexB === -1) return -1;
-                    return indexA - indexB;
-                });
+                return [...headers]
+                    .filter(h => h !== 'fechacreacion') // Ocultar la columna de fecha original
+                    .sort((a, b) => {
+                        const indexA = preferredOrder.indexOf(a);
+                        const indexB = preferredOrder.indexOf(b);
+                        if (indexA === -1 && indexB === -1) return 0;
+                        if (indexA === -1) return 1;
+                        if (indexB === -1) return -1;
+                        return indexA - indexB;
+                    });
             }, [headers]);
 
             const applyFiltersToQuery = (query) => {
                 if (debouncedGlobalFilter && headers.length > 0) {
                     const orFilter = headers
+                        .filter(h => h !== 'fechacreacion') // No incluir la columna de fecha original en el filtro global
                         .map(header => {
                             const h = /^[a-zA-Z0-9_]+$/.test(header) ? header : `"${header}"`;
                             return `${h}.ilike.%${debouncedGlobalFilter}%`;
@@ -146,8 +149,9 @@
                     }
                 });
 
-                if (fechaDesde) query = query.gte('"Fecha Creacion lista"', fechaDesde);
-                if (fechaHasta) query = query.lte('"Fecha Creacion lista"', fechaHasta);
+                // Usar la columna de fecha original para el filtro de rango
+                if (fechaDesde) query = query.gte('fechacreacion', fechaDesde);
+                if (fechaHasta) query = query.lte('fechacreacion', fechaHasta);
 
                 const sortKey = sortConfig.key;
                 const h = /^[a-zA-Z0-9_]+$/.test(sortKey) ? sortKey : `"${sortKey}"`;
