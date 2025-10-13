@@ -131,8 +131,8 @@
                 if (debouncedGlobalFilter && headers.length > 0) {
                     const orFilter = headers
                         .map(header => {
-                            const h = header.includes(' ') ? `"${header}"` : header;
-                            return `${h}::text.ilike.%${debouncedGlobalFilter}%`;
+                            const h = /^[a-zA-Z0-9_]+$/.test(header) ? header : `"${header}"`;
+                            return `${h}.ilike.%${debouncedGlobalFilter}%`;
                         })
                         .join(',');
                     query = query.or(orFilter);
@@ -141,13 +141,8 @@
                 Object.keys(columnFilters).forEach(key => {
                     const filterValue = columnFilters[key] ? columnFilters[key].trim() : '';
                     if (filterValue) {
-                        const h = key.includes(' ') ? `"${key}"` : key;
-                        if (key === 'idlista' || key === 'Legajo' || key === 'nro de pallet' || key === 'cantidad') {
-                             query = query.filter(`${h}::text`, 'ilike', `%${filterValue}%`);
-                        }
-                        else {
-                             query = query.ilike(h, `%${filterValue}%`);
-                        }
+                        const h = /^[a-zA-Z0-9_]+$/.test(key) ? key : `"${key}"`;
+                        query = query.ilike(h, `%${filterValue}%`);
                     }
                 });
 
@@ -155,7 +150,7 @@
                 if (fechaHasta) query = query.lte('"Fecha Creacion lista"', fechaHasta);
 
                 const sortKey = sortConfig.key;
-                const h = sortKey.includes(' ') ? `"${sortKey}"` : sortKey;
+                const h = /^[a-zA-Z0-9_]+$/.test(sortKey) ? sortKey : `"${sortKey}"`;
                 query = query.order(h, { ascending: sortConfig.direction === 'ascending' });
                 
                 return query;
