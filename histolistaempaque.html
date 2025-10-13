@@ -128,7 +128,7 @@
             }, [headers]);
 
             const applyFiltersToQuery = (query) => {
-                if (debouncedGlobalFilter) {
+                if (debouncedGlobalFilter && headers.length > 0) {
                     const orFilter = headers
                         .map(header => {
                             const h = header.includes(' ') ? `"${header}"` : header;
@@ -141,20 +141,22 @@
                 Object.keys(columnFilters).forEach(key => {
                     const filterValue = columnFilters[key] ? columnFilters[key].trim() : '';
                     if (filterValue) {
-                        const dbKey = key; 
+                        const h = key.includes(' ') ? `"${key}"` : key;
                         if (key === 'idlista' || key === 'Legajo' || key === 'nro de pallet' || key === 'cantidad') {
-                             query = query.filter(`${dbKey}::text`, 'ilike', `%${filterValue}%`);
-                        } else {
-                             query = query.ilike(dbKey, `%${filterValue}%`);
+                             query = query.filter(`${h}::text`, 'ilike', `%${filterValue}%`);
+                        }
+                        else {
+                             query = query.ilike(h, `%${filterValue}%`);
                         }
                     }
                 });
 
-                if (fechaDesde) query = query.gte('Fecha Creacion lista', fechaDesde);
-                if (fechaHasta) query = query.lte('Fecha Creacion lista', fechaHasta);
+                if (fechaDesde) query = query.gte('"Fecha Creacion lista"', fechaDesde);
+                if (fechaHasta) query = query.lte('"Fecha Creacion lista"', fechaHasta);
 
                 const sortKey = sortConfig.key;
-                query = query.order(sortKey, { ascending: sortConfig.direction === 'ascending' });
+                const h = sortKey.includes(' ') ? `"${sortKey}"` : sortKey;
+                query = query.order(h, { ascending: sortConfig.direction === 'ascending' });
                 
                 return query;
             };
