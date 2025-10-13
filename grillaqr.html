@@ -181,20 +181,27 @@
                             else if ('no'.startsWith(filterValue.toLowerCase())) query = query.eq('despachado', false);
                         } else {
                             const dbKey = keyMap[key] || key;
+                            const h = /[\s.]/.test(dbKey) ? `"${dbKey}"` : dbKey;
                             if (key === 'numeroDePallet' || key === 'nropallet') {
-                                query = query.filter(dbKey + '::text', 'ilike', `%${filterValue}%`);
+                                query = query.filter(h + '::text', 'ilike', `%${filterValue}%`);
                             } else {
-                                query = query.ilike(dbKey, `%${filterValue}%`);
+                                query = query.ilike(h, `%${filterValue}%`);
                             }
                         }
                     }
                 });
 
                 if (fechaDesde && !isTransferMode) query = query.gte('fechaproduccion', fechaDesde);
-                if (fechaHasta && !isTransferMode) query = query.lte('fechaproduccion', fechaHasta);
+                if (fechaHasta && !isTransferMode) {
+                    const nextDay = new Date(fechaHasta);
+                    nextDay.setDate(nextDay.getDate() + 1);
+                    const nextDayString = nextDay.toISOString().split('T')[0];
+                    query = query.lt('fechaproduccion', nextDayString);
+                }
                 if (isTransferMode) query = query.eq('is_transferred', false);
 
-                const sortKey = keyMap[sortConfig.key] || sortConfig.key;
+                const sortKeyRaw = keyMap[sortConfig.key] || sortConfig.key;
+                const sortKey = /[\s.]/.test(sortKeyRaw) ? `"${sortKeyRaw}"` : sortKeyRaw;
                 query = query.order(sortKey, { ascending: sortConfig.direction === 'ascending' });
                 
                 return query;
