@@ -130,7 +130,10 @@
             const applyFiltersToQuery = (query) => {
                 if (debouncedGlobalFilter) {
                     const orFilter = headers
-                        .map(header => `"${header}"::text.ilike.%${debouncedGlobalFilter}%`)
+                        .map(header => {
+                            const h = header.includes(' ') ? `"${header}"` : header;
+                            return `${h}::text.ilike.%${debouncedGlobalFilter}%`;
+                        })
                         .join(',');
                     query = query.or(orFilter);
                 }
