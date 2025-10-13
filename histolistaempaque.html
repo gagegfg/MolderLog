@@ -134,7 +134,7 @@
                     const orFilter = headers
                         .filter(h => h !== 'fechacreacion') // No incluir la columna de fecha original en el filtro global
                         .map(header => {
-                            const h = /^[a-zA-Z0-9_]+$/.test(header) ? header : `"${header}"`;
+                            const h = /[\\s.]/.test(header) ? `"${header}"` : header;
                             return `${h}.ilike.%${debouncedGlobalFilter}%`;
                         })
                         .join(',');
@@ -144,17 +144,22 @@
                 Object.keys(columnFilters).forEach(key => {
                     const filterValue = columnFilters[key] ? columnFilters[key].trim() : '';
                     if (filterValue) {
-                        const h = /^[a-zA-Z0-9_]+$/.test(key) ? key : `"${key}"`;
+                        const h = /[\\s.]/.test(key) ? `"${key}"` : key;
                         query = query.ilike(h, `%${filterValue}%`);
                     }
                 });
 
                 // Usar la columna de fecha original para el filtro de rango
                 if (fechaDesde) query = query.gte('fechacreacion', fechaDesde);
-                if (fechaHasta) query = query.lte('fechacreacion', fechaHasta);
+                if (fechaHasta) {
+                    const nextDay = new Date(fechaHasta);
+                    nextDay.setDate(nextDay.getDate() + 1);
+                    const nextDayString = nextDay.toISOString().split('T')[0];
+                    query = query.lt('fechacreacion', nextDayString);
+                }
 
                 const sortKey = sortConfig.key;
-                const h = /^[a-zA-Z0-9_]+$/.test(sortKey) ? sortKey : `"${sortKey}"`;
+                const h = /[\\s.]/.test(sortKey) ? `"${sortKey}"` : sortKey;
                 query = query.order(h, { ascending: sortConfig.direction === 'ascending' });
                 
                 return query;
