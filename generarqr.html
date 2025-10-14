@@ -680,6 +680,7 @@
                         showToast(`¡Conflicto! El Pallet ${palletNum} ya fue usado. Se actualizó al Nº ${nuevoNumeroSugerido}. Por favor, revise la nueva vista previa y guarde de nuevo.`, 'error');
                         setNumeroDePallet(nuevoNumeroSugerido);
                         setTimeout(() => handleGeneratePreview(true), 100);
+                        setIsSaving(false);
                         return; 
                     }
 
