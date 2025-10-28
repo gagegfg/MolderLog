@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -250,6 +249,7 @@
                         cliente: item.cliente,
                         hasNote: item.has_note,
                         noteText: item.notatext || '',
+                        despachado: item.despachado,
                         isStored: item.is_transferred,
                         updated_at: item.updated_at
                     }));
@@ -1176,7 +1176,8 @@
                                 </thead>
                                 <tbody class="bg-white divide-y divide-gray-200">
                                     {allData.length > 0 ? allData.map((item) => {
-                                            const isDespachado = item.despachado && item.despachado.toUpperCase() === 'TRUE';
+                                            const isDespachado = item.despachado;
+
                                             const clients = item.cliente ? item.cliente.split('#').filter(Boolean) : [];
 
                                             const noteAction = () => {
