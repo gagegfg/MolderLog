@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -129,6 +130,7 @@
             const [showPendingModal, setShowPendingModal] = useState(false);
             const [activeActionMenu, setActiveActionMenu] = useState(null);
             const actionMenuRef = useRef(null);
+            const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
             const [isTransferMode, setIsTransferMode] = useState(false);
             const [transferSelection, setTransferSelection] = useState({});
@@ -968,7 +970,7 @@
             }
 
             return (
-                <div className="h-screen p-4 sm:p-6 bg-black bg-opacity-50 flex flex-col">
+                <div className="min-h-screen p-4 sm:p-6 bg-black bg-opacity-50 flex flex-col">
                     <NotificationBanner />
                     {isSaving && (
                         <div className="fixed inset-0 bg-white bg-opacity-80 flex items-center justify-center z-50">
@@ -987,28 +989,52 @@
                     <PendingModal isOpen={showPendingModal} onClose={() => setShowPendingModal(false)} data={allData} />
                     {showHelpModal && <HelpModal onClose={() => setShowHelpModal(false)} />}
                     
-                    <div className="bg-white p-6 rounded-2xl shadow-xl flex flex-col flex-grow overflow-hidden">
+                    <div className="bg-white p-4 sm:p-6 rounded-2xl shadow-xl flex flex-col flex-grow overflow-hidden">
                         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 border-b pb-4 border-gray-200">
                             <div className="flex items-center space-x-4">
-                                <h1 className="text-3xl font-extrabold text-gray-800">Histórico de Lotes</h1>
+                                <h1 className="text-2xl sm:text-3xl font-extrabold text-gray-800">Histórico de Lotes</h1>
                                 <button onClick={() => setShowHelpModal(true)} title="Ayuda" className="text-gray-400 hover:text-indigo-600 transition-colors"><i className="fas fa-question-circle text-2xl"></i></button>
                             </div>
-                            <div className="flex items-center space-x-3 mt-4 sm:mt-0">
+                            
+                            {/* Desktop Menu */}
+                            <div className="hidden md:flex items-center space-x-2 mt-4 sm:mt-0">
                                 {!isTransferMode && (
-                                    <button onClick={handleEnterTransferMode} className="bg-blue-500 text-white font-semibold py-2 px-4 rounded-lg hover:bg-blue-600 transition-colors shadow-sm flex items-center"><i className="fas fa-truck mr-2"></i>Modo Transferencia</button>
+                                    <button onClick={handleEnterTransferMode} className="bg-blue-500 text-white font-semibold py-2 px-3 rounded-lg hover:bg-blue-600 transition-colors shadow-sm flex items-center text-sm"><i className="fas fa-truck mr-2"></i>Modo Transferencia</button>
                                 )}
-                                <button onClick={() => setShowPendingModal(true)} className="bg-yellow-500 text-white font-semibold py-2 px-4 rounded-lg hover:bg-yellow-600 transition-colors shadow-sm flex items-center"><i className="fas fa-pallet mr-2"></i>Pendientes de Transferencia</button>
-                                <a href="posiciones3d.html" className="bg-teal-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-teal-700 transition-colors shadow-sm flex items-center"><i className="fas fa-cubes mr-2"></i>Ubicaciones 3D</a>
-                                <a href="histolistaempaque.html" className="bg-purple-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-purple-700 transition-colors shadow-sm flex items-center"><i className="fas fa-history mr-2"></i>Histórico Empaque</a>
-                                <a href="generarqr.html" className="bg-green-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-green-700 transition-colors shadow-sm flex items-center"><i className="fas fa-plus mr-2"></i>Generar Nuevo</a>
-                                <a href="index.html" className="bg-gray-200 text-gray-800 font-semibold py-2 px-4 rounded-lg hover:bg-gray-300 transition-colors">Volver al Menú</a>
+                                <button onClick={() => setShowPendingModal(true)} className="bg-yellow-500 text-white font-semibold py-2 px-3 rounded-lg hover:bg-yellow-600 transition-colors shadow-sm flex items-center text-sm"><i className="fas fa-pallet mr-2"></i>Pendientes</button>
+                                <a href="posiciones3d.html" className="bg-teal-600 text-white font-semibold py-2 px-3 rounded-lg hover:bg-teal-700 transition-colors shadow-sm flex items-center text-sm"><i className="fas fa-cubes mr-2"></i>Ubicaciones 3D</a>
+                                <a href="histolistaempaque.html" className="bg-purple-600 text-white font-semibold py-2 px-3 rounded-lg hover:bg-purple-700 transition-colors shadow-sm flex items-center text-sm"><i className="fas fa-history mr-2"></i>H. Empaque</a>
+                                <a href="generarqr.html" className="bg-green-600 text-white font-semibold py-2 px-3 rounded-lg hover:bg-green-700 transition-colors shadow-sm flex items-center text-sm"><i className="fas fa-plus mr-2"></i>Nuevo</a>
+                                <a href="index.html" className="bg-gray-200 text-gray-800 font-semibold py-2 px-3 rounded-lg hover:bg-gray-300 transition-colors text-sm">Menú</a>
+                            </div>
+
+                            {/* Mobile Menu */}
+                            <div className="md:hidden relative mt-4 sm:mt-0">
+                                <button onClick={() => setIsMobileMenuOpen(prev => !prev)} className="p-2 rounded-md hover:bg-gray-100 border">
+                                    <i className="fas fa-bars text-xl text-gray-600"></i>
+                                </button>
+                                {isMobileMenuOpen && (
+                                    <div className="absolute right-0 mt-2 w-64 bg-white rounded-md shadow-lg border z-40">
+                                        <ul className="text-gray-700 text-sm">
+                                            {!isTransferMode && (
+                                                <li><button onClick={() => { handleEnterTransferMode(); setIsMobileMenuOpen(false); }} className="w-full text-left hover:bg-gray-100 p-3 flex items-center"><i className="fas fa-truck w-6 mr-2 text-blue-500"></i>Modo Transferencia</button></li>
+                                            )}
+                                            <li><button onClick={() => { setShowPendingModal(true); setIsMobileMenuOpen(false); }} className="w-full text-left hover:bg-gray-100 p-3 flex items-center"><i className="fas fa-pallet w-6 mr-2 text-yellow-500"></i>Pendientes de Transferencia</button></li>
+                                            <li><a href="posiciones3d.html" className="w-full hover:bg-gray-100 p-3 flex items-center"><i className="fas fa-cubes w-6 mr-2 text-teal-600"></i>Ubicaciones 3D</a></li>
+                                            <li><a href="histolistaempaque.html" className="w-full hover:bg-gray-100 p-3 flex items-center"><i className="fas fa-history w-6 mr-2 text-purple-600"></i>Histórico Empaque</a></li>
+                                            <li><a href="generarqr.html" className="w-full hover:bg-gray-100 p-3 flex items-center"><i className="fas fa-plus w-6 mr-2 text-green-600"></i>Generar Nuevo Pallet</a></li>
+                                            <li><hr className="my-1"/></li>
+                                            <li><a href="index.html" className="w-full hover:bg-gray-100 p-3 flex items-center"><i className="fas fa-sign-out-alt w-6 mr-2 text-gray-500"></i>Volver al Menú</a></li>
+                                        </ul>
+                                    </div>
+                                )}
                             </div>
                         </div>
                         
                         <TransferBar />
 
-                        <div class="flex justify-between items-center mb-4 p-4 border rounded-lg bg-gray-50">
-                            <div class="flex items-center space-x-4">
+                        <div class="flex flex-col md:flex-row justify-between items-center mb-4 p-4 border rounded-lg bg-gray-50 space-y-4 md:space-y-0">
+                            <div class="flex flex-col md:flex-row items-center space-y-2 md:space-y-0 md:space-x-4">
                                 {!isTransferMode && (
                                     <>
                                         <div class="flex items-center space-x-2">
@@ -1025,16 +1051,15 @@
 
                             </div>
 
-                            <div className="flex items-center space-x-4">
-                                <p className="text-gray-600 font-semibold">{totalRecords} registro(s) encontrado(s)</p>
+                            <div className="flex flex-col md:flex-row items-center space-y-2 md:space-y-0 md:space-x-4">
+                                <p className="text-gray-600 font-semibold">{totalRecords} registro(s)</p>
                                 
                                 <div className="flex items-center space-x-2">
                                     <label htmlFor="recordsPerPage" className="text-sm font-medium text-gray-700">Ver:</label>
                                     <select id="recordsPerPage" value={recordsPerPage} onChange={e => { setRecordsPerPage(Number(e.target.value)); }} className="rounded-md border-gray-300 shadow-sm p-2 border text-sm">
+                                        <option value={25}>25</option>
                                         <option value={50}>50</option>
                                         <option value={100}>100</option>
-                                        <option value={200}>200</option>
-                                        <option value={400}>400</option>
                                     </select>
                                 </div>
 
@@ -1074,6 +1099,7 @@
                                     </div>
                                 </div>
                             )}
+                            {/* Desktop Table View */}
                             <div className="hidden md:block">
                                 <table className={`min-w-full divide-y divide-gray-200 ${isGridLoading ? 'opacity-50' : ''}`}>
                                     <thead className="bg-gray-800 text-white sticky top-0 z-10">
