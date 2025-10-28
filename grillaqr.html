@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -118,7 +119,7 @@
             const [isSaving, setIsSaving] = useState(false);
             
             const [currentPage, setCurrentPage] = useState(1);
-            const [recordsPerPage, setRecordsPerPage] = useLocalStorage('grillaqr_recordsPerPage', 400);
+            const [recordsPerPage, setRecordsPerPage] = useLocalStorage('grillaqr_recordsPerPage', 50);
             const [totalRecords, setTotalRecords] = useState(0);
 
             const [modalState, setModalState] = useState({ isOpen: false, type: null, title: '', message: '', onConfirm: null });
@@ -409,7 +410,6 @@
                 return () => document.removeEventListener("mousedown", handleClickOutside);
             }, []);
 
-            // Debounce for column filters
             useEffect(() => {
                 const handler = setTimeout(() => {
                     if (JSON.stringify(internalColumnFilters) !== JSON.stringify(columnFilters)) {
@@ -419,12 +419,9 @@
                 return () => { clearTimeout(handler); };
             }, [internalColumnFilters, columnFilters]);
 
-            // Sync internal filters if external filters change (e.g., on clear)
             useEffect(() => {
                 setInternalColumnFilters(columnFilters);
             }, [columnFilters]);
-
-
 
             const handleColumnFilterChange = (columnId, value) => {
                 setInternalColumnFilters(prev => ({ ...prev, [columnId]: value }));
