@@ -192,6 +192,9 @@
                                 <div className="font-semibold text-gray-600">Desc. SKU:</div>
                                 <div className="font-bold text-gray-800 md:col-span-1">{data.articulos.descripcioncorta}</div>
 
+                                <div className="font-semibold text-gray-600">Lote(s) de Producto:</div>
+                                <div className="font-bold text-gray-800">{data.loteproducto.replace(/#/g, ' / ')}</div>
+
                                 <div className="font-semibold text-gray-600">Nº de Pallet:</div>
                                 <div className="font-bold text-gray-800">{data.nropallet}</div>
 
@@ -857,6 +860,7 @@
                             created_at,
                             fechaproduccion,
                             cantidad,
+                            loteproducto,
                             articulos ( idsku, descripcioncorta )
                         `)
                         .eq('idsku', selectedArticulo.idsku)
