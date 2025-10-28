@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -117,9 +116,10 @@
             const [isGridLoading, setIsGridLoading] = useState(false);
             const [allData, setAllData] = useState([]);
             const [isSaving, setIsSaving] = useState(false);
+            const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
             
             const [currentPage, setCurrentPage] = useState(1);
-            const [recordsPerPage, setRecordsPerPage] = useLocalStorage('grillaqr_recordsPerPage', 50);
+            const [recordsPerPage, setRecordsPerPage] = useLocalStorage('grillaqr_recordsPerPage', 400);
             const [totalRecords, setTotalRecords] = useState(0);
 
             const [modalState, setModalState] = useState({ isOpen: false, type: null, title: '', message: '', onConfirm: null });
@@ -130,7 +130,7 @@
             const [showPendingModal, setShowPendingModal] = useState(false);
             const [activeActionMenu, setActiveActionMenu] = useState(null);
             const actionMenuRef = useRef(null);
-            const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+            const mobileMenuRef = useRef(null);
 
             const [isTransferMode, setIsTransferMode] = useState(false);
             const [transferSelection, setTransferSelection] = useState({});
@@ -406,11 +406,13 @@
                 const handleClickOutside = (event) => {
                     if (exportMenuRef.current && !exportMenuRef.current.contains(event.target)) setIsExportOpen(false);
                     if (actionMenuRef.current && !actionMenuRef.current.parentElement.contains(event.target)) setActiveActionMenu(null);
+                    if (mobileMenuRef.current && !mobileMenuRef.current.contains(event.target)) setIsMobileMenuOpen(false);
                 };
                 document.addEventListener("mousedown", handleClickOutside);
                 return () => document.removeEventListener("mousedown", handleClickOutside);
             }, []);
 
+            // Debounce for column filters
             useEffect(() => {
                 const handler = setTimeout(() => {
                     if (JSON.stringify(internalColumnFilters) !== JSON.stringify(columnFilters)) {
@@ -420,9 +422,12 @@
                 return () => { clearTimeout(handler); };
             }, [internalColumnFilters, columnFilters]);
 
+            // Sync internal filters if external filters change (e.g., on clear)
             useEffect(() => {
                 setInternalColumnFilters(columnFilters);
             }, [columnFilters]);
+
+
 
             const handleColumnFilterChange = (columnId, value) => {
                 setInternalColumnFilters(prev => ({ ...prev, [columnId]: value }));
@@ -989,43 +994,45 @@
                     <PendingModal isOpen={showPendingModal} onClose={() => setShowPendingModal(false)} data={allData} />
                     {showHelpModal && <HelpModal onClose={() => setShowHelpModal(false)} />}
                     
-                    <div className="bg-white p-4 sm:p-6 rounded-2xl shadow-xl flex flex-col flex-grow overflow-hidden">
+                    <div className="bg-white p-6 rounded-2xl shadow-xl flex flex-col flex-grow md:overflow-hidden">
                         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 border-b pb-4 border-gray-200">
                             <div className="flex items-center space-x-4">
-                                <h1 className="text-2xl sm:text-3xl font-extrabold text-gray-800">Histórico de Lotes</h1>
+                                <h1 className="text-3xl font-extrabold text-gray-800">Histórico de Lotes</h1>
                                 <button onClick={() => setShowHelpModal(true)} title="Ayuda" className="text-gray-400 hover:text-indigo-600 transition-colors"><i className="fas fa-question-circle text-2xl"></i></button>
                             </div>
-                            
-                            {/* Desktop Menu */}
-                            <div className="hidden md:flex items-center space-x-2 mt-4 sm:mt-0">
-                                {!isTransferMode && (
-                                    <button onClick={handleEnterTransferMode} className="bg-blue-500 text-white font-semibold py-2 px-3 rounded-lg hover:bg-blue-600 transition-colors shadow-sm flex items-center text-sm"><i className="fas fa-truck mr-2"></i>Modo Transferencia</button>
-                                )}
-                                <button onClick={() => setShowPendingModal(true)} className="bg-yellow-500 text-white font-semibold py-2 px-3 rounded-lg hover:bg-yellow-600 transition-colors shadow-sm flex items-center text-sm"><i className="fas fa-pallet mr-2"></i>Pendientes</button>
-                                <a href="posiciones3d.html" className="bg-teal-600 text-white font-semibold py-2 px-3 rounded-lg hover:bg-teal-700 transition-colors shadow-sm flex items-center text-sm"><i className="fas fa-cubes mr-2"></i>Ubicaciones 3D</a>
-                                <a href="histolistaempaque.html" className="bg-purple-600 text-white font-semibold py-2 px-3 rounded-lg hover:bg-purple-700 transition-colors shadow-sm flex items-center text-sm"><i className="fas fa-history mr-2"></i>H. Empaque</a>
-                                <a href="generarqr.html" className="bg-green-600 text-white font-semibold py-2 px-3 rounded-lg hover:bg-green-700 transition-colors shadow-sm flex items-center text-sm"><i className="fas fa-plus mr-2"></i>Nuevo</a>
-                                <a href="index.html" className="bg-gray-200 text-gray-800 font-semibold py-2 px-3 rounded-lg hover:bg-gray-300 transition-colors text-sm">Menú</a>
-                            </div>
+                            <div className="flex items-center space-x-3 mt-4 sm:mt-0 relative" ref={mobileMenuRef}>
+                                {/* Hamburger button for mobile */}
+                                <div className="sm:hidden">
+                                    <button onClick={() => setIsMobileMenuOpen(prev => !prev)} className="text-gray-500 hover:text-gray-600 focus:outline-none focus:text-gray-600">
+                                        <i className="fas fa-bars text-2xl"></i>
+                                    </button>
+                                </div>
 
-                            {/* Mobile Menu */}
-                            <div className="md:hidden relative mt-4 sm:mt-0">
-                                <button onClick={() => setIsMobileMenuOpen(prev => !prev)} className="p-2 rounded-md hover:bg-gray-100 border">
-                                    <i className="fas fa-bars text-xl text-gray-600"></i>
-                                </button>
+                                {/* Desktop buttons */}
+                                <div className="hidden sm:flex sm:items-center sm:space-x-3">
+                                    {!isTransferMode && (
+                                        <button onClick={handleEnterTransferMode} className="bg-blue-500 text-white font-semibold py-2 px-4 rounded-lg hover:bg-blue-600 transition-colors shadow-sm flex items-center"><i className="fas fa-truck mr-2"></i>Modo Transferencia</button>
+                                    )}
+                                    <button onClick={() => setShowPendingModal(true)} className="bg-yellow-500 text-white font-semibold py-2 px-4 rounded-lg hover:bg-yellow-600 transition-colors shadow-sm flex items-center"><i className="fas fa-pallet mr-2"></i>Pendientes de Transferencia</button>
+                                    <a href="posiciones3d.html" className="bg-teal-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-teal-700 transition-colors shadow-sm flex items-center"><i className="fas fa-cubes mr-2"></i>Ubicaciones 3D</a>
+                                    <a href="histolistaempaque.html" className="bg-purple-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-purple-700 transition-colors shadow-sm flex items-center"><i className="fas fa-history mr-2"></i>Histórico Empaque</a>
+                                    <a href="generarqr.html" className="bg-green-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-green-700 transition-colors shadow-sm flex items-center"><i className="fas fa-plus mr-2"></i>Generar Nuevo</a>
+                                    <a href="index.html" className="bg-gray-200 text-gray-800 font-semibold py-2 px-4 rounded-lg hover:bg-gray-300 transition-colors">Volver al Menú</a>
+                                </div>
+                                
+                                {/* Mobile menu */}
                                 {isMobileMenuOpen && (
-                                    <div className="absolute right-0 mt-2 w-64 bg-white rounded-md shadow-lg border z-40">
-                                        <ul className="text-gray-700 text-sm">
+                                    <div className="sm:hidden absolute top-10 right-0 mt-2 w-64 bg-white rounded-md shadow-lg border z-40">
+                                        <div className="flex flex-col space-y-2 p-2">
                                             {!isTransferMode && (
-                                                <li><button onClick={() => { handleEnterTransferMode(); setIsMobileMenuOpen(false); }} className="w-full text-left hover:bg-gray-100 p-3 flex items-center"><i className="fas fa-truck w-6 mr-2 text-blue-500"></i>Modo Transferencia</button></li>
+                                                <button onClick={() => { handleEnterTransferMode(); setIsMobileMenuOpen(false); }} className="bg-blue-500 text-white font-semibold py-2 px-4 rounded-lg hover:bg-blue-600 transition-colors shadow-sm flex items-center justify-center"><i className="fas fa-truck mr-2"></i>Modo Transferencia</button>
                                             )}
-                                            <li><button onClick={() => { setShowPendingModal(true); setIsMobileMenuOpen(false); }} className="w-full text-left hover:bg-gray-100 p-3 flex items-center"><i className="fas fa-pallet w-6 mr-2 text-yellow-500"></i>Pendientes de Transferencia</button></li>
-                                            <li><a href="posiciones3d.html" className="w-full hover:bg-gray-100 p-3 flex items-center"><i className="fas fa-cubes w-6 mr-2 text-teal-600"></i>Ubicaciones 3D</a></li>
-                                            <li><a href="histolistaempaque.html" className="w-full hover:bg-gray-100 p-3 flex items-center"><i className="fas fa-history w-6 mr-2 text-purple-600"></i>Histórico Empaque</a></li>
-                                            <li><a href="generarqr.html" className="w-full hover:bg-gray-100 p-3 flex items-center"><i className="fas fa-plus w-6 mr-2 text-green-600"></i>Generar Nuevo Pallet</a></li>
-                                            <li><hr className="my-1"/></li>
-                                            <li><a href="index.html" className="w-full hover:bg-gray-100 p-3 flex items-center"><i className="fas fa-sign-out-alt w-6 mr-2 text-gray-500"></i>Volver al Menú</a></li>
-                                        </ul>
+                                            <button onClick={() => { setShowPendingModal(true); setIsMobileMenuOpen(false); }} className="bg-yellow-500 text-white font-semibold py-2 px-4 rounded-lg hover:bg-yellow-600 transition-colors shadow-sm flex items-center justify-center"><i className="fas fa-pallet mr-2"></i>Pendientes</button>
+                                            <a href="posiciones3d.html" className="bg-teal-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-teal-700 transition-colors shadow-sm flex items-center justify-center"><i className="fas fa-cubes mr-2"></i>Ubicaciones 3D</a>
+                                            <a href="histolistaempaque.html" className="bg-purple-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-purple-700 transition-colors shadow-sm flex items-center justify-center"><i className="fas fa-history mr-2"></i>Hist. Empaque</a>
+                                            <a href="generarqr.html" className="bg-green-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-green-700 transition-colors shadow-sm flex items-center justify-center"><i className="fas fa-plus mr-2"></i>Generar Nuevo</a>
+                                            <a href="index.html" className="bg-gray-200 text-gray-800 font-semibold py-2 px-4 rounded-lg hover:bg-gray-300 transition-colors flex items-center justify-center">Volver al Menú</a>
+                                        </div>
                                     </div>
                                 )}
                             </div>
@@ -1033,8 +1040,8 @@
                         
                         <TransferBar />
 
-                        <div class="flex flex-col md:flex-row justify-between items-center mb-4 p-4 border rounded-lg bg-gray-50 space-y-4 md:space-y-0">
-                            <div class="flex flex-col md:flex-row items-center space-y-2 md:space-y-0 md:space-x-4">
+                        <div class="flex justify-between items-center mb-4 p-4 border rounded-lg bg-gray-50">
+                            <div class="flex items-center space-x-4">
                                 {!isTransferMode && (
                                     <>
                                         <div class="flex items-center space-x-2">
@@ -1051,15 +1058,16 @@
 
                             </div>
 
-                            <div className="flex flex-col md:flex-row items-center space-y-2 md:space-y-0 md:space-x-4">
-                                <p className="text-gray-600 font-semibold">{totalRecords} registro(s)</p>
+                            <div className="flex items-center space-x-4">
+                                <p className="text-gray-600 font-semibold">{totalRecords} registro(s) encontrado(s)</p>
                                 
                                 <div className="flex items-center space-x-2">
                                     <label htmlFor="recordsPerPage" className="text-sm font-medium text-gray-700">Ver:</label>
                                     <select id="recordsPerPage" value={recordsPerPage} onChange={e => { setRecordsPerPage(Number(e.target.value)); }} className="rounded-md border-gray-300 shadow-sm p-2 border text-sm">
-                                        <option value={25}>25</option>
                                         <option value={50}>50</option>
                                         <option value={100}>100</option>
+                                        <option value={200}>200</option>
+                                        <option value={400}>400</option>
                                     </select>
                                 </div>
 
@@ -1099,344 +1107,213 @@
                                     </div>
                                 </div>
                             )}
-                            {/* Desktop Table View */}
-                            <div className="hidden md:block">
-                                <table className={`min-w-full divide-y divide-gray-200 ${isGridLoading ? 'opacity-50' : ''}`}>
-                                    <thead className="bg-gray-800 text-white sticky top-0 z-10">
-                                        <tr>
-                                            <th className="px-1 py-3 text-left text-xs font-medium uppercase tracking-wider">
-                                                <button onClick={() => requestSort('isStored')} className="flex items-center space-x-1 hover:text-gray-300">
-                                                    <span>Almacenado</span>
-                                                    {sortConfig.key === 'isStored' ? (
-                                                        sortConfig.direction === 'ascending' ? <i className="fas fa-sort-up"></i> : <i className="fas fa-sort-down"></i>
-                                                    ) : <i className="fas fa-sort text-gray-500"></i>}
-                                                </button>
-                                            </th>
-                                            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">
-                                                <button onClick={() => requestSort('sku')} className="flex items-center space-x-1 hover:text-gray-300">
-                                                    <span>SKU</span>
-                                                    {sortConfig.key === 'sku' ? (
-                                                        sortConfig.direction === 'ascending' ? <i className="fas fa-sort-up"></i> : <i className="fas fa-sort-down"></i>
-                                                    ) : <i className="fas fa-sort text-gray-500"></i>}
-                                                </button>
-                                            </th>
-                                            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">
-                                                <button onClick={() => requestSort('descripcion')} className="flex items-center space-x-1 hover:text-gray-300">
-                                                    <span>Descripción</span>
-                                                    {sortConfig.key === 'descripcion' ? (
-                                                        sortConfig.direction === 'ascending' ? <i className="fas fa-sort-up"></i> : <i className="fas fa-sort-down"></i>
-                                                    ) : <i className="fas fa-sort text-gray-500"></i>}
-                                                </button>
-                                            </th>
-                                            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">
-                                                <button onClick={() => requestSort('numeroDePallet')} className="flex items-center space-x-1 hover:text-gray-300">
-                                                    <span>Nº Pallet</span>
-                                                    {sortConfig.key === 'numeroDePallet' ? (
-                                                        sortConfig.direction === 'ascending' ? <i className="fas fa-sort-up"></i> : <i className="fas fa-sort-down"></i>
-                                                    ) : <i className="fas fa-sort text-gray-500"></i>}
-                                                </button>
-                                            </th>
-                                            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">
-                                                <button onClick={() => requestSort('lotesProduccion')} className="flex items-center space-x-1 hover:text-gray-300">
-                                                    <span>Lotes Prod.</span>
-                                                    {sortConfig.key === 'lotesProduccion' ? (
-                                                        sortConfig.direction === 'ascending' ? <i className="fas fa-sort-up"></i> : <i className="fas fa-sort-down"></i>
-                                                    ) : <i className="fas fa-sort text-gray-500"></i>}
-                                                </button>
-                                            </th>
-                                            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">
-                                                <button onClick={() => requestSort('despachado')} className="flex items-center space-x-1 hover:text-gray-300">
-                                                    <span>Despachado</span>
-                                                    {sortConfig.key === 'despachado' ? (
-                                                        sortConfig.direction === 'ascending' ? <i className="fas fa-sort-up"></i> : <i className="fas fa-sort-down"></i>
-                                                    ) : <i className="fas fa-sort text-gray-500"></i>}
-                                                </button>
-                                            </th>
-                                            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">
-                                                <button onClick={() => requestSort('cliente')} className="flex items-center space-x-1 hover:text-gray-300">
-                                                    <span>Cliente</span>
-                                                    {sortConfig.key === 'cliente' ? (
-                                                        sortConfig.direction === 'ascending' ? <i className="fas fa-sort-up"></i> : <i className="fas fa-sort-down"></i>
-                                                    ) : <i className="fas fa-sort text-gray-500"></i>}
-                                                </button>
-                                            </th>
-                                            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">
-                                                <button onClick={() => requestSort('fechaProduccion')} className="flex items-center space-x-1 hover:text-gray-300">
-                                                    <span>F. Prod.</span>
-                                                    {sortConfig.key === 'fechaProduccion' ? (
-                                                        sortConfig.direction === 'ascending' ? <i className="fas fa-sort-up"></i> : <i className="fas fa-sort-down"></i>
-                                                    ) : <i className="fas fa-sort text-gray-500"></i>}
-                                                </button>
-                                            </th>
-                                            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">
-                                                <button onClick={() => requestSort('cantidad')} className="flex items-center space-x-1 hover:text-gray-300">
-                                                    <span>Cantidad</span>
-                                                    {sortConfig.key === 'cantidad' ? (
-                                                        sortConfig.direction === 'ascending' ? <i className="fas fa-sort-up"></i> : <i className="fas fa-sort-down"></i>
-                                                    ) : <i className="fas fa-sort text-gray-500"></i>}
-                                                </button>
-                                            </th>
-                                            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">
-                                                <button onClick={() => requestSort('unidadMedida')} className="flex items-center space-x-1 hover:text-gray-300">
-                                                    <span>U.M.</span>
-                                                    {sortConfig.key === 'unidadMedida' ? (
-                                                        sortConfig.direction === 'ascending' ? <i className="fas fa-sort-up"></i> : <i className="fas fa-sort-down"></i>
-                                                    ) : <i className="fas fa-sort text-gray-500"></i>}
-                                                </button>
-                                            </th>
-                                            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Acciones</th>
-                                        </tr>
-                                        <tr class="bg-gray-200">
-                                            <th className="p-1"></th>
-                                            <th className="p-1"><input type="text" placeholder="Filtrar..." value={internalColumnFilters.sku} onChange={e => handleColumnFilterChange('sku', e.target.value)} className="w-full p-1 text-sm text-gray-700 border rounded" /></th>
-                                            <th className="p-1"><input type="text" placeholder="Filtrar..." value={internalColumnFilters.descripcion} onChange={e => handleColumnFilterChange('descripcion', e.target.value)} className="w-full p-1 text-sm text-gray-700 border rounded" /></th>
-                                            <th className="p-1"><input type="text" placeholder="Filtrar..." value={internalColumnFilters.numeroDePallet} onChange={e => handleColumnFilterChange('numeroDePallet', e.target.value)} className="w-full p-1 text-sm text-gray-700 border rounded" /></th>
-                                            <th className="p-1"><input type="text" placeholder="Filtrar..." value={internalColumnFilters.lotesProduccion} onChange={e => handleColumnFilterChange('lotesProduccion', e.target.value)} className="w-full p-1 text-sm text-gray-700 border rounded" /></th>
-                                            <th className="p-1"><input type="text" placeholder="Sí / No" value={internalColumnFilters.despachado} onChange={e => handleColumnFilterChange('despachado', e.target.value)} className="w-full p-1 text-sm text-gray-700 border rounded" /></th>
-                                            <th className="p-1"><input type="text" placeholder="Filtrar..." value={internalColumnFilters.cliente} onChange={e => handleColumnFilterChange('cliente', e.target.value)} className="w-full p-1 text-sm text-gray-700 border rounded" /></th>
-                                            <th colSpan="4" className="p-1"></th>
-                                        </tr>
-                                    </thead>
-                                    <tbody class="bg-white divide-y divide-gray-200">
-                                        {allData.length > 0 ? allData.map((item) => {
-                                                const isDespachado = item.despachado;
+                            <table className={`min-w-full divide-y divide-gray-200 ${isGridLoading ? 'opacity-50' : ''}`}>
+                                <thead className="bg-gray-800 text-white sticky top-0 z-10">
+                                    <tr>
+                                        <th className="px-1 py-3 text-left text-xs font-medium uppercase tracking-wider">
+                                            <button onClick={() => requestSort('isStored')} className="flex items-center space-x-1 hover:text-gray-300">
+                                                <span>Almacenado</span>
+                                                {sortConfig.key === 'isStored' ? (
+                                                    sortConfig.direction === 'ascending' ? <i className="fas fa-sort-up"></i> : <i className="fas fa-sort-down"></i>
+                                                ) : <i className="fas fa-sort text-gray-500"></i>}
+                                            </button>
+                                        </th>
+                                        <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">
+                                            <button onClick={() => requestSort('sku')} className="flex items-center space-x-1 hover:text-gray-300">
+                                                <span>SKU</span>
+                                                {sortConfig.key === 'sku' ? (
+                                                    sortConfig.direction === 'ascending' ? <i className="fas fa-sort-up"></i> : <i className="fas fa-sort-down"></i>
+                                                ) : <i className="fas fa-sort text-gray-500"></i>}
+                                            </button>
+                                        </th>
+                                        <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">
+                                            <button onClick={() => requestSort('descripcion')} className="flex items-center space-x-1 hover:text-gray-300">
+                                                <span>Descripción</span>
+                                                {sortConfig.key === 'descripcion' ? (
+                                                    sortConfig.direction === 'ascending' ? <i className="fas fa-sort-up"></i> : <i className="fas fa-sort-down"></i>
+                                                ) : <i className="fas fa-sort text-gray-500"></i>}
+                                            </button>
+                                        </th>
+                                        <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">
+                                            <button onClick={() => requestSort('numeroDePallet')} className="flex items-center space-x-1 hover:text-gray-300">
+                                                <span>Nº Pallet</span>
+                                                {sortConfig.key === 'numeroDePallet' ? (
+                                                    sortConfig.direction === 'ascending' ? <i className="fas fa-sort-up"></i> : <i className="fas fa-sort-down"></i>
+                                                ) : <i className="fas fa-sort text-gray-500"></i>}
+                                            </button>
+                                        </th>
+                                        <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">
+                                            <button onClick={() => requestSort('lotesProduccion')} className="flex items-center space-x-1 hover:text-gray-300">
+                                                <span>Lotes Prod.</span>
+                                                {sortConfig.key === 'lotesProduccion' ? (
+                                                    sortConfig.direction === 'ascending' ? <i className="fas fa-sort-up"></i> : <i className="fas fa-sort-down"></i>
+                                                ) : <i className="fas fa-sort text-gray-500"></i>}
+                                            </button>
+                                        </th>
+                                        <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">
+                                            <button onClick={() => requestSort('despachado')} className="flex items-center space-x-1 hover:text-gray-300">
+                                                <span>Despachado</span>
+                                                {sortConfig.key === 'despachado' ? (
+                                                    sortConfig.direction === 'ascending' ? <i className="fas fa-sort-up"></i> : <i className="fas fa-sort-down"></i>
+                                                ) : <i className="fas fa-sort text-gray-500"></i>}
+                                            </button>
+                                        </th>
+                                        <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">
+                                            <button onClick={() => requestSort('cliente')} className="flex items-center space-x-1 hover:text-gray-300">
+                                                <span>Cliente</span>
+                                                {sortConfig.key === 'cliente' ? (
+                                                    sortConfig.direction === 'ascending' ? <i className="fas fa-sort-up"></i> : <i className="fas fa-sort-down"></i>
+                                                ) : <i className="fas fa-sort text-gray-500"></i>}
+                                            </button>
+                                        </th>
+                                        <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">
+                                            <button onClick={() => requestSort('fechaProduccion')} className="flex items-center space-x-1 hover:text-gray-300">
+                                                <span>F. Prod.</span>
+                                                {sortConfig.key === 'fechaProduccion' ? (
+                                                    sortConfig.direction === 'ascending' ? <i className="fas fa-sort-up"></i> : <i className="fas fa-sort-down"></i>
+                                                ) : <i className="fas fa-sort text-gray-500"></i>}
+                                            </button>
+                                        </th>
+                                        <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">
+                                            <button onClick={() => requestSort('cantidad')} className="flex items-center space-x-1 hover:text-gray-300">
+                                                <span>Cantidad</span>
+                                                {sortConfig.key === 'cantidad' ? (
+                                                    sortConfig.direction === 'ascending' ? <i className="fas fa-sort-up"></i> : <i className="fas fa-sort-down"></i>
+                                                ) : <i className="fas fa-sort text-gray-500"></i>}
+                                            </button>
+                                        </th>
+                                        <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">
+                                            <button onClick={() => requestSort('unidadMedida')} className="flex items-center space-x-1 hover:text-gray-300">
+                                                <span>U.M.</span>
+                                                {sortConfig.key === 'unidadMedida' ? (
+                                                    sortConfig.direction === 'ascending' ? <i className="fas fa-sort-up"></i> : <i className="fas fa-sort-down"></i>
+                                                ) : <i className="fas fa-sort text-gray-500"></i>}
+                                            </button>
+                                        </th>
+                                        <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Acciones</th>
+                                    </tr>
+                                    <tr class="bg-gray-200">
+                                        <th className="p-1"></th>
+                                        <th className="p-1"><input type="text" placeholder="Filtrar..." value={internalColumnFilters.sku} onChange={e => handleColumnFilterChange('sku', e.target.value)} className="w-full p-1 text-sm text-gray-700 border rounded" /></th>
+                                        <th className="p-1"><input type="text" placeholder="Filtrar..." value={internalColumnFilters.descripcion} onChange={e => handleColumnFilterChange('descripcion', e.target.value)} className="w-full p-1 text-sm text-gray-700 border rounded" /></th>
+                                        <th className="p-1"><input type="text" placeholder="Filtrar..." value={internalColumnFilters.numeroDePallet} onChange={e => handleColumnFilterChange('numeroDePallet', e.target.value)} className="w-full p-1 text-sm text-gray-700 border rounded" /></th>
+                                        <th className="p-1"><input type="text" placeholder="Filtrar..." value={internalColumnFilters.lotesProduccion} onChange={e => handleColumnFilterChange('lotesProduccion', e.target.value)} className="w-full p-1 text-sm text-gray-700 border rounded" /></th>
+                                        <th className="p-1"><input type="text" placeholder="Sí / No" value={internalColumnFilters.despachado} onChange={e => handleColumnFilterChange('despachado', e.target.value)} className="w-full p-1 text-sm text-gray-700 border rounded" /></th>
+                                        <th className="p-1"><input type="text" placeholder="Filtrar..." value={internalColumnFilters.cliente} onChange={e => handleColumnFilterChange('cliente', e.target.value)} className="w-full p-1 text-sm text-gray-700 border rounded" /></th>
+                                        <th colSpan="4" className="p-1"></th>
+                                    </tr>
+                                </thead>
+                                <tbody class="bg-white divide-y divide-gray-200">
+                                    {allData.length > 0 ? allData.map((item) => {
+                                            const isDespachado = item.despachado;
 
-                                                const clients = item.cliente ? item.cliente.split('#').filter(Boolean) : [];
+                                            const clients = item.cliente ? item.cliente.split('#').filter(Boolean) : [];
 
-                                                const noteAction = () => {
-                                                    if (item.hasNote) {
-                                                        setObservationModal({ isOpen: true, text: item.noteText });
-                                                    }
-                                                };
-
-                                                let rowClassName = 'transition-colors';
-                                                if (isTransferMode) {
-                                                    rowClassName += ' cursor-pointer';
-                                                    if (transferSelection[item.id]) {
-                                                        rowClassName += ' bg-indigo-100 hover:bg-indigo-200';
-                                                    } else {
-                                                        rowClassName += ' hover:bg-gray-100';
-                                                    }
-                                                } else if (item.hasNote) {
-                                                    rowClassName += ' bg-yellow-50 hover:bg-yellow-100 cursor-pointer';
-                                                } else {
-                                                    rowClassName += ' hover:bg-gray-50';
+                                            const noteAction = () => {
+                                                if (item.hasNote) {
+                                                    setObservationModal({ isOpen: true, text: item.noteText });
                                                 }
+                                            };
 
-                                                const handleRowClick = () => {
-                                                    if (isTransferMode) {
-                                                        handleToggleTransferSelection(item.id);
-                                                    } else {
-                                                        noteAction();
-                                                    }
-                                                };
+                                            let rowClassName = 'transition-colors';
+                                            if (isTransferMode) {
+                                                rowClassName += ' cursor-pointer';
+                                                if (transferSelection[item.id]) {
+                                                    rowClassName += ' bg-indigo-100 hover:bg-indigo-200';
+                                                } else {
+                                                    rowClassName += ' hover:bg-gray-100';
+                                                }
+                                            } else if (item.hasNote) {
+                                                rowClassName += ' bg-yellow-50 hover:bg-yellow-100 cursor-pointer';
+                                            } else {
+                                                rowClassName += ' hover:bg-gray-50';
+                                            }
 
-                                                return (
-                                                <tr key={item.id} className={rowClassName} 
-                                                    onClick={handleRowClick}
-                                                    onTouchStart={() => !isTransferMode && handlePressStart(noteAction)} 
-                                                    onTouchEnd={() => !isTransferMode && handlePressEnd()}
-                                                    onMouseDown={() => !isTransferMode && handlePressStart(noteAction)} 
-                                                    onMouseUp={() => !isTransferMode && handlePressEnd()} 
-                                                    onMouseLeave={() => !isTransferMode && handlePressEnd()}>
-                                                    <td className="px-1 py-2 text-center align-middle">
-                                                        <input type="checkbox" className={`h-5 w-5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 ${isTransferMode ? 'cursor-pointer' : ''}`}
-                                                            checked={isTransferMode ? !!transferSelection[item.id] : item.isStored}
-                                                            disabled={!isTransferMode}
-                                                            onChange={() => handleToggleTransferSelection(item.id)}
-                                                            onClick={(e) => e.stopPropagation()}
-                                                        />
-                                                    </td>
-                                                    <td className="px-4 py-2 whitespace-nowrap text-sm font-medium text-gray-900">{item.sku}</td>
-                                                    <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-600">{item.descripcion}</td>
-                                                    <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-600 font-semibold">
-                                                        {item.numeroDePallet} {item.hasNote && <span className="text-red-500 ml-1">(*)</span>}
-                                                    </td>
-                                                    <td className="px-4 py-2 text-sm text-gray-600 align-middle">
-                                                        {item.lotesProduccion && item.lotesProduccion.includes('#') ? (
-                                                            <div className="flex flex-wrap gap-1">{item.lotesProduccion.split('#').map((lote, i) => (<span key={`${lote}-${i}`} className="px-2.5 py-0.5 text-xs font-semibold bg-gray-100 text-gray-800 rounded-full">{lote}</span>))}
-                                                            </div>
-                                                        ) : ( item.lotesProduccion )}
-                                                    </td>
-                                                    <td className="px-4 py-2 whitespace-nowrap text-sm font-semibold"><span className={isDespachado ? 'text-green-600' : 'text-red-600'}>{isDespachado ? 'Sí' : 'No'}</span></td>
-                                                    <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-600">
-                                                        <div className="flex flex-wrap gap-1">{clients.map(client => (
-                                                            <div key={client} className="relative">
-                                                                <span 
-                                                                    className="px-2.5 py-0.5 text-xs font-semibold bg-indigo-100 text-indigo-800 rounded-full"
-                                                                >
-                                                                    {client}
-                                                                </span>
-                                                            </div>))}
+                                            const handleRowClick = () => {
+                                                if (isTransferMode) {
+                                                    handleToggleTransferSelection(item.id);
+                                                } else {
+                                                    noteAction();
+                                                }
+                                            };
+
+                                            return (
+                                            <tr key={item.id} className={rowClassName} 
+                                                onClick={handleRowClick}
+                                                onTouchStart={() => !isTransferMode && handlePressStart(noteAction)} 
+                                                onTouchEnd={() => !isTransferMode && handlePressEnd()}
+                                                onMouseDown={() => !isTransferMode && handlePressStart(noteAction)} 
+                                                onMouseUp={() => !isTransferMode && handlePressEnd()} 
+                                                onMouseLeave={() => !isTransferMode && handlePressEnd()}>
+                                                <td className="px-1 py-2 text-center align-middle">
+                                                    <input type="checkbox" className={`h-5 w-5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 ${isTransferMode ? 'cursor-pointer' : ''}`}
+                                                        checked={isTransferMode ? !!transferSelection[item.id] : item.isStored}
+                                                        disabled={!isTransferMode}
+                                                        onChange={() => handleToggleTransferSelection(item.id)}
+                                                        onClick={(e) => e.stopPropagation()}
+                                                    />
+                                                </td>
+                                                <td className="px-4 py-2 whitespace-nowrap text-sm font-medium text-gray-900">{item.sku}</td>
+                                                <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-600">{item.descripcion}</td>
+                                                <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-600 font-semibold">
+                                                    {item.numeroDePallet} {item.hasNote && <span className="text-red-500 ml-1">(*)</span>}
+                                                </td>
+                                                <td className="px-4 py-2 text-sm text-gray-600 align-middle">
+                                                    {item.lotesProduccion && item.lotesProduccion.includes('#') ? (
+                                                        <div className="flex flex-wrap gap-1">{item.lotesProduccion.split('#').map((lote, i) => (<span key={`${lote}-${i}`} className="px-2.5 py-0.5 text-xs font-semibold bg-gray-100 text-gray-800 rounded-full">{lote}</span>))}
                                                         </div>
-                                                    </td>
-                                                    <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-600">{item.fechaProduccion}</td>
-                                                    <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-600">{item.cantidad}</td>
-                                                    <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-600">{item.unidadMedida}</td>
-                                                    <td className="px-4 py-2 text-center">
-                                                        <div className="relative" ref={activeActionMenu === item.id ? actionMenuRef : null}>
-                                                            <button 
-                                                                onClick={(e) => { e.stopPropagation(); setActiveActionMenu(activeActionMenu === item.id ? null : item.id); }} 
-                                                                disabled={isSaving || isTransferMode}
-                                                                className="text-gray-500 hover:text-blue-600 p-2 rounded-full disabled:opacity-50 disabled:cursor-not-allowed"
+                                                    ) : ( item.lotesProduccion )}
+                                                </td>
+                                                <td className="px-4 py-2 whitespace-nowrap text-sm font-semibold"><span className={isDespachado ? 'text-green-600' : 'text-red-600'}>{isDespachado ? 'Sí' : 'No'}</span></td>
+                                                <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-600">
+                                                    <div className="flex flex-wrap gap-1">{clients.map(client => (
+                                                        <div key={client} className="relative">
+                                                            <span 
+                                                                className="px-2.5 py-0.5 text-xs font-semibold bg-indigo-100 text-indigo-800 rounded-full"
                                                             >
-                                                                <i className="fas fa-ellipsis-v"></i>
-                                                            </button>
-                                                            {activeActionMenu === item.id && (
-                                                                <div className="absolute right-0 mt-2 w-56 bg-white rounded-md shadow-lg border z-30">
-                                                                    <ul className="text-gray-700 text-left">
-                                                                        <li><button onClick={(e) => { e.stopPropagation(); handleOpenNoteModal(item); setActiveActionMenu(null); }} className="w-full text-left hover:bg-gray-100 p-3 flex items-center"><i className="fas fa-sticky-note w-6 mr-2 text-yellow-500"></i>{item.hasNote ? 'Editar/Ver Nota' : 'Agregar Nota'}</button></li>
-                                                                        <li><a href={`generarqr.html?edit=${item.numeroDePallet}`} className="w-full text-left hover:bg-gray-100 p-3 flex items-center"><i className="fas fa-edit w-6 mr-2 text-blue-500"></i>Editar</a></li>
-                                                                        <li><button onClick={(e) => { e.stopPropagation(); handleReprint(item); setActiveActionMenu(null); }} className="w-full text-left hover:bg-gray-100 p-3 flex items-center"><i className="fas fa-print w-6 mr-2 text-blue-500"></i>Reimprimir Etiqueta</button></li>
-                                                                        <li><hr className="my-1"/></li>
-                                                                        <li><button onClick={(e) => { e.stopPropagation(); handleDeleteRow(item.id); setActiveActionMenu(null); }} className="w-full text-left hover:bg-gray-100 p-3 flex items-center"><i className="fas fa-trash-alt w-6 mr-2 text-red-500"></i>Eliminar Fila</button></li>
-                                                                    </ul>
-                                                                </div>
-                                                            )}
-                                                        </div>
-                                                    </td>
-                                                </tr>
-                                                )
-                                            }) : (
-                                                <tr><td colSpan="11" className="px-4 py-8 text-center text-sm text-gray-500">No se encontraron registros con los filtros aplicados.</td></tr>
+                                                                {client}
+                                                            </span>
+                                                        </div>))}
+                                                    </div>
+                                                </td>
+                                                <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-600">{item.fechaProduccion}</td>
+                                                <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-600">{item.cantidad}</td>
+                                                <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-600">{item.unidadMedida}</td>
+                                                <td className="px-4 py-2 text-center">
+                                                    <div className="relative" ref={activeActionMenu === item.id ? actionMenuRef : null}>
+                                                        <button 
+                                                            onClick={(e) => { e.stopPropagation(); setActiveActionMenu(activeActionMenu === item.id ? null : item.id); }} 
+                                                            disabled={isSaving || isTransferMode}
+                                                            className="text-gray-500 hover:text-blue-600 p-2 rounded-full disabled:opacity-50 disabled:cursor-not-allowed"
+                                                        >
+                                                            <i className="fas fa-ellipsis-v"></i>
+                                                        </button>
+                                                        {activeActionMenu === item.id && (
+                                                            <div className="absolute right-0 mt-2 w-56 bg-white rounded-md shadow-lg border z-30">
+                                                                <ul className="text-gray-700 text-left">
+                                                                    <li><button onClick={(e) => { e.stopPropagation(); handleOpenNoteModal(item); setActiveActionMenu(null); }} className="w-full text-left hover:bg-gray-100 p-3 flex items-center"><i className="fas fa-sticky-note w-6 mr-2 text-yellow-500"></i>{item.hasNote ? 'Editar/Ver Nota' : 'Agregar Nota'}</button></li>
+                                                                    <li><a href={`generarqr.html?edit=${item.numeroDePallet}`} className="w-full text-left hover:bg-gray-100 p-3 flex items-center"><i className="fas fa-edit w-6 mr-2 text-blue-500"></i>Editar</a></li>
+                                                                    <li><button onClick={(e) => { e.stopPropagation(); handleReprint(item); setActiveActionMenu(null); }} className="w-full text-left hover:bg-gray-100 p-3 flex items-center"><i className="fas fa-print w-6 mr-2 text-blue-500"></i>Reimprimir Etiqueta</button></li>
+                                                                    <li><hr className="my-1"/></li>
+                                                                    <li><button onClick={(e) => { e.stopPropagation(); handleDeleteRow(item.id); setActiveActionMenu(null); }} className="w-full text-left hover:bg-gray-100 p-3 flex items-center"><i className="fas fa-trash-alt w-6 mr-2 text-red-500"></i>Eliminar Fila</button></li>
+                                                                </ul>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </td>
+                                            </tr>
                                             )
-                                        }
-                                    </tbody>
-                                </table>
-                            </div>
-
-                            {/* Mobile Card View */}
-                            <div className="md:hidden space-y-4">
-                                {allData.length > 0 ? allData.map((item) => (
-                                    <MobileCard 
-                                        key={item.id} 
-                                        item={item} 
-                                        isTransferMode={isTransferMode}
-                                        transferSelection={transferSelection}
-                                        activeActionMenu={activeActionMenu}
-                                        isSaving={isSaving}
-                                        actionMenuRef={actionMenuRef}
-                                        handleToggleTransferSelection={handleToggleTransferSelection}
-                                        setObservationModal={setObservationModal}
-                                        setActiveActionMenu={setActiveActionMenu}
-                                        handleOpenNoteModal={handleOpenNoteModal}
-                                        handleReprint={handleReprint}
-                                        handleDeleteRow={handleDeleteRow}
-                                    />
-                                )) : (
-                                    <div className="px-4 py-8 text-center text-sm text-gray-500">No se encontraron registros con los filtros aplicados.</div>
-                                )}
-                            </div>
+                                        }) : (
+                                            <tr><td colSpan="11" className="px-4 py-8 text-center text-sm text-gray-500">No se encontraron registros con los filtros aplicados.</td></tr>
+                                        )
+                                    }
+                                </tbody>
+                            </table>
                         </div>
                     </div>
                 </div>
             );
         };
-
-        const MobileCard = ({ item, isTransferMode, transferSelection, activeActionMenu, isSaving, actionMenuRef, handleToggleTransferSelection, setObservationModal, setActiveActionMenu, handleOpenNoteModal, handleReprint, handleDeleteRow }) => {
-            const isDespachado = item.despachado;
-            const clients = item.cliente ? item.cliente.split('#').filter(Boolean) : [];
-
-            const noteAction = () => {
-                if (item.hasNote) {
-                    setObservationModal({ isOpen: true, text: item.noteText });
-                }
-            };
-
-            let cardClassName = 'bg-white p-4 rounded-lg shadow-md border-l-4 transition-colors';
-            if (isTransferMode) {
-                cardClassName += ' cursor-pointer';
-                if (transferSelection[item.id]) {
-                    cardClassName += ' bg-indigo-100 border-indigo-500';
-                } else {
-                    cardClassName += ' border-gray-200 hover:bg-gray-50';
-                }
-            } else if (item.hasNote) {
-                cardClassName += ' bg-yellow-50 border-yellow-400 cursor-pointer';
-            } else {
-                cardClassName += ' border-gray-200';
-            }
-
-            const handleCardClick = () => {
-                if (isTransferMode) {
-                    handleToggleTransferSelection(item.id);
-                } else {
-                    noteAction();
-                }
-            };
-
-            return (
-                <div key={item.id} className={cardClassName} onClick={handleCardClick}>
-                    <div className="flex justify-between items-start">
-                        <div className="flex-grow">
-                            <div className="flex items-center">
-                                <span className={`font-bold text-lg ${isDespachado ? 'text-green-600' : 'text-red-600'}`}>{item.sku}</span>
-                                {item.hasNote && <span className="text-yellow-500 ml-2"><i className="fas fa-sticky-note"></i></span>}
-                            </div>
-                            <p className="text-sm text-gray-600 truncate">{item.descripcion}</p>
-                        </div>
-                        <div className="relative flex-shrink-0 ml-2" ref={activeActionMenu === item.id ? actionMenuRef : null}>
-                            <button 
-                                onClick={(e) => { e.stopPropagation(); setActiveActionMenu(activeActionMenu === item.id ? null : item.id); }} 
-                                disabled={isSaving || isTransferMode}
-                                className="text-gray-500 hover:text-blue-600 p-2 rounded-full disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                                <i className="fas fa-ellipsis-v"></i>
-                            </button>
-                            {activeActionMenu === item.id && (
-                                <div className="absolute right-0 mt-2 w-56 bg-white rounded-md shadow-lg border z-30">
-                                    <ul className="text-gray-700 text-left">
-                                        <li><button onClick={(e) => { e.stopPropagation(); handleOpenNoteModal(item); setActiveActionMenu(null); }} className="w-full text-left hover:bg-gray-100 p-3 flex items-center"><i className="fas fa-sticky-note w-6 mr-2 text-yellow-500"></i>{item.hasNote ? 'Editar/Ver Nota' : 'Agregar Nota'}</button></li>
-                                        <li><a href={`generarqr.html?edit=${item.numeroDePallet}`} className="w-full text-left hover:bg-gray-100 p-3 flex items-center"><i className="fas fa-edit w-6 mr-2 text-blue-500"></i>Editar</a></li>
-                                        <li><button onClick={(e) => { e.stopPropagation(); handleReprint(item); setActiveActionMenu(null); }} className="w-full text-left hover:bg-gray-100 p-3 flex items-center"><i className="fas fa-print w-6 mr-2 text-blue-500"></i>Reimprimir</button></li>
-                                        <li><hr className="my-1"/></li>
-                                        <li><button onClick={(e) => { e.stopPropagation(); handleDeleteRow(item.id); setActiveActionMenu(null); }} className="w-full text-left hover:bg-gray-100 p-3 flex items-center"><i className="fas fa-trash-alt w-6 mr-2 text-red-500"></i>Eliminar</button></li>
-                                    </ul>
-                                </div>
-                            )}
-                        </div>
-                    </div>
-
-                    <div className="mt-4 grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-                        <div>
-                            <div className="font-semibold text-gray-500">Nº Pallet</div>
-                            <div className="text-gray-800 font-mono">{item.numeroDePallet}</div>
-                        </div>
-                        <div>
-                            <div className="font-semibold text-gray-500">Despachado</div>
-                            <div className={`font-bold ${isDespachado ? 'text-green-600' : 'text-red-600'}`}>{isDespachado ? 'Sí' : 'No'}</div>
-                        </div>
-                        <div>
-                            <div className="font-semibold text-gray-500">Cantidad</div>
-                            <div className="text-gray-800">{item.cantidad} <span className="text-gray-500">{item.unidadMedida}</span></div>
-                        </div>
-                        <div>
-                            <div className="font-semibold text-gray-500">F. Prod.</div>
-                            <div className="text-gray-800">{item.fechaProduccion}</div>
-                        </div>
-                        <div className="col-span-2">
-                            <div className="font-semibold text-gray-500">Lotes</div>
-                            <div className="flex flex-wrap gap-1 mt-1">
-                                {item.lotesProduccion && item.lotesProduccion.split('#').map((lote, i) => (
-                                    <span key={`${lote}-${i}`} className="px-2 py-0.5 text-xs font-semibold bg-gray-100 text-gray-800 rounded-full">{lote}</span>
-                                ))}
-                            </div>
-                        </div>
-                        {clients.length > 0 && (
-                            <div className="col-span-2">
-                                <div className="font-semibold text-gray-500">Cliente(s)</div>
-                                <div className="flex flex-wrap gap-1 mt-1">
-                                    {clients.map(client => (
-                                        <span key={client} className="px-2 py-0.5 text-xs font-semibold bg-indigo-100 text-indigo-800 rounded-full">{client}</span>
-                                    ))}
-                                </div>
-                            </div>
-                        )}
-                    </div>
-                </div>
-            );
-        };
-
         const root = createRoot(document.getElementById('root'));
         root.render(<App />);
     </script>
