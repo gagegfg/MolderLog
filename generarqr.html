@@ -71,6 +71,19 @@
         @keyframes spin {
             to { transform: rotate(360deg); }
         }
+        @keyframes fade-in-up {
+            from {
+                opacity: 0;
+                transform: translateY(20px) scale(0.95);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0) scale(1);
+            }
+        }
+        .animate-fade-in-up {
+            animation: fade-in-up 0.3s ease-out forwards;
+        }
     </style>
 </head>
 <body class="bg-gray-100 font-sans">
@@ -98,14 +111,7 @@
         // =================================================================
         // ### CONFIGURACIÓN DE SUPABASE - CARGADA DESDE config.js ###
         // =================================================================
-        // Las variables SUPABASE_URL y SUPABASE_KEY se cargan desde config.js,
-        // un archivo que se genera en el build de Vercel o se crea
-        // manualmente para el desarrollo local.
-        // =================================================================
-
-        // Inicializa el cliente de Supabase.
         const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-
 
         const Toast = ({ message, type, onHide }) => {
             useEffect(() => {
@@ -146,6 +152,70 @@
             return showToast;
         };
 
+        const DuplicatePalletModal = ({ data, onContinue, onCancel }) => {
+            if (!data) return null;
+
+            const formatDate = (dateString) => {
+                if (!dateString) return 'N/A';
+                const date = new Date(dateString);
+                // Adjust for timezone offset to display the correct date
+                const userTimezoneOffset = date.getTimezoneOffset() * 60000;
+                return new Date(date.getTime() + userTimezoneOffset).toLocaleDateString('es-ES', {
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric'
+                });
+            };
+            
+            const formatDateTime = (dateString) => {
+                if (!dateString) return 'N/A';
+                 const date = new Date(dateString);
+                 return date.toLocaleString('es-ES', {
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                });
+            };
+
+            return (
+                <div className="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm flex justify-center items-center z-50 p-4">
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl transform transition-all duration-300 scale-95 animate-fade-in-up">
+                        <div className="bg-amber-500 text-white p-5 rounded-t-2xl flex items-center justify-between">
+                            <h2 className="text-2xl font-bold flex items-center"><i className="fas fa-exclamation-triangle mr-3"></i>Advertencia: Posible Duplicado</h2>
+                        </div>
+                        <div className="p-6">
+                            <p className="text-gray-700 text-lg mb-5">Se encontró un pallet existente con el mismo SKU y Lote. Por favor, revise los detalles antes de continuar.</p>
+                            
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border-2 border-amber-200 bg-amber-50 rounded-lg p-4">
+                                <div className="font-semibold text-gray-600">Desc. SKU:</div>
+                                <div className="font-bold text-gray-800 md:col-span-1">{data.articulos.descripcioncorta}</div>
+
+                                <div className="font-semibold text-gray-600">Nº de Pallet:</div>
+                                <div className="font-bold text-gray-800">{data.nropallet}</div>
+
+                                <div className="font-semibold text-gray-600">Fecha de Generación:</div>
+                                <div className="font-bold text-gray-800">{formatDateTime(data.created_at)}</div>
+
+                                <div className="font-semibold text-gray-600">Fecha de Producción:</div>
+                                <div className="font-bold text-gray-800">{formatDate(data.fechaproduccion)}</div>
+
+                                <div className="font-semibold text-gray-600">Cantidad:</div>
+                                <div className="font-bold text-gray-800">{data.cantidad}</div>
+                            </div>
+
+                            <p className="text-gray-600 text-md mt-5">¿Desea crear un nuevo pallet con estos datos de todas formas?</p>
+                        </div>
+                        <div className="bg-gray-100 p-4 rounded-b-2xl flex justify-end gap-4">
+                            <button onClick={onCancel} className="py-2 px-6 bg-gray-600 text-white font-semibold rounded-lg shadow-md hover:bg-gray-700 transition-colors duration-200">Cancelar</button>
+                            <button onClick={onContinue} className="py-2 px-6 bg-green-600 text-white font-semibold rounded-lg shadow-md hover:bg-green-700 transition-colors duration-200">Continuar y Guardar</button>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
         const AppWrapper = () => {
             return <App />;
         };
@@ -162,6 +232,8 @@
             const [cantidadCopias, setCantidadCopias] = useState(2);
             const [editMode, setEditMode] = useState(false);
             const [isAlreadyTransferred, setIsAlreadyTransferred] = useState(false);
+            const [showDuplicateModal, setShowDuplicateModal] = useState(false);
+            const [duplicateData, setDuplicateData] = useState(null);
             
             useEffect(() => {
                 const urlParams = new URLSearchParams(window.location.search);
@@ -321,7 +393,7 @@
                     try {
                         const { data, error } = await supabaseClient
                             .from('articulos')
-                            .select('tiposku, sku, descriciolarga, descripcioncorta, rne, rnpa');
+                            .select('idsku, tiposku, sku, descriciolarga, descripcioncorta, rne, rnpa');
 
                         if (error) {
                             console.error("Error fetching articulos:", error);
@@ -329,6 +401,7 @@
                         }
 
                         const parsedArticulos = data.map(item => ({
+                            idsku: item.idsku,
                             tipo: item.tiposku?.trim().toUpperCase(),
                             sku: item.sku?.trim(),
                             descripcionLarga: item.descriciolarga?.trim(),
@@ -656,28 +729,17 @@
                 }
             };
 
-            const handleGenerateAndPrintPDF = async () => {
-                if (isSaving) return;
-                setIsSaving(true);
-
-                const numCopias = parseInt(cantidadCopias, 10);
-                let palletNum = parseInt(numeroDePallet, 10);
-
-                if (isNaN(numCopias) || numCopias < 1 || isNaN(palletNum) || !previewPdfUrl) {
-                    showToast("Genere una vista previa y verifique los datos.", 'error');
-                    setIsSaving(false);
-                    return;
-                }
-
+            const proceedWithSave = async () => {
                 try {
                     const { data: maxPalletData, error: maxPalletError } = await supabaseClient.rpc('get_max_pallet_number');
                     if (maxPalletError) throw new Error('No se pudo verificar el último número de pallet en la DB.');
                     
                     const ultimoPalletGuardado = maxPalletData || 0;
+                    let palletNum = parseInt(numeroDePallet, 10);
 
                     if (palletNum <= ultimoPalletGuardado) {
                         const nuevoNumeroSugerido = ultimoPalletGuardado + 1;
-                        showToast(`¡Conflicto! El Pallet ${palletNum} ya fue usado. Se actualizó al Nº ${nuevoNumeroSugerido}. Por favor, revise la nueva vista previa y guarde de nuevo.`, 'error');
+                        showToast(`¡Conflicto! El Pallet ${palletNum} ya fue usado. Se actualizó al Nº ${nuevoNumeroSugerido}. Por favor, revise y guarde de nuevo.`, 'error');
                         setNumeroDePallet(nuevoNumeroSugerido);
                         setTimeout(() => handleGeneratePreview(true), 100);
                         setIsSaving(false);
@@ -712,6 +774,7 @@
                     }
 
                     const doc = new jsPDF('p', 'mm', 'a4');
+                    const numCopias = parseInt(cantidadCopias, 10);
                     for (let i = 0; i < numCopias; i++) {
                         if (i > 0) doc.addPage();
                         await drawLabelOnDoc(doc, data);
@@ -767,6 +830,58 @@
                     showToast(`ERROR CRÍTICO: ${error.message}`, 'error');
                 } finally {
                     setIsSaving(false);
+                    setShowDuplicateModal(false);
+                }
+            };
+
+            const handleGenerateAndPrintPDF = async () => {
+                if (isSaving) return;
+                setIsSaving(true);
+
+                const numCopias = parseInt(cantidadCopias, 10);
+                const palletNum = parseInt(numeroDePallet, 10);
+                const lotesValidos = lotesProduccion.some(lote => lote.trim() !== '');
+
+                if (isNaN(numCopias) || numCopias < 1 || isNaN(palletNum) || !previewPdfUrl || !lotesValidos || !selectedArticulo) {
+                    showToast("Genere una vista previa y verifique que todos los datos son correctos.", 'error');
+                    setIsSaving(false);
+                    return;
+                }
+                
+                try {
+                    const lotesParaQR = lotesProduccion.filter(lote => lote.trim() !== '').join('#');
+                    const { data: existing, error } = await supabaseClient
+                        .from('detallelotes')
+                        .select(`
+                            nropallet,
+                            created_at,
+                            fechaproduccion,
+                            cantidad,
+                            articulos ( idsku, descripcioncorta )
+                        `)
+                        .eq('idsku', selectedArticulo.idsku)
+                        .eq('loteproducto', lotesParaQR)
+                        .limit(1);
+
+                    if (error) {
+                        showToast(`Error al verificar duplicados: ${error.message}`, 'error');
+                        setIsSaving(false);
+                        return;
+                    }
+
+                    if (existing && existing.length > 0) {
+                        setDuplicateData(existing[0]);
+                        setShowDuplicateModal(true);
+                        // No continuamos, esperamos la decisión del usuario. El isSaving se resetea en el onCancel o en el finally de proceedWithSave
+                        return;
+                    }
+
+                    // Si no hay duplicados, proceder a guardar directamente.
+                    await proceedWithSave();
+
+                } catch (error) {
+                    showToast(`ERROR INESPERADO: ${error.message}`, 'error');
+                    setIsSaving(false);
                 }
             };
             
@@ -776,6 +891,19 @@
 
             return (
                 <Fragment>
+                    {showDuplicateModal && 
+                        <DuplicatePalletModal 
+                            data={duplicateData} 
+                            onContinue={() => {
+                                setShowDuplicateModal(false);
+                                proceedWithSave();
+                            }}
+                            onCancel={() => {
+                                setShowDuplicateModal(false);
+                                setIsSaving(false);
+                            }}
+                        />
+                    }
                     <div className="min-h-screen p-4 flex flex-col" style={{background: 'rgba(243, 244, 246, 0.8)'}}>
                         <div className="bg-white/30 backdrop-blur-lg border border-white/50 p-6 rounded-xl shadow-lg flex-grow">
                             <div className="flex justify-between items-center mb-6">
@@ -889,7 +1017,7 @@
                                             placeholder="Información adicional para el registro interno..."
                                         ></textarea>
                                     </div>
-                                    <button onClick={handleGeneratePreview} className="w-full bg-blue-600 text-white font-semibold py-3 px-4 rounded-md shadow-md hover:bg-blue-700 text-xl flex items-center justify-center">
+                                    <button onClick={() => handleGeneratePreview(false)} className="w-full bg-blue-600 text-white font-semibold py-3 px-4 rounded-md shadow-md hover:bg-blue-700 text-xl flex items-center justify-center">
                                         Generar Vista Previa
                                     </button>
                                 </div>
