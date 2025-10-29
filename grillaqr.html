@@ -240,6 +240,32 @@
             );
         };
 
+        const FilterControls = ({ isTransferMode, fechaDesde, setFechaDesde, fechaHasta, setFechaHasta, internalColumnFilters, handleColumnFilterChange, clearFilters }) => (
+            <div className="flex flex-col space-y-4">
+                {!isTransferMode && (
+                    <div className="flex flex-col sm:flex-row gap-4">
+                        <div className="flex-1">
+                            <label className="text-sm font-medium text-gray-700">Desde:</label>
+                            <input type="date" value={fechaDesde} onChange={e => setFechaDesde(e.target.value)} className="w-full mt-1 rounded-md border-gray-300 shadow-sm p-2 border"/>
+                        </div>
+                        <div className="flex-1">
+                            <label className="text-sm font-medium text-gray-700">Hasta:</label>
+                            <input type="date" value={fechaHasta} onChange={e => setFechaHasta(e.target.value)} className="w-full mt-1 rounded-md border-gray-300 shadow-sm p-2 border"/>
+                        </div>
+                    </div>
+                )}
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                    <input type="text" placeholder="Filtrar SKU..." value={internalColumnFilters.sku} onChange={e => handleColumnFilterChange('sku', e.target.value)} className="w-full p-2 text-sm text-gray-700 border rounded-md" />
+                    <input type="text" placeholder="Filtrar Descripción..." value={internalColumnFilters.descripcion} onChange={e => handleColumnFilterChange('descripcion', e.target.value)} className="w-full p-2 text-sm text-gray-700 border rounded-md" />
+                    <input type="text" placeholder="Filtrar Nº Pallet..." value={internalColumnFilters.numeroDePallet} onChange={e => handleColumnFilterChange('numeroDePallet', e.target.value)} className="w-full p-2 text-sm text-gray-700 border rounded-md" />
+                    <input type="text" placeholder="Filtrar Lotes..." value={internalColumnFilters.lotesProduccion} onChange={e => handleColumnFilterChange('lotesProduccion', e.target.value)} className="w-full p-2 text-sm text-gray-700 border rounded-md" />
+                    <input type="text" placeholder="Filtrar Despachado (Sí/No)" value={internalColumnFilters.despachado} onChange={e => handleColumnFilterChange('despachado', e.target.value)} className="w-full p-2 text-sm text-gray-700 border rounded-md" />
+                    <input type="text" placeholder="Filtrar Cliente..." value={internalColumnFilters.cliente} onChange={e => handleColumnFilterChange('cliente', e.target.value)} className="w-full p-2 text-sm text-gray-700 border rounded-md" />
+                </div>
+                <button onClick={clearFilters} className="bg-white text-gray-700 border border-gray-300 font-semibold py-2 px-4 rounded-lg shadow-sm hover:bg-gray-50 flex items-center justify-center"><i className="fas fa-times-circle mr-2"></i>Limpiar Filtros</button>
+            </div>
+        );
+
         const App = () => {
             const [supabaseClient, setSupabaseClient] = useState(null);
             const [appIsLoading, setAppIsLoading] = useState(true);
@@ -1101,32 +1127,6 @@
                 return null; 
             }
 
-            const FilterControls = () => (
-                <div className="flex flex-col space-y-4">
-                    {!isTransferMode && (
-                        <div className="flex flex-col sm:flex-row gap-4">
-                            <div className="flex-1">
-                                <label className="text-sm font-medium text-gray-700">Desde:</label>
-                                <input type="date" value={fechaDesde} onChange={e => setFechaDesde(e.target.value)} className="w-full mt-1 rounded-md border-gray-300 shadow-sm p-2 border"/>
-                            </div>
-                            <div className="flex-1">
-                                <label className="text-sm font-medium text-gray-700">Hasta:</label>
-                                <input type="date" value={fechaHasta} onChange={e => setFechaHasta(e.target.value)} className="w-full mt-1 rounded-md border-gray-300 shadow-sm p-2 border"/>
-                            </div>
-                        </div>
-                    )}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-                        <input type="text" placeholder="Filtrar SKU..." value={internalColumnFilters.sku} onChange={e => handleColumnFilterChange('sku', e.target.value)} className="w-full p-2 text-sm text-gray-700 border rounded-md" />
-                        <input type="text" placeholder="Filtrar Descripción..." value={internalColumnFilters.descripcion} onChange={e => handleColumnFilterChange('descripcion', e.target.value)} className="w-full p-2 text-sm text-gray-700 border rounded-md" />
-                        <input type="text" placeholder="Filtrar Nº Pallet..." value={internalColumnFilters.numeroDePallet} onChange={e => handleColumnFilterChange('numeroDePallet', e.target.value)} className="w-full p-2 text-sm text-gray-700 border rounded-md" />
-                        <input type="text" placeholder="Filtrar Lotes..." value={internalColumnFilters.lotesProduccion} onChange={e => handleColumnFilterChange('lotesProduccion', e.target.value)} className="w-full p-2 text-sm text-gray-700 border rounded-md" />
-                        <input type="text" placeholder="Filtrar Despachado (Sí/No)" value={internalColumnFilters.despachado} onChange={e => handleColumnFilterChange('despachado', e.target.value)} className="w-full p-2 text-sm text-gray-700 border rounded-md" />
-                        <input type="text" placeholder="Filtrar Cliente..." value={internalColumnFilters.cliente} onChange={e => handleColumnFilterChange('cliente', e.target.value)} className="w-full p-2 text-sm text-gray-700 border rounded-md" />
-                    </div>
-                     <button onClick={clearFilters} className="bg-white text-gray-700 border border-gray-300 font-semibold py-2 px-4 rounded-lg shadow-sm hover:bg-gray-50 flex items-center justify-center"><i className="fas fa-times-circle mr-2"></i>Limpiar Filtros</button>
-                </div>
-            );
-
             const PaginationControls = () => (
                  <div className="flex flex-col sm:flex-row justify-between items-center space-y-2 sm:space-y-0">
                     <p className="text-gray-600 font-semibold text-sm">{totalRecords} registro(s) encontrado(s)</p>
@@ -1256,7 +1256,7 @@
                             </button>
                             {showMobileFilters && (
                                 <div className="p-4 border-x border-b rounded-b-lg bg-gray-50 space-y-4">
-                                    <FilterControls />
+                                    <FilterControls isTransferMode={isTransferMode} fechaDesde={fechaDesde} setFechaDesde={setFechaDesde} fechaHasta={fechaHasta} setFechaHasta={setFechaHasta} internalColumnFilters={internalColumnFilters} handleColumnFilterChange={handleColumnFilterChange} clearFilters={clearFilters} />
                                     <hr/>
                                     <PaginationControls />
                                 </div>
