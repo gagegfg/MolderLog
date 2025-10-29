@@ -449,12 +449,24 @@
           return null;
       };
 
-      const handleScan = (value) => {
+      const verificarPalletEnSupabase = async (numeroDePallet) => {
+        const { data, error } = await supabaseClient
+          .from('vista_detallelotes_completa')
+          .select('*')
+          .eq('nropallet', numeroDePallet)
+          .single();
+
+        if (error) {
+          console.error('Error al verificar el pallet en Supabase:', error);
+          return null;
+        }
+        return data;
+      };
+
+      const handleScan = async (value) => {
         if (!value) return;
 
         let rawParts;
-        let finalParts;
-
         if (value.includes(';')) {
             rawParts = value.split(';');
         } else {
@@ -466,80 +478,76 @@
             setShowInfoModal(true);
             setMockQrValue('');
             return;
-        } else if (rawParts.length === 7) {
-            finalParts = rawParts;
-        } else {
-            const unidadMedida = rawParts[rawParts.length - 1];
-            const cantidad = rawParts[rawParts.length - 2];
-            const fechaProduccion = rawParts[rawParts.length - 3];
-            const lotesProduccion = rawParts[rawParts.length - 4];
-            const numeroDePallet = rawParts[rawParts.length - 5];
-            
-            const skuAndDescParts = rawParts.slice(0, rawParts.length - 5);
-            const sku = skuAndDescParts[0];
-            const descripcion = skuAndDescParts.slice(1).join('ñ');
-
-            finalParts = [sku, descripcion, numeroDePallet, lotesProduccion, fechaProduccion, cantidad, unidadMedida];
         }
 
-        const validationError = validateQrData(finalParts);
-        if (validationError) {
-            setModalContent({ title: 'Error en Datos de QR', message: validationError, errorData: value });
-            setShowInfoModal(true);
-            setMockQrValue('');
-            return;
-        }
+        const numeroDePalletScaneado = rawParts.length === 7 ? rawParts[2] : rawParts[rawParts.length - 5];
 
-        const [sku, descripcion, numeroDePallet, lotesProduccion, fechaProduccion, cantidad, unidadMedida] = finalParts;
-        
-        if (!skuList.includes(sku)) {
-            setModalContent({
-                title: 'Error de Artículo',
-                message: `El SKU "${sku}" no se encuentra en la lista de artículos válidos.`, 
-                errorData: value
-            });
-            setShowInfoModal(true);
-            setMockQrValue('');
-            return;
-        }
-        
-        if (items.some(item => item.numeroDePallet === numeroDePallet)) {
-          setModalContent({ title: 'Pallet Duplicado', message: `Error: El Pallet Nº "${numeroDePallet}" ya fue cargado.`, errorData: value });
+        if (items.some(item => item.numeroDePallet === numeroDePalletScaneado)) {
+          setModalContent({ title: 'Pallet Duplicado', message: `Error: El Pallet Nº "${numeroDePalletScaneado}" ya fue cargado en esta lista.`, errorData: value });
           setShowInfoModal(true);
           setMockQrValue('');
           return;
         }
 
-        const numericQuantity = parseSpanishNumber(cantidad);
+        const palletData = await verificarPalletEnSupabase(numeroDePalletScaneado);
 
-        const newItem = {
-            id: Date.now(),
-            sku,
-            descripcion,
-            numeroDePallet,
-            lotesProduccion: lotesProduccion.split('#').filter(Boolean),
-            fechaProduccion: formatDate(parseDate(fechaProduccion)),
-            cantidad: formatSpanishNumber(numericQuantity),
-            originalCantidad: numericQuantity,
-            cantidadEditada: false,
-            unidadMedida,
-            controlado: false,
-            nota: null,
-            tieneNota: false,
-            isExpanded: false,
+        if (!palletData) {
+            setModalContent({ title: 'Pallet Inexistente', message: `El Pallet Nº "${numeroDePalletScaneado}" no se encontró en la base de datos. Por favor, verifique el código QR.`, errorData: value });
+            setShowInfoModal(true);
+            setMockQrValue('');
+            return;
+        }
+
+        const proceedWithAdding = (data) => {
+            const numericQuantity = parseFloat(data.cantidad);
+            const newItem = {
+                id: Date.now(),
+                sku: data.sku,
+                descripcion: data.descripcion,
+                numeroDePallet: String(data.nropallet),
+                lotesProduccion: (data.lotesproduccion || '').split('#').filter(Boolean),
+                fechaProduccion: data.fechaproduccion ? new Date(data.fechaproduccion).toLocaleDateString('es-AR') : '',
+                cantidad: formatSpanishNumber(numericQuantity),
+                originalCantidad: numericQuantity,
+                cantidadEditada: false,
+                unidadMedida: data.unidadmedida,
+                controlado: false,
+                nota: data.notatext || null,
+                tieneNota: data.has_note,
+                isExpanded: false,
+            };
+
+            if (newItem.tieneNota) {
+                 setConfirmationModalContent({
+                    title: 'Observación Encontrada',
+                    message: `Se encontró la siguiente nota para este pallet:\n\n"${newItem.nota}"\n\n¿Desea adjuntar el pallet a la lista con esta observación?`,
+                    onConfirm: () => {
+                        setItems([newItem, ...items]);
+                        setShowConfirmationModal(false);
+                        setMockQrValue('');
+                        setTimeout(() => manualInputRef.current?.focus(), 0);
+                    },
+                    onCancel: () => {
+                        setShowConfirmationModal(false);
+                        setMockQrValue('');
+                        setTimeout(() => manualInputRef.current?.focus(), 0);
+                    }
+                });
+                setShowConfirmationModal(true);
+            } else {
+                setItems([newItem, ...items]);
+                setMockQrValue('');
+                setTimeout(() => manualInputRef.current?.focus(), 0);
+            }
         };
-        
-        const notaEncontrada = notesList.find(n => n.sku === sku && n.nroPallet === numeroDePallet);
-        if (notaEncontrada) {
+
+        if (palletData.despachado) {
             setConfirmationModalContent({
-                title: 'Observación Encontrada',
-                message: `Se encontró la siguiente nota para este pallet:\n\n"${notaEncontrada.nota}"\n\n¿Desea adjuntar el pallet a la lista con esta observación?`,
+                title: 'Advertencia: Pallet ya Despachado',
+                message: `El Pallet Nº "${palletData.nropallet}" ya fue despachado anteriormente.\n¿Desea agregarlo de todas formas a esta nueva lista?`,
                 onConfirm: () => {
-                    const itemConNota = { ...newItem, nota: notaEncontrada.nota, tieneNota: true };
-                    setItems([itemConNota, ...items]);
                     setShowConfirmationModal(false);
-                    setMockQrValue('');
-                    setTimeout(() => manualInputRef.current?.focus(), 0);
+                    proceedWithAdding(palletData);
                 },
                 onCancel: () => {
                     setShowConfirmationModal(false);
@@ -549,9 +557,7 @@
             });
             setShowConfirmationModal(true);
         } else {
-            setItems([newItem, ...items]);
-            setMockQrValue('');
-            setTimeout(() => manualInputRef.current?.focus(), 0);
+            proceedWithAdding(palletData);
         }
       };
 
