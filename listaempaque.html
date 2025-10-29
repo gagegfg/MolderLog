@@ -123,7 +123,51 @@
       const suggestionsRef = useRef(null);
 
       useEffect(() => {
-        // Lógica de carga inicial...
+        const loadInitialData = async () => {
+          const loaderProgress = document.getElementById('loader-progress');
+          const loaderStatus = document.getElementById('loader-status');
+          const staticLoader = document.getElementById('static-loader');
+
+          try {
+            // 1. Cargar clientes
+            loaderStatus.innerText = 'Cargando clientes...';
+            loaderProgress.style.width = '30%';
+            const { data: clients, error: clientError } = await supabaseClient
+              .from('clientes')
+              .select('razonsocial')
+              .order('razonsocial', { ascending: true });
+
+            if (clientError) throw new Error(`Error al cargar clientes: ${clientError.message}`);
+            
+            setClientList(clients.map(c => c.razonsocial));
+            loaderProgress.style.width = '70%';
+
+            // 2. Cargar otras cosas si es necesario (ej. jsPDF)
+            loaderStatus.innerText = 'Cargando librerías...';
+            if (window.jspdf) {
+              setIsPdfLibLoaded(true);
+            }
+            loaderProgress.style.width = '90%';
+
+            // 3. Finalizar carga
+            loaderStatus.innerText = 'Aplicación lista.';
+            loaderProgress.style.width = '100%';
+            
+            // Ocultar el loader y mostrar la app
+            setTimeout(() => {
+              if(staticLoader) staticLoader.style.display = 'none';
+              setIsAppReady(true);
+            }, 500);
+
+          } catch (error) {
+            loaderStatus.innerText = 'Error en la carga inicial.';
+            console.error(error);
+            setModalContent({ title: 'Error Crítico', message: `No se pudo cargar la aplicación. ${error.message}` });
+            setShowInfoModal(true);
+          }
+        };
+
+        loadInitialData();
       }, []);
 
       const ejecutarProcesoDeGuardado = async (itemsScaneados, cliente, legajo) => {
