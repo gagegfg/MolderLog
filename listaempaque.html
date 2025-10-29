@@ -339,641 +339,621 @@
 
 
 
-      const ejecutarProcesoDeGuardado = async (itemsScaneados, cliente, legajo) => {
-        if (itemsScaneados.length === 0) {
-            console.log("No hay items para actualizar.");
-            return true;
-        }
-
-        setIsGenerating(true);
-        
-        try {
-            // 1. Obtener el ID del cliente
-            const { data: clienteData, error: clienteError } = await supabaseClient
-                .from('clientes')
-                .select('idcli')
-                .eq('razonsocial', cliente)
-                .single();
-
-            if (clienteError || !clienteData) throw new Error(`Cliente "${cliente}" no encontrado en la base de datos.`);
-
-            // 2. Crear la entrada en la tabla `listaempaque`
-            const { data: listaData, error: listaError } = await supabaseClient
-                .from('listaempaque')
-                .insert({
-                    idcliente: clienteData.idcli,
-                    legajo: legajo
-                })
-                .select('idlista')
-                .single();
-
-            if (listaError) throw new Error(`Error al crear la lista de empaque: ${listaError.message}`);
-            const idListaNueva = listaData.idlista;
-
-            // 3. Preparar y crear las entradas en `detallelistaempaque`
-            const detallesParaInsertar = itemsScaneados.map(item => ({
-                idlista: idListaNueva,
-                nropallet: item.numeroDePallet,
-                lotesproduccion: item.lotesProduccion.join('#'),
-                cantidad: parseSpanishNumber(item.cantidad)
-            }));
-
-            const { error: detallesError } = await supabaseClient
-                .from('detallelistaempaque')
-                .insert(detallesParaInsertar);
-
-            if (detallesError) throw new Error(`Error al guardar los detalles de la lista: ${detallesError.message}`);
-
-            // 4. (Opcional) Marcar pallets como transferidos en `nropalettransferidos`
-            // Esta lógica puede adaptarse de la original si es necesario.
-
-            console.log(`¡Éxito! Se guardó la lista de empaque ID ${idListaNueva} con ${detallesParaInsertar.length} items.`);
-            showFeedback('¡Despacho registrado en Supabase!');
-            return true;
-
-        } catch (error) {
-            console.error("FALLO el proceso de guardado en Supabase:", error);
-            setModalContent({ title: 'Error de Sincronización', message: `No se pudo registrar la operación en la base de datos.\n\nDetalle: ${error.message}` });
-            setShowInfoModal(true);
-            return false;
-        } finally {
-            setIsGenerating(false);
-        }
-      };
-
-
-      const parseSpanishNumber = (str) => {
-          if (typeof str !== 'string') return NaN;
-          const cleanedStr = str.replace(/\./g, '').replace(',', '.');
-          return parseFloat(cleanedStr);
-      };
-
-      const parseDate = (dateStr) => {
-          if (typeof dateStr !== 'string') return null;
-          const parts = dateStr.match(/(\d+)/g);
-          if (!parts || parts.length < 3) return null;
-
-          let day, month, year;
-          if (parts[2].length === 4) {
-              day = parseInt(parts[0], 10);
-              month = parseInt(parts[1], 10) - 1;
-              year = parseInt(parts[2], 10);
-          } else {
-              day = parseInt(parts[2], 10);
-              month = parseInt(parts[1], 10) - 1;
-              year = parseInt(parts[0], 10);
-          }
-
-          const date = new Date(year, month, day);
-          if (isNaN(date.getTime()) || date.getFullYear() !== year || date.getMonth() !== month || date.getDate() !== day) {
-              return null;
-          }
-          return date;
-      };
-
-      const formatDate = (dateObj) => {
-          if (!(dateObj instanceof Date)) return '';
-          const day = String(dateObj.getDate()).padStart(2, '0');
-          const month = String(dateObj.getMonth() + 1).padStart(2, '0');
-          const year = dateObj.getFullYear();
-          return `${day}/${month}/${year}`;
-      };
-
-      const formatSpanishNumber = (num) => {
-          if (isNaN(num)) return '';
-          return new Intl.NumberFormat('es-ES', {minimumFractionDigits: 0, maximumFractionDigits: 2}).format(num);
-      };
-
-      const validateQrData = (parts) => {
-          if (parts.length < 7) return "El código QR no tiene los 7 campos requeridos.";
-          const [, , , , fechaProduccion, cantidad] = parts;
-          if (!parseDate(fechaProduccion)) return "La fecha de producción no tiene un formato válido.";
-          if (isNaN(parseSpanishNumber(cantidad))) return "La cantidad debe ser un valor numérico.";
-          return null;
-      };
-
-      const verificarPalletEnSupabase = async (numeroDePallet) => {
-        const { data, error } = await supabaseClient
-          .from('vista_detallelotes_completa')
-          .select('*')
-          .eq('nropallet', numeroDePallet)
-          .single();
-
-        if (error) {
-          console.error('Error al verificar el pallet en Supabase:', error);
-          return null;
-        }
-        return data;
-      };
-
-      const handleScan = async (value) => {
-        if (!value) return;
-
-        let rawParts;
-        if (value.includes(';')) {
-            rawParts = value.split(';');
-        } else {
-            rawParts = value.split('ñ');
-        }
-
-        if (rawParts.length < 7) {
-            setModalContent({ title: 'Error en QR', message: `El código QR parece incompleto. Se detectaron ${rawParts.length} campos en lugar de 7.`, errorData: value });
-            setShowInfoModal(true);
-            setMockQrValue('');
-            return;
-        }
-
-        const numeroDePalletScaneado = rawParts.length === 7 ? rawParts[2] : rawParts[rawParts.length - 5];
-
-        if (items.some(item => item.numeroDePallet === numeroDePalletScaneado)) {
-          setModalContent({ title: 'Pallet Duplicado', message: `Error: El Pallet Nº "${numeroDePalletScaneado}" ya fue cargado en esta lista.`, errorData: value });
-          setShowInfoModal(true);
-          setMockQrValue('');
-          return;
-        }
-
-        const palletData = await verificarPalletEnSupabase(numeroDePalletScaneado);
-
-        if (!palletData) {
-            setModalContent({ title: 'Pallet Inexistente', message: `El Pallet Nº "${numeroDePalletScaneado}" no se encontró en la base de datos. Por favor, verifique el código QR.`, errorData: value });
-            setShowInfoModal(true);
-            setMockQrValue('');
-            return;
-        }
-
-        const proceedWithAdding = (data) => {
-            const numericQuantity = parseFloat(data.cantidad);
-            const newItem = {
-                id: Date.now(),
-                sku: data.sku,
-                descripcion: data.descripcion,
-                numeroDePallet: String(data.nropallet),
-                lotesProduccion: (data.lotesproduccion || '').split('#').filter(Boolean),
-                fechaProduccion: data.fechaproduccion ? new Date(data.fechaproduccion).toLocaleDateString('es-AR') : '',
-                cantidad: formatSpanishNumber(numericQuantity),
-                originalCantidad: numericQuantity,
-                cantidadEditada: false,
-                unidadMedida: data.unidadmedida,
-                controlado: false,
-                nota: data.notatext || null,
-                tieneNota: data.has_note,
-                isExpanded: false,
+            const ejecutarProcesoDeGuardado = async (itemsScaneados, cliente, legajo, transporte, fechaCarga, retiraEnPlanta) => {
+              if (itemsScaneados.length === 0) {
+                  console.log("No hay items para actualizar.");
+                  return { success: true };
+              }
+      
+              setIsGenerating(true);
+              
+              try {
+                  const detalles = itemsScaneados.map(item => ({
+                      nropallet: parseInt(item.numeroDePallet, 10),
+                      lotesproduccion: item.lotesProduccion.join('#'),
+                      cantidad: parseSpanishNumber(item.cantidad)
+                  }));
+      
+                  const { data, error } = await supabaseClient.rpc('crear_lista_empaque_completa', {
+                      p_legajo: legajo,
+                      p_cliente_razonsocial: cliente,
+                      p_fecha_despacho: fechaCarga,
+                      p_razon_social_transporte: transporte,
+                      p_retiran_desde_planta: retiraEnPlanta,
+                      p_detalles: detalles
+                  });
+      
+                  if (error) {
+                      throw new Error(`Error al llamar a crear_lista_empaque_completa: ${error.message}`);
+                  }
+      
+                  const idListaEmpaque = data;
+                  console.log(`¡Éxito! Se guardó la lista de empaque ID ${idListaEmpaque} con ${detalles.length} items.`);
+                  showFeedback('¡Despacho registrado en Supabase!');
+                  return { success: true, idListaEmpaque: idListaEmpaque };
+      
+              } catch (error) {
+                  console.error("FALLO el proceso de guardado en Supabase:", error);
+                  setModalContent({ title: 'Error de Sincronización', message: `No se pudo registrar la operación en la base de datos.\n\nDetalle: ${error.message}` });
+                  setShowInfoModal(true);
+                  return { success: false };
+              } finally {
+                  setIsGenerating(false);
+              }
             };
-
-            if (newItem.tieneNota) {
-                 setConfirmationModalContent({
-                    title: 'Observación Encontrada',
-                    message: `Se encontró la siguiente nota para este pallet:\n\n"${newItem.nota}"\n\n¿Desea adjuntar el pallet a la lista con esta observación?`,
-                    onConfirm: () => {
-                        setItems([newItem, ...items]);
-                        setShowConfirmationModal(false);
-                        setMockQrValue('');
-                        setTimeout(() => manualInputRef.current?.focus(), 0);
-                    },
-                    onCancel: () => {
-                        setShowConfirmationModal(false);
-                        setMockQrValue('');
-                        setTimeout(() => manualInputRef.current?.focus(), 0);
-                    }
-                });
-                setShowConfirmationModal(true);
-            } else {
-                setItems([newItem, ...items]);
-                setMockQrValue('');
-                setTimeout(() => manualInputRef.current?.focus(), 0);
-            }
-        };
-
-        if (palletData.despachado) {
-            setConfirmationModalContent({
-                title: 'Advertencia: Pallet ya Despachado',
-                message: `El Pallet Nº "${palletData.nropallet}" ya fue despachado anteriormente.\n¿Desea agregarlo de todas formas a esta nueva lista?`,
-                onConfirm: () => {
-                    setShowConfirmationModal(false);
-                    proceedWithAdding(palletData);
-                },
-                onCancel: () => {
-                    setShowConfirmationModal(false);
-                    setMockQrValue('');
-                    setTimeout(() => manualInputRef.current?.focus(), 0);
-                }
-            });
-            setShowConfirmationModal(true);
-        } else {
-            proceedWithAdding(palletData);
-        }
-      };
-
-      const handleDelete = (id) => setItems(items.filter(item => item.id !== id));
-
-      const handleToggleExpand = (id) => {
-        setItems(prev => prev.map(item => item.id === id ? { ...item, isExpanded: !item.isExpanded } : item));
-      };
-
-      const handleControlCheck = (id) => setItems(prev => prev.map(item => item.id === id ? { ...item, controlado: !item.controlado } : item));
-
-      const handleStartEdit = (item) => {
-        setEditingItemId(item.id);
-        const originalQuantity = item.cantidad.replace(/\./g, '').replace(',', '.');
-        setEditingQuantity(originalQuantity);
-      };
       
-      const handleQuantityChange = (value) => {
-        const sanitizedValue = value.replace(/[^0-9,.]/g, '').replace(/([,.])[,.]+/g, '$1');
-        setEditingQuantity(sanitizedValue);
-      };
-
-      const handleSaveEdit = () => {
-        if (editingItemId === null) return;
-
-        const currentItem = items.find(i => i.id === editingItemId);
-        if (!currentItem) return;
-
-        const newQuantityValue = parseFloat(editingQuantity.replace(',', '.'));
-        
-        if (isNaN(newQuantityValue) || newQuantityValue < 0) {
-          setEditingItemId(null);
-          return;
-        }
-
-        if (newQuantityValue > currentItem.originalCantidad) {
-            setModalContent({ 
-                title: 'Error de Cantidad', 
-                message: `La cantidad ingresada (${formatSpanishNumber(newQuantityValue)}) no puede ser mayor a la original del pallet (${formatSpanishNumber(currentItem.originalCantidad)}).` 
-            });
-            setShowInfoModal(true);
-            setEditingItemId(null);
-            return;
-        }
-
-        setItems(prevItems =>
-          prevItems.map(item =>
-            item.id === editingItemId
-              ? { ...item, cantidad: formatSpanishNumber(newQuantityValue), cantidadEditada: true }
-              : item
-          )
-        );
-        setEditingItemId(null);
-        setEditingQuantity('');
-      };
-
-      const handleDeleteLote = (itemId, loteToDelete) => {
-        setConfirmationModalContent({
-            title: 'Confirmar Eliminación',
-            message: `¿Estás seguro de que deseas eliminar el lote "${loteToDelete}" de este pallet? Esta acción no se puede deshacer.`, 
-            onConfirm: () => {
-                 setItems(prevItems =>
-                    prevItems.map(item => {
-                        if (item.id === itemId) {
-                            const nuevosLotes = item.lotesProduccion.filter(lote => lote !== loteToDelete);
-                            return { ...item, lotesProduccion: nuevosLotes };
-                        }
-                        return item;
-                    })
-                );
-                showFeedback(`Lote ${loteToDelete} eliminado.`);
-                setShowConfirmationModal(false);
-            },
-            onCancel: () => {
-                setShowConfirmationModal(false);
-            }
-        });
-        setShowConfirmationModal(true);
-      };
-
-      const handleManualSubmit = (e) => {
-        e.preventDefault();
-        if (mockQrValue) {
-          handleScan(mockQrValue);
-        }
-      };
-
-      const handleContinue = () => {
-        const isClienteValid = clientList.includes(clienteNombre);
-        if (operarioLegajo && clienteNombre && isClienteValid) {
-          const formattedLegajo = parseInt(operarioLegajo, 10).toString();
-          setOperarioLegajo(formattedLegajo);
-          setIsDataEntered(true);
-          setShowSuggestions(false);
-        }
-      };
-
-      const handleImageUpload = (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
-        const html5QrCode = new Html5Qrcode("reader-placeholder");
-        html5QrCode.scanFile(file, true)
-        .then(decodedText => {
-            handleScan(decodedText);
-        })
-        .catch(err => {
-            console.error(`Error scanning file. Reason: ${err}`);
-            setModalContent({ title: 'Error de Escaneo', message: 'No se pudo encontrar un código QR en la imagen. Intenta con una imagen más clara o mejor recortada.' });
-            setShowInfoModal(true);
-        });
-        e.target.value = '';
-      };
-
-      const createPdfDocument = async () => {
-        // No se cambia el estado isGenerating aquí, se controla desde la función que lo llama
-        try {
-          if (!isPdfLibLoaded) throw new Error("La librería jsPDF no está cargada.");
-          const { jsPDF } = window.jspdf;
-          const pdf = new jsPDF('l', 'mm', 'a4');
-          const pdfWidth = pdf.internal.pageSize.getWidth();
-          const pdfHeight = pdf.internal.pageSize.getHeight();
-          let y = 10;
-          const m = 10;
-          const pageWidth = pdfWidth - (2 * m);
-          const midPoint = pdfWidth / 2;
-
-          pdf.setDrawColor(150, 150, 150);
-          pdf.rect(m, y, pageWidth, 30);
-          pdf.line(midPoint, y, midPoint, y + 30);
-
-          let yLeft = y + 7;
-          pdf.setFont('helvetica', 'bold');
-          pdf.setFontSize(26);
-          pdf.text("MOLDERIL S.A.", m + 5, yLeft);
-          pdf.setFont('helvetica', 'normal');
-          pdf.setFontSize(8);
-          yLeft += 8;
-          pdf.text("ADMINISTRACION Y VENTAS:", m + 5, yLeft);
-          yLeft += 4;
-          pdf.text("AV. Hermanos Lescano 550 - Rio Primero (Cordoba)", m + 5, yLeft);
-          yLeft += 4;
-          pdf.text("Tel/Fax: 03574-420768 (lineas Rotativas)", m + 5, yLeft);
-
-          let yRight = y + 7;
-          pdf.setFont('helvetica', 'bold');
-          pdf.setFontSize(14);
-          pdf.text("LISTA DE EMPAQUE", midPoint + 5, yRight);
-          pdf.setLineWidth(0.5);
-          pdf.line(midPoint + 5, yRight + 1.5, midPoint + 60, yRight + 1.5);
-          pdf.setLineWidth(0.2);
-
-          pdf.setFont('helvetica', 'normal');
-          pdf.setFontSize(9);
-          yRight += 8;
-          pdf.text(`Cliente:`, midPoint + 5, yRight);
-          pdf.setFont('helvetica', 'bold');
-          pdf.setFontSize(11);
-          pdf.text(`${clienteNombre || 'N/A'}`, midPoint + 20, yRight);
-          pdf.setFont('helvetica', 'normal');
-          pdf.setFontSize(9);
-          yRight += 5;
-          pdf.text(`Operario (Legajo):`, midPoint + 5, yRight);
-          pdf.setFont('helvetica', 'bold');
-          pdf.text(`${operarioLegajo || 'N/A'}`, midPoint + 33, yRight);
-          
-          pdf.setFont('helvetica', 'normal');
-          yRight += 5;
-          pdf.text(`Transporte:`, midPoint + 5, yRight);
-          pdf.setFont('helvetica', 'bold');
-          pdf.text(`${transporte || 'N/A'}`, midPoint + 25, yRight);
-
-          pdf.setFont('helvetica', 'normal');
-          yRight += 5;
-          const formattedFechaCarga = fechaCarga ? new Date(fechaCarga.replace(/-/g, '/')).toLocaleDateString('es-AR') : 'N/A';
-          pdf.text(`Fecha de Carga:`, midPoint + 5, yRight);
-          pdf.setFont('helvetica', 'bold');
-          pdf.text(formattedFechaCarga, midPoint + 30, yRight);
-
-          pdf.setFont('helvetica', 'normal');
-          yRight += 5;
-          pdf.text(`Retira en Planta:`, midPoint + 5, yRight);
-          pdf.setFont('helvetica', 'bold');
-          pdf.text(retiraEnPlanta ? 'Sí' : 'No', midPoint + 32, yRight);
-
-          pdf.setFont('helvetica', 'normal');
-          yRight += 5;
-          const now = new Date();
-          const formattedDate = `${now.getDate().toString().padStart(2, '0')}/${(now.getMonth() + 1).toString().padStart(2, '0')}/${now.getFullYear()}`;
-          const formattedTime = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
-          pdf.text(`Fecha y Hora Doc:`, midPoint + 5, yRight);
-          pdf.setFont('helvetica', 'bold');
-          pdf.text(`${formattedDate} ${formattedTime}`, midPoint + 32, yRight);
-
-          y = 45;
-          const headers = ["SKU", "Descripción", "Nº Pallet", "Lotes Prod.", "F. Prod.", "Cant.", "U.M.", "Control"];
-          const colWidths = [0.12, 0.33, 0.12, 0.13, 0.08, 0.06, 0.05, 0.11];
-          const colPos = colWidths.reduce((acc, width, i) => {
-              acc.push( (i === 0 ? m : acc[i - 1]) + (i === 0 ? 0 : pageWidth * colWidths[i - 1]) );
-              return acc;
-          }, []);
-
-          const drawHeader = (currentY) => {
-              pdf.setFont('helvetica', 'bold');
-              pdf.setFontSize(8);
-              pdf.setFillColor(230, 230, 230);
-              pdf.rect(m, currentY, pageWidth, 6, 'F');
-              headers.forEach((h, i) => pdf.text(h, colPos[i] + 2, currentY + 4.5));
-              return currentY + 6;
-          };
-          y = drawHeader(y);
-
-          const rowHeight = 5;
-          const startTableY = y;
-          pdf.setFont('helvetica', 'normal');
-          pdf.setFontSize(7);
-
-          items.forEach((item) => {
-            if (y + rowHeight > pdfHeight - m - 20) {
-              pdf.addPage();
-              y = m;
-              y = drawHeader(y);
-              pdf.setFontSize(7);
-            }
-            if (item.tieneNota) {
-              pdf.setFillColor(255, 250, 205);
-              pdf.rect(m, y, pageWidth, rowHeight, 'F');
-            }
-            pdf.line(m, y, pdfWidth - m, y);
-            const palletDisplay = item.tieneNota ? `${item.numeroDePallet} (*)` : item.numeroDePallet;
-            const itemData = [item.sku, item.descripcion, palletDisplay, item.lotesProduccion.join(', '), item.fechaProduccion, item.cantidad, item.unidadMedida].map(d => String(d || ''));
-            itemData.forEach((data, i) => pdf.text(data, colPos[i] + 2, y + 3.5));
-            const boxSize = 3;
-            pdf.rect(colPos[7] + (pageWidth * colWidths[7] / 2) - (boxSize / 2), y + (rowHeight / 2) - (boxSize / 2), boxSize, boxSize);
-            y += rowHeight;
-          });
-
-          pdf.line(m, y, pdfWidth - m, y);
-          colPos.forEach(pos => pdf.line(pos, startTableY, pos, y));
-          pdf.line(pdfWidth - m, startTableY, pdfWidth - m, y);
-
-          pdf.setFont('helvetica', 'bold');
-          pdf.setFontSize(12);
-          pdf.text(`Total de bultos escaneados: ${items.length}`, m, y + 10);
-
-          const totalPages = pdf.internal.getNumberOfPages();
-          for (let i = 1; i <= totalPages; i++) {
-              pdf.setPage(i);
-              let footerY = pdfHeight - 20;
-              pdf.setFontSize(10);
-              pdf.text("Responsable de Carga:", m, footerY);
-              pdf.line(m + 45, footerY, m + 125, footerY);
-              footerY += 5;
-              pdf.setFontSize(8);
-              pdf.text("Firma y Aclaración", m + 65, footerY);
-          }
-
-          return pdf;
-        } catch (error) {
-          console.error("Error al crear el documento PDF:", error);
-          setModalContent({ title: 'Error de PDF', message: `Error: ${error.message}` });
-          setShowInfoModal(true);
-          return null;
-        }
-      };
-
-      const showFeedback = (message) => {
-        setFeedbackMessage(message);
-        setTimeout(() => setFeedbackMessage(''), 2500);
-      };
-
-      const copyToClipboard = (text, feedbackMsg = '¡Copiado!') => {
-        const promise = new Promise((res, rej) => {
-            if (navigator.clipboard && window.isSecureContext) {
-                navigator.clipboard.writeText(text).then(res).catch(rej);
-            } else {
-                let textArea = document.createElement("textarea");
-                textArea.value = text;
-                textArea.style.position = "fixed";
-                textArea.style.left = "-999999px";
-                textArea.style.top = "-999999px";
-                document.body.appendChild(textArea);
-                textArea.focus();
-                textArea.select();
-                document.execCommand('copy') ? res() : rej();
-                textArea.remove();
-            }
-        });
-        promise.then(() => showFeedback(feedbackMsg)).catch(() => showFeedback('Error al copiar'));
-      };
-
-      const getPdfFilename = () => {
-        const date = new Date();
-        const dateString = `${date.getFullYear()}${(date.getMonth() + 1).toString().padStart(2, '0')}${date.getDate().toString().padStart(2, '0')}`;
-        const timeString = `${date.getHours().toString().padStart(2, '0')}${date.getMinutes().toString().padStart(2, '0')}`;
-        return `Lista_Empaque_${dateString}-${timeString}_${operarioLegajo}.pdf`;
-      }
       
-      const handleDispatchAndExecuteAction = async (finalAction) => {
-        if (items.length === 0) {
-            setModalContent({ title: 'Lista Vacía', message: 'No hay artículos en la lista para despachar.' });
-            setShowInfoModal(true);
-            return;
-        }
-
-        if (isListSaved) {
-            showFeedback('Generando documento de lista ya guardada...');
-            setIsGenerating(true);
-            await finalAction();
-            setIsGenerating(false);
-            return;
-        }
-
-        setConfirmationModalContent({
-            title: 'Confirmar y Cerrar Lista',
-            message: `Está a punto de registrar y CERRAR la lista con ${items.length} pallet(s).\n\nUna vez guardada, no podrá modificarla.\n\n¿Desea continuar?`,
-            onConfirm: async () => {
-                setShowConfirmationModal(false);
-                const success = await ejecutarProcesoDeGuardado(items, clienteNombre, operarioLegajo);
-                if (success) {
-                    setIsListSaved(true);
-                    showFeedback('¡Operación registrada! Generando documento...');
-                    await finalAction();
+            const parseSpanishNumber = (str) => {
+                if (typeof str !== 'string') return NaN;
+                const cleanedStr = str.replace(/\./g, '').replace(',', '.');
+                return parseFloat(cleanedStr);
+            };
+      
+            const parseDate = (dateStr) => {
+                if (typeof dateStr !== 'string') return null;
+                const parts = dateStr.match(/(\d+)/g);
+                if (!parts || parts.length < 3) return null;
+      
+                let day, month, year;
+                if (parts[2].length === 4) {
+                    day = parseInt(parts[0], 10);
+                    month = parseInt(parts[1], 10) - 1;
+                    year = parseInt(parts[2], 10);
                 } else {
-                    showFeedback('Fallo el registro de la operación.');
+                    day = parseInt(parts[2], 10);
+                    month = parseInt(parts[1], 10) - 1;
+                    year = parseInt(parts[0], 10);
                 }
-            },
-            onCancel: () => {
-                setShowConfirmationModal(false);
-                showFeedback('Operación cancelada por el usuario.');
-            }
-        });
-        setShowConfirmationModal(true);
-        setIsActionsOpen(false);
-      };
-
-      const handleDownloadPdf = () => {
-        handleDispatchAndExecuteAction(async () => {
-            const pdf = await createPdfDocument();
-            if (pdf) pdf.save(getPdfFilename());
-        });
-      };
-
-      const handlePrintPdf = () => {
-        handleDispatchAndExecuteAction(async () => {
-            const pdf = await createPdfDocument();
-            if (pdf) {
-                const iframe = document.createElement('iframe');
-                iframe.style.display = 'none';
-                iframe.src = pdf.output('bloburl');
-                document.body.appendChild(iframe);
-                iframe.contentWindow.print();
-            }
-        });
-      };
-
-      const handleEmailPdf = () => {
-        handleDispatchAndExecuteAction(async () => {
-            const pdf = await createPdfDocument();
-            if (pdf) {
-                const pdfName = getPdfFilename();
-                pdf.save(pdfName);
-                const mailtoLink = `mailto:?subject=${encodeURIComponent(`Lista de Empaque - Cliente: ${clienteNombre || 'N/A'}`)}&body=${encodeURIComponent(`Hola,\n\nEl archivo "${pdfName}" se ha descargado. Por favor, adjúntalo a este correo.\n\nGenerado por MOLDERIL Inventory Scanner.`)}`;
-                const iframe = document.createElement('iframe');
-                iframe.style.display = 'none';
-                document.body.appendChild(iframe);
-                iframe.src = mailtoLink;
-                setTimeout(() => document.body.removeChild(iframe), 500);
-            }
-        });
-      };
-
-      const handleWhatsAppPdf = () => {
-        handleDispatchAndExecuteAction(async () => {
-            const pdf = await createPdfDocument();
-            if (pdf) {
-                const pdfName = getPdfFilename();
-                pdf.save(pdfName);
-                setModalContent({ title: 'Enviar por WhatsApp', message: `El archivo "${pdfName}" se ha descargado. Ahora se abrirá WhatsApp Web para que lo adjuntes.` });
-                setShowInfoModal(true);
-            }
-        });
-      };
-
-      const handleShare = () => {
-        handleDispatchAndExecuteAction(async () => {
-            const pdf = await createPdfDocument();
-            if (!pdf) return;
-
-            const pdfBlob = pdf.output('blob');
-            const pdfFile = new File([pdfBlob], getPdfFilename(), { type: 'application/pdf' });
-            const shareData = {
-                files: [pdfFile],
-                title: `Lista de Empaque - ${clienteNombre}`,
-                text: `Lista de empaque generada para el cliente ${clienteNombre}.`,
+      
+                const date = new Date(year, month, day);
+                if (isNaN(date.getTime()) || date.getFullYear() !== year || date.getMonth() !== month || date.getDate() !== day) {
+                    return null;
+                }
+                return date;
             };
-
-            if (navigator.canShare && navigator.canShare(shareData)) {
-                try {
-                    await navigator.share(shareData);
-                } catch (error) {
-                    if (error.name !== 'AbortError') {
-                        console.error('Error al compartir:', error);
-                        setModalContent({ title: 'Error al Compartir', message: `Ocurrió un error: ${error.message}` });
-                        setShowInfoModal(true);
-                    }
-                }
-            } else {
-                setModalContent({ title: 'No se puede compartir', message: `Tu navegador no soporta compartir este tipo de archivo. Por favor, descarga el PDF y compártelo manualmente.` });
+      
+            const formatDate = (dateObj) => {
+                if (!(dateObj instanceof Date)) return '';
+                const day = String(dateObj.getDate()).padStart(2, '0');
+                const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+                const year = dateObj.getFullYear();
+                return `${day}/${month}/${year}`;
+            };
+      
+            const formatSpanishNumber = (num) => {
+                if (isNaN(num)) return '';
+                return new Intl.NumberFormat('es-ES', {minimumFractionDigits: 0, maximumFractionDigits: 2}).format(num);
+            };
+      
+            const validateQrData = (parts) => {
+                if (parts.length < 7) return "El código QR no tiene los 7 campos requeridos.";
+                const [, , , , fechaProduccion, cantidad] = parts;
+                if (!parseDate(fechaProduccion)) return "La fecha de producción no tiene un formato válido.";
+                if (isNaN(parseSpanishNumber(cantidad))) return "La cantidad debe ser un valor numérico.";
+                return null;
+            };
+      
+            const verificarPalletEnSupabase = async (numeroDePallet) => {
+              const { data, error } = await supabaseClient
+                .from('vista_detallelotes_completa')
+                .select('*')
+                .eq('nropallet', numeroDePallet)
+                .single();
+      
+              if (error) {
+                console.error('Error al verificar el pallet en Supabase:', error);
+                return null;
+              }
+              return data;
+            };
+      
+            const handleScan = async (value) => {
+              if (!value) return;
+      
+              let rawParts;
+              if (value.includes(';')) {
+                  rawParts = value.split(';');
+              } else {
+                  rawParts = value.split('ñ');
+              }
+      
+              if (rawParts.length < 7) {
+                  setModalContent({ title: 'Error en QR', message: `El código QR parece incompleto. Se detectaron ${rawParts.length} campos en lugar de 7.`, errorData: value });
+                  setShowInfoModal(true);
+                  setMockQrValue('');
+                  return;
+              }
+      
+              const numeroDePalletScaneado = rawParts.length === 7 ? rawParts[2] : rawParts[rawParts.length - 5];
+      
+              if (items.some(item => item.numeroDePallet === numeroDePalletScaneado)) {
+                setModalContent({ title: 'Pallet Duplicado', message: `Error: El Pallet Nº "${numeroDePalletScaneado}" ya fue cargado en esta lista.`, errorData: value });
                 setShowInfoModal(true);
+                setMockQrValue('');
+                return;
+              }
+      
+              const palletData = await verificarPalletEnSupabase(numeroDePalletScaneado);
+      
+              if (!palletData) {
+                  setModalContent({ title: 'Pallet Inexistente', message: `El Pallet Nº "${numeroDePalletScaneado}" no se encontró en la base de datos. Por favor, verifique el código QR.`, errorData: value });
+                  setShowInfoModal(true);
+                  setMockQrValue('');
+                  return;
+              }
+      
+              const proceedWithAdding = (data) => {
+                  const numericQuantity = parseFloat(data.cantidad);
+                  const newItem = {
+                      id: Date.now(),
+                      sku: data.sku,
+                      descripcion: data.descripcion,
+                      numeroDePallet: String(data.nropallet),
+                      lotesProduccion: (data.lotesproduccion || '').split('#').filter(Boolean),
+                      fechaProduccion: data.fechaproduccion ? new Date(data.fechaproduccion).toLocaleDateString('es-AR') : '',
+                      cantidad: formatSpanishNumber(numericQuantity),
+                      originalCantidad: numericQuantity,
+                      cantidadEditada: false,
+                      unidadMedida: data.unidadmedida,
+                      controlado: false,
+                      nota: data.notatext || null,
+                      tieneNota: data.has_note,
+                      isExpanded: false,
+                  };
+      
+                  if (newItem.tieneNota) {
+                       setConfirmationModalContent({
+                          title: 'Observación Encontrada',
+                          message: `Se encontró la siguiente nota para este pallet:\n\n"${newItem.nota}"\n\n¿Desea adjuntar el pallet a la lista con esta observación?`,
+                          onConfirm: () => {
+                              setItems([newItem, ...items]);
+                              setShowConfirmationModal(false);
+                              setMockQrValue('');
+                              setTimeout(() => manualInputRef.current?.focus(), 0);
+                          },
+                          onCancel: () => {
+                              setShowConfirmationModal(false);
+                              setMockQrValue('');
+                              setTimeout(() => manualInputRef.current?.focus(), 0);
+                          }
+                      });
+                      setShowConfirmationModal(true);
+                  } else {
+                      setItems([newItem, ...items]);
+                      setMockQrValue('');
+                      setTimeout(() => manualInputRef.current?.focus(), 0);
+                  }
+              };
+      
+              if (palletData.despachado) {
+                  setConfirmationModalContent({
+                      title: 'Advertencia: Pallet ya Despachado',
+                      message: `El Pallet Nº "${palletData.nropallet}" ya fue despachado anteriormente.\n¿Desea agregarlo de todas formas a esta nueva lista?`,
+                      onConfirm: () => {
+                          setShowConfirmationModal(false);
+                          proceedWithAdding(palletData);
+                      },
+                      onCancel: () => {
+                          setShowConfirmationModal(false);
+                          setMockQrValue('');
+                          setTimeout(() => manualInputRef.current?.focus(), 0);
+                      }
+                  });
+                  setShowConfirmationModal(true);
+              } else {
+                  proceedWithAdding(palletData);
+              }
+            };
+      
+            const handleDelete = (id) => setItems(items.filter(item => item.id !== id));
+      
+            const handleToggleExpand = (id) => {
+              setItems(prev => prev.map(item => item.id === id ? { ...item, isExpanded: !item.isExpanded } : item));
+            };
+      
+            const handleControlCheck = (id) => setItems(prev => prev.map(item => item.id === id ? { ...item, controlado: !item.controlado } : item));
+      
+            const handleStartEdit = (item) => {
+              setEditingItemId(item.id);
+              const originalQuantity = item.cantidad.replace(/\./g, '').replace(',', '.');
+              setEditingQuantity(originalQuantity);
+            };
+            
+            const handleQuantityChange = (value) => {
+              const sanitizedValue = value.replace(/[^0-9,.]/g, '').replace(/([,.])[,.]+/g, '$1');
+              setEditingQuantity(sanitizedValue);
+            };
+      
+            const handleSaveEdit = () => {
+              if (editingItemId === null) return;
+      
+              const currentItem = items.find(i => i.id === editingItemId);
+              if (!currentItem) return;
+      
+              const newQuantityValue = parseFloat(editingQuantity.replace(',', '.'));
+              
+              if (isNaN(newQuantityValue) || newQuantityValue < 0) {
+                setEditingItemId(null);
+                return;
+              }
+      
+              if (newQuantityValue > currentItem.originalCantidad) {
+                  setModalContent({
+                      title: 'Error de Cantidad',
+                      message: `La cantidad ingresada (${formatSpanishNumber(newQuantityValue)}) no puede ser mayor a la original del pallet (${formatSpanishNumber(currentItem.originalCantidad)}).` 
+                  });
+                  setShowInfoModal(true);
+                  setEditingItemId(null);
+                  return;
+              }
+      
+              setItems(prevItems =>
+                prevItems.map(item =>
+                  item.id === editingItemId
+                    ? { ...item, cantidad: formatSpanishNumber(newQuantityValue), cantidadEditada: true }
+                    : item
+                )
+              );
+              setEditingItemId(null);
+              setEditingQuantity('');
+            };
+      
+            const handleDeleteLote = (itemId, loteToDelete) => {
+              setConfirmationModalContent({
+                  title: 'Confirmar Eliminación',
+                  message: `¿Estás seguro de que deseas eliminar el lote "${loteToDelete}" de este pallet? Esta acción no se puede deshacer.`,
+                  onConfirm: () => {
+                       setItems(prevItems =>
+                          prevItems.map(item => {
+                              if (item.id === itemId) {
+                                  const nuevosLotes = item.lotesProduccion.filter(lote => lote !== loteToDelete);
+                                  return { ...item, lotesProduccion: nuevosLotes };
+                              }
+                              return item;
+                          })
+                      );
+                      showFeedback(`Lote ${loteToDelete} eliminado.`);
+                      setShowConfirmationModal(false);
+                  },
+                  onCancel: () => {
+                      setShowConfirmationModal(false);
+                  }
+              });
+              setShowConfirmationModal(true);
+            };
+      
+            const handleManualSubmit = (e) => {
+              e.preventDefault();
+              if (mockQrValue) {
+                handleScan(mockQrValue);
+              }
+            };
+      
+            const handleContinue = () => {
+              const isClienteValid = clientList.includes(clienteNombre);
+              if (operarioLegajo && clienteNombre && isClienteValid) {
+                const formattedLegajo = parseInt(operarioLegajo, 10).toString();
+                setOperarioLegajo(formattedLegajo);
+                setIsDataEntered(true);
+                setShowSuggestions(false);
+              }
+            };
+      
+            const handleImageUpload = (e) => {
+              const file = e.target.files[0];
+              if (!file) return;
+              const html5QrCode = new Html5Qrcode("reader-placeholder");
+              html5QrCode.scanFile(file, true)
+              .then(decodedText => {
+                  handleScan(decodedText);
+              })
+              .catch(err => {
+                  console.error(`Error scanning file. Reason: ${err}`);
+                  setModalContent({ title: 'Error de Escaneo', message: 'No se pudo encontrar un código QR en la imagen. Intenta con una imagen más clara o mejor recortada.' });
+                  setShowInfoModal(true);
+              });
+              e.target.value = '';
+            };
+      
+            const createPdfDocument = async (idListaEmpaque) => {
+              // No se cambia el estado isGenerating aquí, se controla desde la función que lo llama
+              try {
+                if (!isPdfLibLoaded) throw new Error("La librería jsPDF no está cargada.");
+                const { jsPDF } = window.jspdf;
+                const pdf = new jsPDF('l', 'mm', 'a4');
+                const pdfWidth = pdf.internal.pageSize.getWidth();
+                const pdfHeight = pdf.internal.pageSize.getHeight();
+                let y = 10;
+                const m = 10;
+                const pageWidth = pdfWidth - (2 * m);
+                const midPoint = pdfWidth / 2;
+      
+                pdf.setDrawColor(150, 150, 150);
+                pdf.rect(m, y, pageWidth, 30);
+                pdf.line(midPoint, y, midPoint, y + 30);
+      
+                let yLeft = y + 7;
+                pdf.setFont('helvetica', 'bold');
+                pdf.setFontSize(26);
+                pdf.text("MOLDERIL S.A.", m + 5, yLeft);
+                pdf.setFont('helvetica', 'normal');
+                pdf.setFontSize(8);
+                yLeft += 8;
+                pdf.text("ADMINISTRACION Y VENTAS:", m + 5, yLeft);
+                yLeft += 4;
+                pdf.text("AV. Hermanos Lescano 550 - Rio Primero (Cordoba)", m + 5, yLeft);
+                yLeft += 4;
+                pdf.text("Tel/Fax: 03574-420768 (lineas Rotativas)", m + 5, yLeft);
+      
+                let yRight = y + 7;
+                pdf.setFont('helvetica', 'bold');
+                pdf.setFontSize(14);
+                pdf.text(`LISTA DE EMPAQUE N°: ${idListaEmpaque || ''}`, midPoint + 5, yRight);
+                pdf.setLineWidth(0.5);
+                pdf.line(midPoint + 5, yRight + 1.5, midPoint + 60, yRight + 1.5);
+                pdf.setLineWidth(0.2);
+      
+                pdf.setFont('helvetica', 'normal');
+                pdf.setFontSize(9);
+                yRight += 8;
+                pdf.text(`Cliente:`, midPoint + 5, yRight);
+                pdf.setFont('helvetica', 'bold');
+                pdf.setFontSize(11);
+                pdf.text(`${clienteNombre || 'N/A'}`, midPoint + 20, yRight);
+                pdf.setFont('helvetica', 'normal');
+                pdf.setFontSize(9);
+                yRight += 5;
+                pdf.text(`Operario (Legajo):`, midPoint + 5, yRight);
+                pdf.setFont('helvetica', 'bold');
+                pdf.text(`${operarioLegajo || 'N/A'}`, midPoint + 33, yRight);
+                
+                pdf.setFont('helvetica', 'normal');
+                yRight += 5;
+                pdf.text(`Transporte:`, midPoint + 5, yRight);
+                pdf.setFont('helvetica', 'bold');
+                pdf.text(`${transporte || 'N/A'}`, midPoint + 25, yRight);
+      
+                pdf.setFont('helvetica', 'normal');
+                yRight += 5;
+                const formattedFechaCarga = fechaCarga ? new Date(fechaCarga.replace(/-/g, '/')).toLocaleDateString('es-AR') : 'N/A';
+                pdf.text(`Fecha de Carga:`, midPoint + 5, yRight);
+                pdf.setFont('helvetica', 'bold');
+                pdf.text(formattedFechaCarga, midPoint + 30, yRight);
+      
+                pdf.setFont('helvetica', 'normal');
+                yRight += 5;
+                pdf.text(`Retira en Planta:`, midPoint + 5, yRight);
+                pdf.setFont('helvetica', 'bold');
+                pdf.text(retiraEnPlanta ? 'Sí' : 'No', midPoint + 32, yRight);
+      
+                pdf.setFont('helvetica', 'normal');
+                yRight += 5;
+                const now = new Date();
+                const formattedDate = `${now.getDate().toString().padStart(2, '0')}/${(now.getMonth() + 1).toString().padStart(2, '0')}/${now.getFullYear()}`;
+                const formattedTime = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+                pdf.text(`Fecha y Hora Doc:`, midPoint + 5, yRight);
+                pdf.setFont('helvetica', 'bold');
+                pdf.text(`${formattedDate} ${formattedTime}`, midPoint + 32, yRight);
+      
+                y = 45;
+                const headers = ["SKU", "Descripción", "Nº Pallet", "Lotes Prod.", "F. Prod", "Cant.", "U.M.", "Control"];
+                const colWidths = [0.12, 0.33, 0.12, 0.13, 0.08, 0.06, 0.05, 0.11];
+                const colPos = colWidths.reduce((acc, width, i) => {
+                    acc.push( (i === 0 ? m : acc[i - 1]) + (i === 0 ? 0 : pageWidth * colWidths[i - 1]) );
+                    return acc;
+                }, []);
+      
+                const drawHeader = (currentY) => {
+                    pdf.setFont('helvetica', 'bold');
+                    pdf.setFontSize(8);
+                    pdf.setFillColor(230, 230, 230);
+                    pdf.rect(m, currentY, pageWidth, 6, 'F');
+                    headers.forEach((h, i) => pdf.text(h, colPos[i] + 2, currentY + 4.5));
+                    return currentY + 6;
+                };
+                y = drawHeader(y);
+      
+                const rowHeight = 5;
+                const startTableY = y;
+                pdf.setFont('helvetica', 'normal');
+                pdf.setFontSize(7);
+      
+                items.forEach((item) => {
+                  if (y + rowHeight > pdfHeight - m - 20) {
+                    pdf.addPage();
+                    y = m;
+                    y = drawHeader(y);
+                    pdf.setFontSize(7);
+                  }
+                  if (item.tieneNota) {
+                    pdf.setFillColor(255, 250, 205);
+                    pdf.rect(m, y, pageWidth, rowHeight, 'F');
+                  }
+                  pdf.line(m, y, pdfWidth - m, y);
+                  const palletDisplay = item.tieneNota ? `${item.numeroDePallet} (*)` : item.numeroDePallet;
+                  const itemData = [item.sku, item.descripcion, palletDisplay, item.lotesProduccion.join(', '), item.fechaProduccion, item.cantidad, item.unidadMedida].map(d => String(d || ''));
+                  itemData.forEach((data, i) => pdf.text(data, colPos[i] + 2, y + 3.5));
+                  const boxSize = 3;
+                  pdf.rect(colPos[7] + (pageWidth * colWidths[7] / 2) - (boxSize / 2), y + (rowHeight / 2) - (boxSize / 2), boxSize, boxSize);
+                  y += rowHeight;
+                });
+      
+                pdf.line(m, y, pdfWidth - m, y);
+                colPos.forEach(pos => pdf.line(pos, startTableY, pos, y));
+                pdf.line(pdfWidth - m, startTableY, pdfWidth - m, y);
+      
+                pdf.setFont('helvetica', 'bold');
+                pdf.setFontSize(12);
+                pdf.text(`Total de bultos escaneados: ${items.length}`, m, y + 10);
+      
+                const totalPages = pdf.internal.getNumberOfPages();
+                for (let i = 1; i <= totalPages; i++) {
+                    pdf.setPage(i);
+                    let footerY = pdfHeight - 20;
+                    pdf.setFontSize(10);
+                    pdf.text("Responsable de Carga:", m, footerY);
+                    pdf.line(m + 45, footerY, m + 125, footerY);
+                    footerY += 5;
+                    pdf.setFontSize(8);
+                    pdf.text("Firma y Aclaración", m + 65, footerY);
+                }
+      
+                return pdf;
+              } catch (error) {
+                console.error("Error al crear el documento PDF:", error);
+                setModalContent({ title: 'Error de PDF', message: `Error: ${error.message}` });
+                setShowInfoModal(true);
+                return null;
+              }
+            };
+      
+            const showFeedback = (message) => {
+              setFeedbackMessage(message);
+              setTimeout(() => setFeedbackMessage(''), 2500);
+            };
+      
+            const copyToClipboard = (text, feedbackMsg = '¡Copiado!') => {
+              const promise = new Promise((res, rej) => {
+                  if (navigator.clipboard && window.isSecureContext) {
+                      navigator.clipboard.writeText(text).then(res).catch(rej);
+                  } else {
+                      let textArea = document.createElement("textarea");
+                      textArea.value = text;
+                      textArea.style.position = "fixed";
+                      textArea.style.left = "-999999px";
+                      textArea.style.top = "-999999px";
+                      document.body.appendChild(textArea);
+                      textArea.focus();
+                      textArea.select();
+                      document.execCommand('copy') ? res() : rej();
+                      textArea.remove();
+                  }
+              });
+              promise.then(() => showFeedback(feedbackMsg)).catch(() => showFeedback('Error al copiar'));
+            };
+      
+            const getPdfFilename = () => {
+              const date = new Date();
+              const dateString = `${date.getFullYear()}${(date.getMonth() + 1).toString().padStart(2, '0')}${date.getDate().toString().padStart(2, '0')}`;
+              const timeString = `${date.getHours().toString().padStart(2, '0')}${date.getMinutes().toString().padStart(2, '0')}`;
+              return `Lista_Empaque_${dateString}-${timeString}_${operarioLegajo}.pdf`;
             }
-        });
-      };
-
+            
+            const handleDispatchAndExecuteAction = async (finalAction) => {
+              if (items.length === 0) {
+                  setModalContent({ title: 'Lista Vacía', message: 'No hay artículos en la lista para despachar.' });
+                  setShowInfoModal(true);
+                  return;
+              }
+      
+              if (isListSaved) {
+                  showFeedback('Generando documento de lista ya guardada...');
+                  setIsGenerating(true);
+                  await finalAction();
+                  setIsGenerating(false);
+                  return;
+              }
+      
+              setConfirmationModalContent({
+                  title: 'Confirmar y Cerrar Lista',
+                  message: `Está a punto de registrar y CERRAR la lista con ${items.length} pallet(s).\n\nUna vez guardada, no podrá modificarla.\n\n¿Desea continuar?`,
+                  onConfirm: async () => {
+                      setShowConfirmationModal(false);
+                      const { success, idListaEmpaque } = await ejecutarProcesoDeGuardado(items, clienteNombre, operarioLegajo, transporte, fechaCarga, retiraEnPlanta);
+                      if (success) {
+                          setIsListSaved(true);
+                          showFeedback('¡Operación registrada! Generando documento...');
+                          await finalAction(idListaEmpaque);
+                      } else {
+                          showFeedback('Fallo el registro de la operación.');
+                      }
+                  },
+                  onCancel: () => {
+                      setShowConfirmationModal(false);
+                      showFeedback('Operación cancelada por el usuario.');
+                  }
+              });
+              setShowConfirmationModal(true);
+              setIsActionsOpen(false);
+            };
+      
+            const handleDownloadPdf = () => {
+              handleDispatchAndExecuteAction(async (idListaEmpaque) => {
+                  const pdf = await createPdfDocument(idListaEmpaque);
+                  if (pdf) pdf.save(getPdfFilename());
+              });
+            };
+      
+            const handlePrintPdf = () => {
+              handleDispatchAndExecuteAction(async (idListaEmpaque) => {
+                  const pdf = await createPdfDocument(idListaEmpaque);
+                  if (pdf) {
+                      const iframe = document.createElement('iframe');
+                      iframe.style.display = 'none';
+                      iframe.src = pdf.output('bloburl');
+                      document.body.appendChild(iframe);
+                      iframe.contentWindow.print();
+                  }
+              });
+            };
+      
+            const handleEmailPdf = () => {
+              handleDispatchAndExecuteAction(async (idListaEmpaque) => {
+                  const pdf = await createPdfDocument(idListaEmpaque);
+                  if (pdf) {
+                      const pdfName = getPdfFilename();
+                      pdf.save(pdfName);
+                      const mailtoLink = `mailto:?subject=${encodeURIComponent(`Lista de Empaque - Cliente: ${clienteNombre || 'N/A'}`)}&body=${encodeURIComponent(`Hola,\n\nEl archivo "${pdfName}" se ha descargado. Por favor, adjúntalo a este correo.\n\nGenerado por MOLDERIL Inventory Scanner.`)}`;
+                      const iframe = document.createElement('iframe');
+                      iframe.style.display = 'none';
+                      document.body.appendChild(iframe);
+                      iframe.src = mailtoLink;
+                      setTimeout(() => document.body.removeChild(iframe), 500);
+                  }
+              });
+            };
+      
+            const handleWhatsAppPdf = () => {
+              handleDispatchAndExecuteAction(async (idListaEmpaque) => {
+                  const pdf = await createPdfDocument(idListaEmpaque);
+                  if (pdf) {
+                      const pdfName = getPdfFilename();
+                      pdf.save(pdfName);
+                      setModalContent({ title: 'Enviar por WhatsApp', message: `El archivo "${pdfName}" se ha descargado. Ahora se abrirá WhatsApp Web para que lo adjuntes.` });
+                      setShowInfoModal(true);
+                  }
+              });
+            };
+      
+            const handleShare = () => {
+              handleDispatchAndExecuteAction(async (idListaEmpaque) => {
+                  const pdf = await createPdfDocument(idListaEmpaque);
+                  if (!pdf) return;
+      
+                  const pdfBlob = pdf.output('blob');
+                  const pdfFile = new File([pdfBlob], getPdfFilename(), { type: 'application/pdf' });
+                  const shareData = {
+                      files: [pdfFile],
+                      title: `Lista de Empaque - ${clienteNombre}`,
+                      text: `Lista de empaque generada para el cliente ${clienteNombre}.`,
+                  };
+      
+                  if (navigator.canShare && navigator.canShare(shareData)) {
+                      try {
+                          await navigator.share(shareData);
+                      } catch (error) {
+                          if (error.name !== 'AbortError') {
+                              console.error('Error al compartir:', error);
+                              setModalContent({ title: 'Error al Compartir', message: `Ocurrió un error: ${error.message}` });
+                              setShowInfoModal(true);
+                          }
+                      }
+                  } else {
+                      setModalContent({ title: 'No se puede compartir', message: `Tu navegador no soporta compartir este tipo de archivo. Por favor, descarga el PDF y compártelo manualmente.` });
+                      setShowInfoModal(true);
+                  }
+              });
+            };
       const handleCopyJson = () => {
         setIsActionsOpen(false);
         const jsonString = JSON.stringify(items.map(({ id, controlado, originalCantidad, cantidadEditada, ...rest }) => ({
