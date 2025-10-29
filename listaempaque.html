@@ -177,6 +177,9 @@
       const [items, setItems] = useState([]);
       const [operarioLegajo, setOperarioLegajo] = useState('');
       const [clienteNombre, setClienteNombre] = useState('');
+      const [fechaCarga, setFechaCarga] = useState('');
+      const [transporte, setTransporte] = useState('');
+      const [retiraEnPlanta, setRetiraEnPlanta] = useState(false);
       const [isDataEntered, setIsDataEntered] = useState(false);
       const [mockQrValue, setMockQrValue] = useState('');
       const [isGenerating, setIsGenerating] = useState(false);
@@ -722,14 +725,34 @@
           pdf.text(`Operario (Legajo):`, midPoint + 5, yRight);
           pdf.setFont('helvetica', 'bold');
           pdf.text(`${operarioLegajo || 'N/A'}`, midPoint + 33, yRight);
+          
+          pdf.setFont('helvetica', 'normal');
+          yRight += 5;
+          pdf.text(`Transporte:`, midPoint + 5, yRight);
+          pdf.setFont('helvetica', 'bold');
+          pdf.text(`${transporte || 'N/A'}`, midPoint + 25, yRight);
+
+          pdf.setFont('helvetica', 'normal');
+          yRight += 5;
+          const formattedFechaCarga = fechaCarga ? new Date(fechaCarga.replace(/-/g, '/')).toLocaleDateString('es-AR') : 'N/A';
+          pdf.text(`Fecha de Carga:`, midPoint + 5, yRight);
+          pdf.setFont('helvetica', 'bold');
+          pdf.text(formattedFechaCarga, midPoint + 30, yRight);
+
+          pdf.setFont('helvetica', 'normal');
+          yRight += 5;
+          pdf.text(`Retira en Planta:`, midPoint + 5, yRight);
+          pdf.setFont('helvetica', 'bold');
+          pdf.text(retiraEnPlanta ? 'Sí' : 'No', midPoint + 32, yRight);
+
           pdf.setFont('helvetica', 'normal');
           yRight += 5;
           const now = new Date();
           const formattedDate = `${now.getDate().toString().padStart(2, '0')}/${(now.getMonth() + 1).toString().padStart(2, '0')}/${now.getFullYear()}`;
           const formattedTime = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
-          pdf.text(`Fecha y Hora:`, midPoint + 5, yRight);
+          pdf.text(`Fecha y Hora Doc:`, midPoint + 5, yRight);
           pdf.setFont('helvetica', 'bold');
-          pdf.text(`${formattedDate} ${formattedTime}`, midPoint + 26, yRight);
+          pdf.text(`${formattedDate} ${formattedTime}`, midPoint + 32, yRight);
 
           y = 45;
           const headers = ["SKU", "Descripción", "Nº Pallet", "Lotes Prod.", "F. Prod.", "Cant.", "U.M.", "Control"];
@@ -964,6 +987,9 @@
         setIsDataEntered(false); 
         setOperarioLegajo(''); 
         setClienteNombre(''); 
+        setFechaCarga('');
+        setTransporte('');
+        setRetiraEnPlanta(false);
         setItems([]); 
         setIsListSaved(false);
       };
@@ -1105,7 +1131,47 @@
                     <p className="text-red-400 text-sm mt-1 [text-shadow:_1px_1px_2px_rgba(0,0,0,0.7)]">El cliente debe ser uno de la lista.</p>
                   }
                 </div>
-                <button onClick={handleContinue} disabled={!operarioLegajo || !isClienteValid} className="w-full bg-blue-600 text-white font-semibold py-3 px-4 rounded-md shadow-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-xl transition-transform transform hover:scale-105">
+
+                <div>
+                  <label htmlFor="fecha-carga" className="block text-xl font-medium text-white [text-shadow:_1px_1px_2px_rgba(0,0,0,0.5)]">Fecha de Carga</label>
+                  <input
+                    type="date"
+                    id="fecha-carga"
+                    value={fechaCarga}
+                    onChange={(e) => setFechaCarga(e.target.value)}
+                    min={new Date().toISOString().split('T')[0]}
+                    max={new Date(new Date().setDate(new Date().getDate() + 7)).toISOString().split('T')[0]}
+                    className="mt-1 block w-full rounded-md bg-white/10 border-white/30 text-white placeholder-white/50 shadow-sm p-2 border text-2xl focus:ring-amber-400 focus:border-amber-400"
+                  />
+                </div>
+
+                <div>
+                  <label htmlFor="transporte" className="block text-xl font-medium text-white [text-shadow:_1px_1px_2px_rgba(0,0,0,0.5)]">Transporte</label>
+                  <input
+                    type="text"
+                    id="transporte"
+                    value={transporte}
+                    onChange={(e) => setTransporte(e.target.value.toUpperCase())}
+                    className="mt-1 block w-full rounded-md bg-white/10 border-white/30 text-white placeholder-white/50 shadow-sm p-2 border text-2xl focus:ring-amber-400 focus:border-amber-400"
+                    placeholder="Nombre del transporte"
+                    style={{textTransform: 'uppercase'}}
+                  />
+                </div>
+
+                <div className="flex items-center justify-start pt-2">
+                    <input
+                        id="retira-en-planta"
+                        type="checkbox"
+                        checked={retiraEnPlanta}
+                        onChange={(e) => setRetiraEnPlanta(e.target.checked)}
+                        className="h-6 w-6 rounded border-gray-300 text-amber-500 focus:ring-amber-400 bg-white/10"
+                    />
+                    <label htmlFor="retira-en-planta" className="ml-3 block text-xl font-medium text-white [text-shadow:_1px_1px_2px_rgba(0,0,0,0.5)]">
+                        ¿El transporte retira en planta?
+                    </label>
+                </div>
+
+                <button onClick={handleContinue} disabled={!operarioLegajo || !isClienteValid || !fechaCarga || !transporte} className="w-full bg-blue-600 text-white font-semibold py-3 px-4 rounded-md shadow-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-xl transition-transform transform hover:scale-105">
                   Continuar
                 </button>
                 <a href="index.html" className="w-full block text-center bg-gray-600 text-white font-semibold py-3 px-4 rounded-md shadow-md hover:bg-gray-700 text-xl transition-transform transform hover:scale-105">
@@ -1125,7 +1191,7 @@
           {feedbackMessage && <div className="fixed top-5 right-5 bg-green-500 text-white py-2 px-4 rounded-lg shadow-lg z-50">{feedbackMessage}</div>}
           <div className="bg-white p-2 sm:p-6 rounded-xl shadow-lg flex-grow flex flex-col">
 
-            <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-4 shadow-sm">
+            <div class="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-4 shadow-sm">
               <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start">
                 <div className="mb-4 sm:mb-0">
                   <h1 className="text-2xl sm:text-4xl font-extrabold text-gray-900">MOLDERIL S.A.</h1>
@@ -1133,7 +1199,7 @@
                   <p className="text-xs text-gray-500">Tel/Fax: 03574-420768</p>
                 </div>
                 <div className="flex items-start space-x-4 w-full sm:w-auto">
-                    <div className="text-right space-y-2 flex-grow">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-2 flex-grow">
                       <div className="flex items-center justify-end">
                         <div className="text-right mr-3">
                           <p className="text-xs text-gray-500">Operario (Legajo)</p>
@@ -1147,6 +1213,39 @@
                           <p className="font-semibold text-gray-800 text-base sm:text-lg">{clienteNombre}</p>
                         </div>
                         <i className="fas fa-building text-gray-400 text-2xl"></i>
+                      </div>
+                      <div className="flex items-center justify-end">
+                         <div className="text-right mr-3">
+                          <p className="text-xs text-gray-500">Transporte</p>
+                          <p className="font-semibold text-gray-800 text-base sm:text-lg">{transporte}</p>
+                        </div>
+                        <i className="fas fa-truck text-gray-400 text-2xl"></i>
+                      </div>
+                      <div className="flex items-center justify-end">
+                         <div className="text-right mr-3">
+                          <p className="text-xs text-gray-500">Fecha de Carga</p>
+                          <input
+                            type="date"
+                            value={fechaCarga}
+                            onChange={(e) => setFechaCarga(e.target.value)}
+                            min={new Date().toISOString().split('T')[0]}
+                            max={new Date(new Date().setDate(new Date().getDate() + 7)).toISOString().split('T')[0]}
+                            className="font-semibold text-gray-800 text-base sm:text-lg bg-gray-50 text-right w-full rounded-md border-gray-300 shadow-sm p-1 border focus:ring-amber-400 focus:border-amber-400"
+                          />
+                        </div>
+                        <i className="fas fa-calendar-alt text-gray-400 text-2xl"></i>
+                      </div>
+                      <div className="flex items-center justify-end col-span-1 md:col-span-2">
+                         <div className="text-right mr-3">
+                          <p className="text-xs text-gray-500">Retira en Planta</p>
+                          <input
+                            type="checkbox"
+                            checked={retiraEnPlanta}
+                            onChange={(e) => setRetiraEnPlanta(e.target.checked)}
+                            className="h-6 w-6 rounded border-gray-300 text-amber-500 focus:ring-amber-400"
+                          />
+                        </div>
+                        <i className="fas fa-industry text-gray-400 text-2xl"></i>
                       </div>
                     </div>
                     <button onClick={() => setShowHelpModal(true)} title="Ayuda" className="text-gray-400 hover:text-indigo-600 transition-colors">
