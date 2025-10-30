@@ -296,15 +296,46 @@
 
         // --- FUNCIONES DE CARGA DE DATOS DESDE SUPABASE ---
         async function loadDetalleLotesFromSupabase() {
-            console.log("Cargando detalle de lotes desde Supabase (placeholder)...");
-            // Implementación real iría aquí
-            return []; 
+            updateLoader('Cargando detalle de lotes desde Supabase...', 30);
+            const { data, error } = await supabaseClient
+                .from('vista_detallelotes_optimizada') // Querying the optimized view
+                .select('nropallet, sku, lotesproduccion, fechaproduccion, cantidad, unidadmedida');
+
+            if (error) {
+                console.error('Error al cargar lotes:', error.message);
+                throw new Error('Error al cargar lotes desde Supabase.');
+            }
+            data.forEach(lote => {
+                lotesData.set(lote.nropallet.toString(), {
+                    nropallet: lote.nropallet,
+                    sku: lote.sku,
+                    lotes: lote.lotesproduccion,
+                    fecha: lote.fechaproduccion,
+                    cantidad: lote.cantidad,
+                    uom: lote.unidadmedida,
+                    // tiposku will be retrieved from articulosData later
+                });
+            });
+            console.log(`Lotes cargados: ${lotesData.size}`);
         }
 
         async function loadArticulosFromSupabase() {
-            console.log("Cargando artículos desde Supabase (placeholder)...");
-            // Implementación real iría aquí
-            return [];
+            updateLoader('Cargando artículos desde Supabase...', 45);
+            const { data, error } = await supabaseClient
+                .from('articulos')
+                .select('sku, descripcioncorta, descriciolarga, tiposku'); // Include tiposku
+
+            if (error) {
+                console.error('Error al cargar artículos:', error.message);
+                throw new Error('Error al cargar artículos desde Supabase.');
+            }
+            data.forEach(articulo => articulosData.set(articulo.sku, {
+                sku: articulo.sku,
+                descripcionCorta: articulo.descripcioncorta,
+                descripcionLarga: articulo.descriciolarga,
+                tiposku: articulo.tiposku
+            }));
+            console.log(`Artículos cargados: ${articulosData.size}`);
         }
 
         // --- FUNCIÓN PRINCIPAL DE INICIALIZACIÓN ---
@@ -435,10 +466,16 @@
             
             try {
                 updateLoader('Descargando archivos de datos...', 25);
-                await Promise.all([
-                    loadDetalleLotesFromSupabase(),
-                    loadArticulosFromSupabase()
-                ]);
+                await loadArticulosFromSupabase();
+                await loadDetalleLotesFromSupabase();
+                
+                // Now that both are loaded, add tiposku to lotesData
+                lotesData.forEach((lote, key) => {
+                    const articulo = articulosData.get(lote.sku);
+                    if (articulo) {
+                        lote.tiposku = articulo.tiposku;
+                    }
+                });
                 
                 updateLoader('Procesando texturas...', 75);
                 createTextures();
