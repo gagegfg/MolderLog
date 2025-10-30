@@ -265,8 +265,7 @@
         const initialCameraPosition = new THREE.Vector3(40, 30, 50);
 
         // --- CONTENEDORES DE DATOS CARGADOS ---
-        const racksData = new Map();
-        const inventoryData = new Map();
+
         const lotesData = new Map();
         const articulosData = new Map();
         
@@ -295,306 +294,61 @@
         }
 
         // --- FUNCIÓN PRINCIPAL DE INICIALIZACIÓN ---
-        async function init() {
-            clock = new THREE.Clock();
-            
-            updateLoader('Inicializando motor 3D...', 10);
-            setupScene();
-            setupLights();
-            setupControls();
-            
-            try {
-                updateLoader('Descargando archivos de datos...', 25);
-                await Promise.all([
-                    loadEstanteriasFromSupabase(),
-                    loadCSV('inventario_ubicaciones.csv', parseInventory, inventoryData),
-                    loadDetalleLotesFromSupabase(),
-                    loadArticulosFromSupabase()
-                ]);
-                
-                updateLoader('Procesando texturas...', 75);
-                createTextures();
-                
-                updateLoader('Construyendo depósito...', 90);
-                buildWarehouse();
-                populateLegend();
-                setupInteractions();
-                
-                updateLoader('¡Listo!', 100);
-                setTimeout(() => {
-                    loaderUI.style.opacity = '0';
-                    setTimeout(() => {
-                        loaderUI.style.display = 'none';
-                        leftPanel.style.display = 'flex';
-                    }, 500);
-                }, 500);
-
-                animate();
-            } catch (error) {
-                console.error("Error crítico durante la inicialización:", error);
-                updateLoader('Error de Carga', 100);
-                loaderProgress.style.backgroundColor = '#ef4444';
-                loaderStatus.innerHTML = `No se pudo cargar.<br><span style="font-size: 0.8em; color: #ff8888;">${error.message}</span>`;
-            }
-        }
-
-        // --- CONFIGURACIÓN DE LA ESCENA Y RENDERIZADO THREE.JS ---
-        function setupScene() {
-            scene = new THREE.Scene();
-            scene.background = new THREE.Color(0xdedede);
-
-            camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 2000);
-            camera.position.copy(initialCameraPosition);
-
-            renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('render-canvas'), antialias: true, powerPreference: "high-performance" });
-            renderer.setSize(window.innerWidth, window.innerHeight);
-            renderer.setPixelRatio(window.devicePixelRatio);
-            renderer.shadowMap.enabled = true;
-            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-            renderer.toneMapping = THREE.LinearToneMapping;
-            renderer.toneMappingExposure = 1.0;
-        }
-
-        function setupLights() {
-            scene.add(new THREE.AmbientLight(0xffffff, 1.2)); 
-            const hemiLight = new THREE.HemisphereLight(0xffffff, 0x888888, 1.5);
-            hemiLight.position.set(0, 50, 0);
-            scene.add(hemiLight);
-
-            const dirLight = new THREE.DirectionalLight(0xffffff, 2.0);
-            dirLight.position.set(-50, 60, 40);
-            dirLight.castShadow = true;
-            dirLight.shadow.camera.top = 80;
-            dirLight.shadow.camera.bottom = -80;
-            dirLight.shadow.camera.left = -100;
-            dirLight.shadow.camera.right = 100;
-            dirLight.shadow.mapSize.width = 4096;
-            dirLight.shadow.mapSize.height = 4096;
-            dirLight.shadow.bias = -0.002;
-            scene.add(dirLight);
-        }
-
-        function setupControls() {
-            controls = new OrbitControls(camera, renderer.domElement);
-            controls.enableDamping = true;
-            controls.dampingFactor = 0.05;
-            controls.minDistance = 2;
-            controls.maxDistance = 150;
-            controls.maxPolarAngle = Math.PI / 1.5;
-            controls.target.set(0, 3, 0);
-        }
-
-        // --- LÓGICA DE CARGA Y PARSEO DE DATOS CSV ---
-        async function loadCSV(path, parser, dataMap) {
-            const url = `${BASE_URL}${path}?t=${new Date().getTime()}`;
-            const response = await fetch(url);
-            if (!response.ok) throw new Error(`No se pudo cargar ${path}`);
-            const text = await response.text();
-            const rows = text.trim().split('\n').slice(1);
-            rows.forEach(row => parser(row.trim(), dataMap));
-        }
-
-        async function init() {
-            clock = new THREE.Clock();
-            
-            updateLoader('Inicializando motor 3D...', 10);
-            setupScene();
-            setupLights();
-            setupControls();
-            
-            try {
-                updateLoader('Descargando archivos de datos...', 25);
-                await Promise.all([
-                    loadEstanteriasFromSupabase(),
-                    loadDetalleLotesFromSupabase(),
-                    loadArticulosFromSupabase()
-                ]);
-                
-                updateLoader('Procesando texturas...', 75);
-                createTextures();
-                
-                updateLoader('Construyendo depósito...', 90);
-                buildWarehouse();
-                populateLegend();
-                setupInteractions();
-                
-                updateLoader('¡Listo!', 100);
-                setTimeout(() => {
-                    loaderUI.style.opacity = '0';
-                    setTimeout(() => {
-                        loaderUI.style.display = 'none';
-                        leftPanel.style.display = 'flex';
-                    }, 500);
-                }, 500);
-
-                animate();
-            } catch (error) {
-                console.error("Error crítico durante la inicialización:", error);
-                updateLoader('Error de Carga', 100);
-                loaderProgress.style.backgroundColor = '#ef4444';
-                loaderStatus.innerHTML = `No se pudo cargar.<br><span style="font-size: 0.8em; color: #ff8888;">${error.message}</span>`;
-            }
-        }
-
-        // --- CONFIGURACIÓN DE LA ESCENA Y RENDERIZADO THREE.JS ---
-        function setupScene() {
-            scene = new THREE.Scene();
-            scene.background = new THREE.Color(0xdedede);
-
-            camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 2000);
-            camera.position.copy(initialCameraPosition);
-
-            renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('render-canvas'), antialias: true, powerPreference: "high-performance" });
-            renderer.setSize(window.innerWidth, window.innerHeight);
-            renderer.setPixelRatio(window.devicePixelRatio);
-            renderer.shadowMap.enabled = true;
-            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-            renderer.toneMapping = THREE.LinearToneMapping;
-            renderer.toneMappingExposure = 1.0;
-        }
-
-        function setupLights() {
-            scene.add(new THREE.AmbientLight(0xffffff, 1.2)); 
-            const hemiLight = new THREE.HemisphereLight(0xffffff, 0x888888, 1.5);
-            hemiLight.position.set(0, 50, 0);
-            scene.add(hemiLight);
-
-            const dirLight = new THREE.DirectionalLight(0xffffff, 2.0);
-            dirLight.position.set(-50, 60, 40);
-            dirLight.castShadow = true;
-            dirLight.shadow.camera.top = 80;
-            dirLight.shadow.camera.bottom = -80;
-            dirLight.shadow.camera.left = -100;
-            dirLight.shadow.camera.right = 100;
-            dirLight.shadow.mapSize.width = 4096;
-            dirLight.shadow.mapSize.height = 4096;
-            dirLight.shadow.bias = -0.002;
-            scene.add(dirLight);
-        }
-
-        function setupControls() {
-            controls = new OrbitControls(camera, renderer.domElement);
-            controls.enableDamping = true;
-            controls.dampingFactor = 0.05;
-            controls.minDistance = 2;
-            controls.maxDistance = 150;
-            controls.maxPolarAngle = Math.PI / 1.5;
-            controls.target.set(0, 3, 0);
-        }
-
-        // --- LÓGICA DE CARGA Y PARSEO DE DATOS CSV ---
-        async function loadCSV(path, parser, dataMap) {
-            const url = `${BASE_URL}${path}?t=${new Date().getTime()}`;
-            const response = await fetch(url);
-            if (!response.ok) throw new Error(`No se pudo cargar ${path}`);
-            const text = await response.text();
-            const rows = text.trim().split('\n').slice(1);
-            rows.forEach(row => parser(row.trim(), dataMap));
-        }
-
-        async function loadEstanteriasFromSupabase() {
-            if (!supabaseClient) throw new Error('Supabase client no está inicializado.');
-            
-            updateLoader('Cargando estanterías desde DB...', 30);
-            const { data, error } = await supabaseClient.from('definicion_estanterias').select('*');
-
-            if (error) {
-                console.error("Error fetching estanterias from Supabase:", error);
-                throw new Error('No se pudo cargar la definición de estanterías desde la base de datos.');
-            }
-
-            data.forEach(item => {
-                if (item.id_estanteria) {
-                    racksData.set(item.id_estanteria, {
-                        x: parseFloat(item.pos_x),
-                        z: parseFloat(item.pos_z),
-                        levels: parseInt(item.niveles),
-                        columns: parseInt(item.columnas),
-                        slotWidth: parseFloat(item.ancho_slot),
-                        slotHeight: parseFloat(item.alto_slot),
-                        slotDepth: parseFloat(item.profundidad_slot),
-                        depthPositions: parseInt(item.posiciones_profundidad) || 1,
-                        rotationY: parseFloat(item.rotacion_y) || 0
-                    });
-                }
-            });
-        }
-
-        function parseInventory(row, map) {
-            const [locationId, sku, palletId] = row.split(';');
-            if (locationId) map.set(locationId.trim(), { sku: sku.trim(), palletId: palletId.trim() });
-        }
-        function parseLotes(row, map) {
-            const [sku, desc, pallet, lotes, fecha, qty, uom] = row.split(';');
-            if (pallet) map.set(pallet.trim(), { sku, lotes, fecha, cantidad: qty, uom });
-        }
-        
-        async function loadArticulosFromSupabase() {
-            if (!supabaseClient) throw new Error('Supabase client no está inicializado.');
-            
-            updateLoader('Cargando artículos desde DB...', 60);
-            const { data, error } = await supabaseClient
-                .from('articulos')
-                .select('idsku, tiposku, sku, descriciolarga, descripcioncorta, rne, rnpa');
-
-            if (error) {
-                console.error("Error fetching articulos from Supabase:", error);
-                throw new Error('No se pudo cargar la lista de artículos desde la base de datos.');
-            }
-
-            data.forEach(item => {
-                if (item.sku) {
-                    articulosData.set(item.sku.trim(), {
-                        idsku: item.idsku,
-                        tipo: item.tiposku?.trim().toUpperCase(),
-                        descripcionLarga: item.descriciolarga?.trim(),
-                        descripcionCorta: item.descripcioncorta?.trim(),
-                        rne: item.rne?.trim(),
-                        rnpa: item.rnpa?.trim()
-                    });
-                }
-            });
-        }
-        
-        // --- LÓGICA DE CONSTRUCCIÓN PARAMÉTRICA DEL DEPÓSITO ---
-        function buildWarehouse() {
+        function buildVirtualWarehouse() {
             const mainGroup = new THREE.Group();
-            for (const [id, rackDef] of racksData.entries()) {
-                const rackGroup = createRack(rackDef);
-                rackGroup.position.set(rackDef.x, 0, rackDef.z);
-                rackGroup.rotation.y = THREE.MathUtils.degToRad(rackDef.rotationY);
-                mainGroup.add(rackGroup);
+            const pallets = Array.from(lotesData.values());
 
-                for (let l = 1; l <= rackDef.levels; l++) {
-                    for (let c = 1; c <= rackDef.columns; c++) {
-                        for (let p = 1; p <= rackDef.depthPositions; p++) {
-                            const locationId = `${id}-${l}-${c}-${p}`;
-                            const pos = calculateSlotPosition(rackDef, l, c, p);
-                            
-                            const palletData = inventoryData.get(locationId);
-                            let mesh;
-                            if (palletData) {
-                                mesh = createPallet(palletData, locationId);
-                                palletsInScene.set(palletData.palletId, mesh);
-                            } else {
-                                mesh = createEmptySlot(rackDef, locationId);
-                            }
-                            mesh.position.copy(pos);
-                            rackGroup.add(mesh);
-                        }
-                    }
+            // Group pallets by tiposku
+            const groupedByTipoSku = pallets.reduce((acc, pallet) => {
+                const key = pallet.tiposku || 'SIN_TIPO';
+                if (!acc[key]) {
+                    acc[key] = [];
                 }
+                acc[key].push(pallet);
+                return acc;
+            }, {});
+
+            const tipoSkuKeys = Object.keys(groupedByTipoSku);
+            const numTipoSku = tipoSkuKeys.length;
+            const spacing = 5;
+            let currentX = 0;
+
+            for (let i = 0; i < numTipoSku; i++) {
+                const tipoSku = tipoSkuKeys[i];
+                const palletsInGroup = groupedByTipoSku[tipoSku];
+                const numPallets = palletsInGroup.length;
+                const gridCols = Math.ceil(Math.sqrt(numPallets));
+                const groupWidth = gridCols * 1.5;
+
+                const groupContainer = new THREE.Group();
+                groupContainer.position.x = currentX;
+
+                for (let j = 0; j < numPallets; j++) {
+                    const pallet = palletsInGroup[j];
+                    const row = Math.floor(j / gridCols);
+                    const col = j % gridCols;
+
+                    const locationId = `VIRTUAL-${tipoSku}-${row}-${col}`;
+                    const palletMesh = createPallet(pallet, locationId);
+                    palletMesh.position.set(col * 1.5, 0, row * 1.5);
+                    groupContainer.add(palletMesh);
+                    palletsInScene.set(pallet.nropallet.toString(), palletMesh);
+                }
+
+                mainGroup.add(groupContainer);
+                currentX += groupWidth + spacing;
             }
+
             scene.add(mainGroup);
-            
+
             worldBounds.setFromObject(mainGroup, true).expandByScalar(20);
-            
+
             const floorSize = Math.max(worldBounds.getSize(new THREE.Vector3()).x, worldBounds.getSize(new THREE.Vector3()).z) + 20;
             const textureLoader = new THREE.TextureLoader();
             const floorTexture = textureLoader.load('fondo.jpg');
             const floor = new THREE.Mesh(
                 new THREE.PlaneGeometry(floorSize, floorSize),
-                new THREE.MeshStandardMaterial({ 
+                new THREE.MeshStandardMaterial({
                     color: 0xcccccc, map: floorTexture, roughness: 0.9, metalness: 0.1
                 })
             );
@@ -610,93 +364,49 @@
 
             createFlyThroughPath();
         }
+
+        async function init() {
+            clock = new THREE.Clock();
+            
+            updateLoader('Inicializando motor 3D...', 10);
+            setupScene();
+            setupLights();
+            setupControls();
+            
+            try {
+                updateLoader('Descargando archivos de datos...', 25);
+                await Promise.all([
+                    loadDetalleLotesFromSupabase(),
+                    loadArticulosFromSupabase()
+                ]);
+                
+                updateLoader('Procesando texturas...', 75);
+                createTextures();
+                
+                updateLoader('Construyendo depósito virtual...', 90);
+                buildVirtualWarehouse();
+                populateLegend();
+                setupInteractions();
+                
+                updateLoader('¡Listo!', 100);
+                setTimeout(() => {
+                    loaderUI.style.opacity = '0';
+                    setTimeout(() => {
+                        loaderUI.style.display = 'none';
+                        leftPanel.style.display = 'flex';
+                    }, 500);
+                }, 500);
+
+                animate();
+            } catch (error) {
+                console.error("Error crítico durante la inicialización:", error);
+                updateLoader('Error de Carga', 100);
+                loaderProgress.style.backgroundColor = '#ef4444';
+                loaderStatus.innerHTML = `No se pudo cargar.<br><span style="font-size: 0.8em; color: #ff8888;">${error.message}</span>`;
+            }
+        }
         
-        // --- FUNCIÓN DE CONSTRUCCIÓN DE ESTANTERÍAS (REFACTORIZADA) ---
-        function createRack(def) {
-            const rack = new THREE.Group();
-            const postGeo = new THREE.BoxGeometry(0.12, def.slotHeight * def.levels, 0.12);
-            const beamZGeo = new THREE.BoxGeometry(0.12, 0.1, def.slotDepth); // Viga de soporte en profundidad
 
-            // 1. Matriz de Postes Verticales
-            for (let c = 0; c <= def.columns; c++) {
-                for (let p = 0; p <= def.depthPositions; p++) {
-                    const post = new THREE.Mesh(postGeo, rackPostMaterial);
-                    post.position.set(
-                        c * def.slotWidth,
-                        (def.slotHeight * def.levels) / 2,
-                        (p - def.depthPositions / 2) * def.slotDepth
-                    );
-                    post.castShadow = true;
-                    rack.add(post);
-                }
-            }
-
-            // 2. Vigas de Soporte (en profundidad)
-            for (let l = 1; l <= def.levels; l++) {
-                const yPos = (l - 1) * def.slotHeight;
-                for (let c = 0; c < def.columns; c++) {
-                     for (let p = 0; p < def.depthPositions; p++) {
-                        const xPos = c * def.slotWidth;
-                        const zPos = (p - (def.depthPositions - 1) / 2) * def.slotDepth;
-
-                        const supportRail1 = new THREE.Mesh(beamZGeo, rackBeamMaterial);
-                        supportRail1.position.set(xPos, yPos, zPos);
-                        supportRail1.castShadow = true;
-                        rack.add(supportRail1);
-
-                        const supportRail2 = new THREE.Mesh(beamZGeo, rackBeamMaterial);
-                        supportRail2.position.set(xPos + def.slotWidth, yPos, zPos);
-                        supportRail2.castShadow = true;
-                        rack.add(supportRail2);
-                     }
-                }
-            }
-            return rack;
-        }
-
-        function calculateSlotPosition(def, level, column, depthPos) {
-            const x = (column - 0.5) * def.slotWidth;
-            const y = (level - 1) * def.slotHeight;
-            const z = (depthPos - 0.5 - def.depthPositions / 2) * def.slotDepth;
-            return new THREE.Vector3(x, y, z);
-        }
-
-        function createPallet(data, locationId) {
-            const palletGroup = new THREE.Group();
-            
-            const boxGeo = new THREE.BoxGeometry(1.2, 1.2, 1.0);
-            const boxMaterial = new THREE.MeshStandardMaterial({ color: getSkuColor(data.sku), roughness: 0.7 });
-            const box = new THREE.Mesh(boxGeo, boxMaterial.clone());
-            box.position.y = 0.15 + 1.2/2;
-            box.castShadow = true;
-            box.receiveShadow = true;
-
-            const baseGeo = new THREE.BoxGeometry(1.2, 0.15, 1.0);
-            const base = new THREE.Mesh(baseGeo, palletBaseMaterial);
-            base.position.y = 0.15/2;
-            base.castShadow = true;
-            base.receiveShadow = true;
-            
-            const boxEdges = new THREE.LineSegments(new THREE.EdgesGeometry(boxGeo), lineMaterial);
-            boxEdges.position.copy(box.position);
-            const baseEdges = new THREE.LineSegments(new THREE.EdgesGeometry(baseGeo), lineMaterial);
-            baseEdges.position.copy(base.position);
-
-            palletGroup.add(box, base, boxEdges, baseEdges);
-
-            palletGroup.userData = { isPallet: true, ...data, locationId };
-            palletGroup.userData.originalMaterial = box.material;
-            return palletGroup;
-        }
-
-        function createEmptySlot(def, locationId) {
-            const slotGeo = new THREE.BoxGeometry(def.slotWidth * 0.9, def.slotHeight * 0.8, def.slotDepth * 0.9);
-            const emptySlot = new THREE.Mesh(slotGeo, emptySlotMaterial.clone());
-            emptySlot.position.y = (def.slotHeight * 0.8) / 2 + 0.15;
-            emptySlot.userData = { isEmptySlot: true, locationId };
-            emptySlot.userData.originalMaterial = emptySlot.material;
-            return emptySlot;
-        }
 
         // --- GESTIÓN DE INTERACTIVIDAD Y UI ---
         function setupInteractions() {
