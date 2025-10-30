@@ -247,7 +247,9 @@
 
         
         // --- CONFIGURACIÓN DE LA APLICACIÓN ---
-        const BASE_URL = ``;
+        const GITHUB_USER = 'gagegfg';
+        const GITHUB_REPO = 'Molderil_ListaEmpaque';
+        const BASE_URL = `https://raw.githubusercontent.com/${GITHUB_USER}/${GITHUB_REPO}/main/`;
 
         // --- ESTADO GLOBAL DE LA APLICACIÓN ---
         let scene, camera, renderer, controls, clock;
@@ -304,9 +306,9 @@
             try {
                 updateLoader('Descargando archivos de datos...', 25);
                 await Promise.all([
-                    loadCSV('definicion_estanterias.csv', parseRacks, racksData),
+                    loadEstanteriasFromSupabase(),
                     loadCSV('inventario_ubicaciones.csv', parseInventory, inventoryData),
-                    loadCSV('detallelotes.csv', parseLotes, lotesData),
+                    loadDetalleLotesFromSupabase(),
                     loadArticulosFromSupabase()
                 ]);
                 
@@ -384,7 +386,7 @@
 
         // --- LÓGICA DE CARGA Y PARSEO DE DATOS CSV ---
         async function loadCSV(path, parser, dataMap) {
-            const url = `${path}?t=${new Date().getTime()}`;
+            const url = `${BASE_URL}${path}?t=${new Date().getTime()}`;
             const response = await fetch(url);
             if (!response.ok) throw new Error(`No se pudo cargar ${path}`);
             const text = await response.text();
@@ -392,14 +394,132 @@
             rows.forEach(row => parser(row.trim(), dataMap));
         }
 
-        function parseRacks(row, map) {
-            const [id, x, z, levels, cols, w, h, d, p, rotY] = row.split(';');
-            if (id) map.set(id, {
-                x: parseFloat(x), z: parseFloat(z), levels: parseInt(levels),
-                columns: parseInt(cols), slotWidth: parseFloat(w), slotHeight: parseFloat(h),
-                slotDepth: parseFloat(d), depthPositions: parseInt(p) || 1, rotationY: parseFloat(rotY) || 0
+        async function init() {
+            clock = new THREE.Clock();
+            
+            updateLoader('Inicializando motor 3D...', 10);
+            setupScene();
+            setupLights();
+            setupControls();
+            
+            try {
+                updateLoader('Descargando archivos de datos...', 25);
+                await Promise.all([
+                    loadEstanteriasFromSupabase(),
+                    loadDetalleLotesFromSupabase(),
+                    loadArticulosFromSupabase()
+                ]);
+                
+                updateLoader('Procesando texturas...', 75);
+                createTextures();
+                
+                updateLoader('Construyendo depósito...', 90);
+                buildWarehouse();
+                populateLegend();
+                setupInteractions();
+                
+                updateLoader('¡Listo!', 100);
+                setTimeout(() => {
+                    loaderUI.style.opacity = '0';
+                    setTimeout(() => {
+                        loaderUI.style.display = 'none';
+                        leftPanel.style.display = 'flex';
+                    }, 500);
+                }, 500);
+
+                animate();
+            } catch (error) {
+                console.error("Error crítico durante la inicialización:", error);
+                updateLoader('Error de Carga', 100);
+                loaderProgress.style.backgroundColor = '#ef4444';
+                loaderStatus.innerHTML = `No se pudo cargar.<br><span style="font-size: 0.8em; color: #ff8888;">${error.message}</span>`;
+            }
+        }
+
+        // --- CONFIGURACIÓN DE LA ESCENA Y RENDERIZADO THREE.JS ---
+        function setupScene() {
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0xdedede);
+
+            camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 2000);
+            camera.position.copy(initialCameraPosition);
+
+            renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('render-canvas'), antialias: true, powerPreference: "high-performance" });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            renderer.toneMapping = THREE.LinearToneMapping;
+            renderer.toneMappingExposure = 1.0;
+        }
+
+        function setupLights() {
+            scene.add(new THREE.AmbientLight(0xffffff, 1.2)); 
+            const hemiLight = new THREE.HemisphereLight(0xffffff, 0x888888, 1.5);
+            hemiLight.position.set(0, 50, 0);
+            scene.add(hemiLight);
+
+            const dirLight = new THREE.DirectionalLight(0xffffff, 2.0);
+            dirLight.position.set(-50, 60, 40);
+            dirLight.castShadow = true;
+            dirLight.shadow.camera.top = 80;
+            dirLight.shadow.camera.bottom = -80;
+            dirLight.shadow.camera.left = -100;
+            dirLight.shadow.camera.right = 100;
+            dirLight.shadow.mapSize.width = 4096;
+            dirLight.shadow.mapSize.height = 4096;
+            dirLight.shadow.bias = -0.002;
+            scene.add(dirLight);
+        }
+
+        function setupControls() {
+            controls = new OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+            controls.minDistance = 2;
+            controls.maxDistance = 150;
+            controls.maxPolarAngle = Math.PI / 1.5;
+            controls.target.set(0, 3, 0);
+        }
+
+        // --- LÓGICA DE CARGA Y PARSEO DE DATOS CSV ---
+        async function loadCSV(path, parser, dataMap) {
+            const url = `${BASE_URL}${path}?t=${new Date().getTime()}`;
+            const response = await fetch(url);
+            if (!response.ok) throw new Error(`No se pudo cargar ${path}`);
+            const text = await response.text();
+            const rows = text.trim().split('\n').slice(1);
+            rows.forEach(row => parser(row.trim(), dataMap));
+        }
+
+        async function loadEstanteriasFromSupabase() {
+            if (!supabaseClient) throw new Error('Supabase client no está inicializado.');
+            
+            updateLoader('Cargando estanterías desde DB...', 30);
+            const { data, error } = await supabaseClient.from('definicion_estanterias').select('*');
+
+            if (error) {
+                console.error("Error fetching estanterias from Supabase:", error);
+                throw new Error('No se pudo cargar la definición de estanterías desde la base de datos.');
+            }
+
+            data.forEach(item => {
+                if (item.id_estanteria) {
+                    racksData.set(item.id_estanteria, {
+                        x: parseFloat(item.pos_x),
+                        z: parseFloat(item.pos_z),
+                        levels: parseInt(item.niveles),
+                        columns: parseInt(item.columnas),
+                        slotWidth: parseFloat(item.ancho_slot),
+                        slotHeight: parseFloat(item.alto_slot),
+                        slotDepth: parseFloat(item.profundidad_slot),
+                        depthPositions: parseInt(item.posiciones_profundidad) || 1,
+                        rotationY: parseFloat(item.rotacion_y) || 0
+                    });
+                }
             });
         }
+
         function parseInventory(row, map) {
             const [locationId, sku, palletId] = row.split(';');
             if (locationId) map.set(locationId.trim(), { sku: sku.trim(), palletId: palletId.trim() });
