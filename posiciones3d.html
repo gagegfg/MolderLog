@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>Molderil - Visualizador de Depósito 3D Paramétrico</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="config.js"></script>
     <!-- Librería para generar códigos QR -->
     <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js"></script>
     <style>
@@ -162,7 +164,7 @@
     <div id="loader">
         <div class="loader-overlay"></div>
         <div class="loader-panel">
-            <img src="https://placehold.co/400x150/transparent/white?text=MOLDERIL&font=raleway" alt="Logo Molderil"/>
+            <img src="logo.jpg" alt="Logo Molderil"/>
             <p id="loader-status">Iniciando aplicación...</p>
             <div class="progress-bar-container">
                 <div id="loader-progress" style="width: 0%"></div>
@@ -241,10 +243,11 @@
         import * as THREE from 'three';
         import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
         
+        const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+        
         // --- CONFIGURACIÓN DE LA APLICACIÓN ---
-        const GITHUB_USER = 'gagegfg';
-        const GITHUB_REPO = 'Molderil_ListaEmpaque';
-        const BASE_URL = `https://raw.githubusercontent.com/${GITHUB_USER}/${GITHUB_REPO}/main/`;
+        const BASE_URL = ``;
 
         // --- ESTADO GLOBAL DE LA APLICACIÓN ---
         let scene, camera, renderer, controls, clock;
@@ -304,7 +307,7 @@
                     loadCSV('definicion_estanterias.csv', parseRacks, racksData),
                     loadCSV('inventario_ubicaciones.csv', parseInventory, inventoryData),
                     loadCSV('detallelotes.csv', parseLotes, lotesData),
-                    loadCSV('articulos.csv', parseArticulos, articulosData)
+                    loadArticulosFromSupabase()
                 ]);
                 
                 updateLoader('Procesando texturas...', 75);
@@ -381,7 +384,7 @@
 
         // --- LÓGICA DE CARGA Y PARSEO DE DATOS CSV ---
         async function loadCSV(path, parser, dataMap) {
-            const url = `${BASE_URL}${path}?t=${new Date().getTime()}`;
+            const url = `${path}?t=${new Date().getTime()}`;
             const response = await fetch(url);
             if (!response.ok) throw new Error(`No se pudo cargar ${path}`);
             const text = await response.text();
@@ -405,9 +408,32 @@
             const [sku, desc, pallet, lotes, fecha, qty, uom] = row.split(';');
             if (pallet) map.set(pallet.trim(), { sku, lotes, fecha, cantidad: qty, uom });
         }
-        function parseArticulos(row, map) {
-            const [tipo, sku, descLarga, descCorta] = row.split(';');
-            if (sku) map.set(sku.trim(), { desc: (descCorta || descLarga || '').trim() });
+        
+        async function loadArticulosFromSupabase() {
+            if (!supabaseClient) throw new Error('Supabase client no está inicializado.');
+            
+            updateLoader('Cargando artículos desde DB...', 60);
+            const { data, error } = await supabaseClient
+                .from('articulos')
+                .select('idsku, tiposku, sku, descriciolarga, descripcioncorta, rne, rnpa');
+
+            if (error) {
+                console.error("Error fetching articulos from Supabase:", error);
+                throw new Error('No se pudo cargar la lista de artículos desde la base de datos.');
+            }
+
+            data.forEach(item => {
+                if (item.sku) {
+                    articulosData.set(item.sku.trim(), {
+                        idsku: item.idsku,
+                        tipo: item.tiposku?.trim().toUpperCase(),
+                        descripcionLarga: item.descriciolarga?.trim(),
+                        descripcionCorta: item.descripcioncorta?.trim(),
+                        rne: item.rne?.trim(),
+                        rnpa: item.rnpa?.trim()
+                    });
+                }
+            });
         }
         
         // --- LÓGICA DE CONSTRUCCIÓN PARAMÉTRICA DEL DEPÓSITO ---
@@ -678,7 +704,7 @@
                 
                 const palletId = data.palletId || 'N/A';
                 const sku = data.sku || 'N/A';
-                const desc = artInfo.desc || 'Descripción no encontrada';
+                const desc = artInfo.descripcionCorta || artInfo.descripcionLarga || 'Descripción no encontrada';
                 const qty = loteInfo.cantidad || 'N/A';
                 const uom = loteInfo.uom || '';
                 const lotes = loteInfo.lotes || 'N/A';
