@@ -289,6 +289,7 @@
 
         // --- FUNCIÓN PARA ACTUALIZAR LA BARRA DE PROGRESO ---
         function updateLoader(status, percentage) {
+            console.log(`Loading: ${status} - ${percentage}%`);
             loaderStatus.textContent = status;
             loaderProgress.style.width = `${percentage}%`;
         }
@@ -365,7 +366,53 @@
             createFlyThroughPath();
         }
 
+        function setupScene() {
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0xdedede);
+
+            camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 2000);
+            camera.position.copy(initialCameraPosition);
+
+            renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('render-canvas'), antialias: true, powerPreference: "high-performance" });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            renderer.toneMapping = THREE.LinearToneMapping;
+            renderer.toneMappingExposure = 1.0;
+        }
+
+        function setupLights() {
+            scene.add(new THREE.AmbientLight(0xffffff, 1.2)); 
+            const hemiLight = new THREE.HemisphereLight(0xffffff, 0x888888, 1.5);
+            hemiLight.position.set(0, 50, 0);
+            scene.add(hemiLight);
+
+            const dirLight = new THREE.DirectionalLight(0xffffff, 2.0);
+            dirLight.position.set(-50, 60, 40);
+            dirLight.castShadow = true;
+            dirLight.shadow.camera.top = 80;
+            dirLight.shadow.camera.bottom = -80;
+            dirLight.shadow.camera.left = -100;
+            dirLight.shadow.camera.right = 100;
+            dirLight.shadow.mapSize.width = 4096;
+            dirLight.shadow.mapSize.height = 4096;
+            dirLight.shadow.bias = -0.002;
+            scene.add(dirLight);
+        }
+
+        function setupControls() {
+            controls = new OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+            controls.minDistance = 2;
+            controls.maxDistance = 150;
+            controls.maxPolarAngle = Math.PI / 1.5;
+            controls.target.set(0, 3, 0);
+        }
+
         async function init() {
+            console.log("Initializing...");
             clock = new THREE.Clock();
             
             updateLoader('Inicializando motor 3D...', 10);
@@ -406,6 +453,35 @@
             }
         }
         
+
+
+        function createPallet(data, locationId) {
+            const palletGroup = new THREE.Group();
+            
+            const boxGeo = new THREE.BoxGeometry(1.2, 1.2, 1.0);
+            const boxMaterial = new THREE.MeshStandardMaterial({ color: getSkuColor(data.sku), roughness: 0.7 });
+            const box = new THREE.Mesh(boxGeo, boxMaterial.clone());
+            box.position.y = 0.15 + 1.2/2;
+            box.castShadow = true;
+            box.receiveShadow = true;
+
+            const baseGeo = new THREE.BoxGeometry(1.2, 0.15, 1.0);
+            const base = new THREE.Mesh(baseGeo, palletBaseMaterial);
+            base.position.y = 0.15/2;
+            base.castShadow = true;
+            base.receiveShadow = true;
+            
+            const boxEdges = new THREE.LineSegments(new THREE.EdgesGeometry(boxGeo), lineMaterial);
+            boxEdges.position.copy(box.position);
+            const baseEdges = new THREE.LineSegments(new THREE.EdgesGeometry(baseGeo), lineMaterial);
+            baseEdges.position.copy(base.position);
+
+            palletGroup.add(box, base, boxEdges, baseEdges);
+
+            palletGroup.userData = { isPallet: true, ...data, locationId };
+            palletGroup.userData.originalMaterial = box.material;
+            return palletGroup;
+        }
 
 
         // --- GESTIÓN DE INTERACTIVIDAD Y UI ---
