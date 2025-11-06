@@ -211,6 +211,55 @@
             );
         };
 
+        const HelpModal = ({ onClose }) => (
+            <div className="fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center z-50 p-4">
+                <div className="bg-white p-6 rounded-xl shadow-lg w-full max-w-3xl h-5/6 flex flex-col">
+                    <h3 className="text-xl font-bold text-gray-800 mb-4 border-b pb-2">Guía de Usuario: Histórico de Listas</h3>
+                    <div className="flex-grow overflow-y-auto pr-2 space-y-6 text-gray-700">
+                        
+                        <div>
+                            <h4 className="font-bold text-lg text-indigo-700 flex items-center"><i className="fas fa-search w-6 mr-2"></i>Búsqueda y Filtrado</h4>
+                            <ul className="list-disc list-inside mt-2 space-y-2 pl-4">
+                                <li><strong>Búsqueda Global:</strong> Utiliza el campo "Búsqueda global..." para encontrar texto en cualquier parte de la tabla.</li>
+                                <li><strong>Filtros por Columna:</strong> Debajo de cada título de columna, hay un campo para filtrar específicamente por ese dato.</li>
+                                <li><strong>Filtro por Fechas:</strong> Usa los campos "Desde" y "Hasta" para acotar los registros por su fecha de creación.</li>
+                                <li><strong>Limpiar Filtros:</strong> El botón <i className="fas fa-times-circle"></i> "Limpiar Filtros" borra todas las búsquedas y fechas.</li>
+                            </ul>
+                        </div>
+
+                        <div>
+                            <h4 className="font-bold text-lg text-indigo-700 flex items-center"><i className="fas fa-eye w-6 mr-2"></i>Visualización</h4>
+                            <ul className="list-disc list-inside mt-2 space-y-2 pl-4">
+                                <li><strong>Ordenar:</strong> Haz clic en el título de cualquier columna para ordenar la tabla por ese dato.</li>
+                                <li><strong>Agrupación:</strong> Las filas están agrupadas por lista de empaque. Una línea azul más gruesa indica el comienzo de una nueva lista.</li>
+                                <li><strong>Paginación:</strong> Usa los controles en la parte superior para navegar entre páginas y cambiar cuántos registros ves a la vez.</li>
+                            </ul>
+                        </div>
+
+                        <div>
+                            <h4 className="font-bold text-lg text-indigo-700 flex items-center"><i className="fas fa-pencil-alt w-6 mr-2"></i>Acciones de Edición</h4>
+                            <p className="mt-1 pl-4">Cada fila tiene un menú de acciones (<i className="fas fa-ellipsis-v"></i>) en la última columna. Desde allí puedes:</p>
+                            <ul className="list-disc list-inside mt-2 space-y-2 pl-8">
+                                <li>
+                                    <strong><i className="fas fa-truck-loading text-blue-500 w-6 mr-1"></i>Editar Despacho:</strong> Abre una ventana para cambiar la fecha, el transporte y si retira en planta. Ambos campos son obligatorios para guardar.
+                                </li>
+                                <li>
+                                    <strong><i className="fas fa-minus-circle text-yellow-600 w-6 mr-1"></i>Eliminar Pallet de la Lista:</strong> Quita un solo pallet (una fila) de la lista de empaque. La lista y el pallet seguirán existiendo, solo se borra la relación entre ellos.
+                                </li>
+                                <li>
+                                    <strong><i className="fas fa-trash-alt text-red-600 w-6 mr-1"></i>Eliminar Lista Completa:</strong> Borra permanentemente la lista de empaque y todos sus pallets asociados. Esta acción no se puede deshacer.
+                                </li>
+                            </ul>
+                        </div>
+
+                    </div>
+                    <div className="flex justify-end mt-6">
+                        <button onClick={onClose} className="bg-blue-600 text-white font-semibold py-2 px-6 rounded-lg hover:bg-blue-700">Entendido</button>
+                    </div>
+                </div>
+            </div>
+        );
+
         const App = () => {
             const [data, setData] = useState([]);
             const [headers, setHeaders] = useState([]);
@@ -236,6 +285,7 @@
 
             const [modalState, setModalState] = useState({ isOpen: false, title: '', message: '', onConfirm: () => {} });
             const [editModalState, setEditModalState] = useState({ isOpen: false, item: null });
+            const [showHelpModal, setShowHelpModal] = useState(false);
             
             const displayHeaders = useMemo(() => {
                 if (headers.length === 0) return [];
@@ -549,11 +599,18 @@
                         onClose={() => setEditModalState({ isOpen: false, item: null })}
                         onSave={handleSaveDispatch}
                     />
+                    {showHelpModal && <HelpModal onClose={() => setShowHelpModal(false)} />}
                     <div className="bg-white p-6 rounded-2xl shadow-xl flex flex-col flex-grow">
                         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 border-b pb-4 border-gray-200">
-                            <h1 className="text-3xl font-extrabold text-gray-800">Histórico de Listas de Empaque</h1>
+                            <div className="flex items-center space-x-4">
+                                <h1 className="text-3xl font-extrabold text-gray-800">Histórico de Listas de Empaque</h1>
+                                <button onClick={() => setShowHelpModal(true)} title="Ayuda" className="text-gray-400 hover:text-indigo-600 transition-colors">
+                                    <i className="fas fa-question-circle text-2xl"></i>
+                                </button>
+                            </div>
                             <div className="flex items-center space-x-3 mt-4 sm:mt-0">
                                 <a href="grillaqr.html" className="bg-green-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-green-700 transition-colors shadow-sm flex items-center"><i className="fas fa-qrcode mr-2"></i>Trazabilidad Lotes</a>
+                                <a href="listaempaque.html" className="bg-purple-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-purple-700 transition-colors shadow-sm flex items-center"><i className="fas fa-barcode mr-2"></i>Crear Lista Empaque</a>
                                 <a href="index.html" className="bg-gray-200 text-gray-800 font-semibold py-2 px-4 rounded-lg hover:bg-gray-300 transition-colors">Menú Principal</a>
                             </div>
                         </div>
