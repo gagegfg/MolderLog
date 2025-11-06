@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
@@ -279,8 +279,8 @@
             const [fechaHasta, setFechaHasta] = useState('');
             
             {/* Nuevos estados para el rango de fecha de producción */}
-            const [fechaProdDesde, setFechaProdDesde] = useState('');
-            const [fechaProdHasta, setFechaProdHasta] = useState('');
+            {/* const [fechaProdDesde, setFechaProdDesde] = useState(''); */} {/* ELIMINADO */}
+            {/* const [fechaProdHasta, setFechaProdHasta] = useState(''); */} {/* ELIMINADO */}
 
             const [sortConfig, setSortConfig] = useState({ key: 'idlista', direction: 'descending' });
             
@@ -364,13 +364,13 @@
                 }
 
                 {/* --- Nueva Lógica para Filtro de Fecha de PRODUCCIÓN --- */}
-                if (fechaProdDesde) query = query.gte('Fecha de produccion', fechaProdDesde);
-                if (fechaProdHasta) {
-                    const nextProdDay = new Date(fechaProdHasta);
-                    nextProdDay.setDate(nextProdDay.getDate() + 1);
-                    const nextProdDayString = nextProdDay.toISOString().split('T')[0];
-                    query = query.lt('Fecha de produccion', nextProdDayString);
-                }
+                {/* if (fechaProdDesde) query = query.gte('Fecha de produccion', fechaProdDesde); */} {/* ELIMINADO */}
+                {/* if (fechaProdHasta) { */} {/* ELIMINADO */}
+                {/* const nextProdDay = new Date(fechaProdHasta); */} {/* ELIMINADO */}
+                {/* nextProdDay.setDate(nextProdDay.getDate() + 1); */} {/* ELIMINADO */}
+                {/* const nextProdDayString = nextProdDay.toISOString().split('T')[0]; */} {/* ELIMINADO */}
+                {/* query = query.lt('Fecha de produccion', nextProdDayString); */} {/* ELIMINADO */}
+                {/* } */} {/* ELIMINADO */}
                 {/* --- Fin de la nueva lógica --- */}
 
 
@@ -421,9 +421,15 @@
                     setIsGridLoading(false);
                     if (isLoading) setIsLoading(false);
                 }
-            }, [supabaseClient, columnFilters, debouncedGlobalFilter, fechaDesde, fechaHasta, fechaProdDesde, fechaProdHasta, sortConfig, currentPage, recordsPerPage, headers]); // <-- Añadidas dependencias de fecha prod
+            }, [supabaseClient, columnFilters, debouncedGlobalFilter, fechaDesde, fechaHasta, /* fechaProdDesde, fechaProdHasta, */ sortConfig, currentPage, recordsPerPage, headers]); // <-- Dependencias eliminadas
 
             // Initial load and dependency-driven reloads
+            useEffect(() => {
+                if (!isLoading) {
+                     loadData(true); // Force reset to page 1 on filter change
+                }
+            }, [columnFilters, debouncedGlobalFilter, fechaDesde, fechaHasta, /* fechaProdDesde, fechaProdHasta, */ sortConfig, recordsPerPage]); // <-- Dependencias eliminadas
+
             useEffect(() => {
                 if (!isLoading) {
                      loadData(true); // Force reset to page 1 on filter change
@@ -515,8 +521,8 @@
                 setGlobalFilter('');
                 
                 {/* Limpiar nuevos filtros de fecha prod */}
-                setFechaProdDesde('');
-                setFechaProdHasta('');
+                {/* setFechaProdDesde(''); */} {/* ELIMINADO */}
+                {/* setFechaProdHasta(''); */} {/* ELIMINADO */}
 
                 if (currentPage !== 1) setCurrentPage(1);
             };
@@ -704,14 +710,7 @@
                                 </div>
 
                                 {/* --- INICIO: Nuevos Filtros Fecha Producción --- */}
-                                <div className="flex items-center gap-x-2">
-                                    <label className="text-sm font-medium text-gray-700" title="Fecha de Producción Desde">Prod. Desde:</label>
-                                    <input type="date" value={fechaProdDesde} onChange={e => setFechaProdDesde(e.target.value)} className="rounded-md border-gray-300 shadow-sm p-2 border" title="Fecha de Producción Desde"/>
-                                </div>
-                                <div className="flex items-center gap-x-2">
-                                    <label className="text-sm font-medium text-gray-700" title="Fecha de Producción Hasta">Prod. Hasta:</label>
-                                    <input type="date" value={fechaProdHasta} onChange={e => setFechaProdHasta(e.target.value)} className="rounded-md border-gray-300 shadow-sm p-2 border" title="Fecha de Producción Hasta"/>
-                                </div>
+                                {/* ELIMINADOS */}
                                 {/* --- FIN: Nuevos Filtros Fecha Producción --- */}
 
                                 <span className="text-sm font-medium text-gray-700 px-2">
