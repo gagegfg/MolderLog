@@ -303,7 +303,7 @@
                 ];
                 
                 return [...headers]
-                    .filter(h => h !== 'fechacreacion') // Ocultar la columna de fecha original
+                    .filter(h => h !== 'fechacreacion' && h !== 'Legajo') // <-- MODIFICACIÓN AQUÍ
                     .sort((a, b) => {
                         const indexA = preferredOrder.indexOf(a);
                         const indexB = preferredOrder.indexOf(b);
@@ -317,7 +317,7 @@
             const applyFiltersToQuery = (query) => {
                 if (debouncedGlobalFilter && headers.length > 0) {
                     const orFilter = headers
-                        .filter(h => h !== 'fechacreacion') // No incluir la columna de fecha original en el filtro global
+                        .filter(h => h !== 'fechacreacion' && h !== 'Legajo') // <-- MODIFICACIÓN AQUÍ
                         .map(header => {
                             const h = /[\\s.]/.test(header) ? `"${header}"` : header;
                             return `${h}.ilike.%${debouncedGlobalFilter}%`;
@@ -327,6 +327,9 @@
                 }
 
                 Object.keys(columnFilters).forEach(key => {
+                    // No aplicar filtro de columna para 'Legajo' si ya está oculta
+                    if (key === 'Legajo') return; 
+                    
                     const filterValue = columnFilters[key] ? columnFilters[key].trim() : '';
                     if (filterValue) {
                         const h = /[\\s.]/.test(key) ? `"${key}"` : key;
@@ -590,13 +593,16 @@
                 let classes = 'px-3 py-2 text-sm text-gray-700 align-middle';
                 switch(header.toLowerCase()) {
                     case 'idlista':
-                    case 'legajo':
-                        return `${classes} w-20 font-semibold text-gray-900 whitespace-nowrap`;
+                    // case 'legajo': // Comentado ya que la columna está oculta
+                    //     return `${classes} w-20 font-semibold text-gray-900 whitespace-nowrap`;
                     case 'fecha creacion lista':
                         return `${classes} w-40 whitespace-nowrap`;
                     case 'cantidad':
                     case 'u.m.':
                         return `${classes} w-24 text-center`;
+                    // Añadimos 'idlista' aquí si queremos que también tenga ese estilo
+                    case 'idlista':
+                        return `${classes} w-20 font-semibold text-gray-900 whitespace-nowrap`;
                     default:
                         return classes;
                 }
