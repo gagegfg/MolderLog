@@ -1,4 +1,4 @@
-!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
@@ -430,11 +430,14 @@
                 }
             }, [columnFilters, debouncedGlobalFilter, fechaDesde, fechaHasta, /* fechaProdDesde, fechaProdHasta, */ sortConfig, recordsPerPage]); // <-- Dependencias eliminadas
 
+            /*
             useEffect(() => {
                 if (!isLoading) {
                      loadData(true); // Force reset to page 1 on filter change
                 }
             }, [columnFilters, debouncedGlobalFilter, fechaDesde, fechaHasta, fechaProdDesde, fechaProdHasta, sortConfig, recordsPerPage]); // <-- Añadidas dependencias de fecha prod
+            */
+            // ^^^ ESTE BLOQUE COMPLETO FUE ELIMINADO PORQUE ESTABA DUPLICADO Y ROTO ^^^
 
             useEffect(() => {
                 if (!isLoading) {
