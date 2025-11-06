@@ -223,9 +223,8 @@
                     <div className="flex-grow overflow-y-auto pr-2 space-y-6 text-gray-700">
                         
                         <div>
-                            <h4 className="font-bold text-lg text-indigo-700 flex items-center"><i className="fas fa-search w-6 mr-2"></i>Búsqueda y Filtrado</h4>
+                            <h4 className="font-bold text-lg text-indigo-700 flex items-center"><i className="fas fa-search w-6 mr-2"></i>Filtrado</h4>
                             <ul className="list-disc list-inside mt-2 space-y-2 pl-4">
-                                <li><strong>Búsqueda Global:</strong> Utiliza el campo "Búsqueda global..." para encontrar texto en cualquier parte de la tabla.</li>
                                 <li><strong>Filtros por Columna:</strong> Debajo de cada título de columna, hay un campo para filtrar específicamente por ese dato.</li>
                                 <li><strong>Filtro por Fechas:</strong> Usa los campos "Desde" y "Hasta" para acotar los registros por su fecha de creación.</li>
                                 <li><strong>Limpiar Filtros:</strong> El botón <i className="fas fa-times-circle"></i> "Limpiar Filtros" borra todas las búsquedas y fechas.</li>
@@ -273,15 +272,12 @@
 
             const [columnFilters, setColumnFilters] = useState({});
             const [internalColumnFilters, setInternalColumnFilters] = useState({});
-            const [globalFilter, setGlobalFilter] = useState('');
-            const [debouncedGlobalFilter, setDebouncedGlobalFilter] = useState('');
+            {/* Búsqueda Global Eliminada */}
+            {/* const [globalFilter, setGlobalFilter] = useState(''); */}
+            {/* const [debouncedGlobalFilter, setDebouncedGlobalFilter] = useState(''); */}
             const [fechaDesde, setFechaDesde] = useState('');
             const [fechaHasta, setFechaHasta] = useState('');
             
-            {/* Nuevos estados para el rango de fecha de producción */}
-            {/* const [fechaProdDesde, setFechaProdDesde] = useState(''); */} {/* ELIMINADO */}
-            {/* const [fechaProdHasta, setFechaProdHasta] = useState(''); */} {/* ELIMINADO */}
-
             const [sortConfig, setSortConfig] = useState({ key: 'idlista', direction: 'descending' });
             
             const [currentPage, setCurrentPage] = useState(1);
@@ -308,7 +304,7 @@
                 ];
                 
                 return [...headers]
-                    .filter(h => h !== 'fechacreacion' && h !== 'Legajo') // <-- MODIFICACIÓN AQUÍ
+                    .filter(h => h !== 'fechacreacion' && h !== 'Legajo') // Sigue ocultando 'Legajo' y 'fechacreacion'
                     .sort((a, b) => {
                         const indexA = preferredOrder.indexOf(a);
                         const indexB = preferredOrder.indexOf(b);
@@ -320,20 +316,12 @@
             }, [headers]);
 
             const applyFiltersToQuery = (query) => {
-                if (debouncedGlobalFilter && headers.length > 0) {
-                    const orFilter = headers
-                        .filter(h => h !== 'fechacreacion' && h !== 'Legajo') // <-- MODIFICACIÓN AQUÍ
-                        .map(header => {
-                            const h = /[\\s.]/.test(header) ? `"${header}"` : header;
-                            return `${h}.ilike.%${debouncedGlobalFilter}%`;
-                        })
-                        .join(',');
-                    query = query.or(orFilter);
-                }
-
-                {/* --- Lógica de Filtro de Columna Modificada --- */}
+                
                 const numericColumns = ['idlista', 'cantidad']; // Definimos columnas numéricas
 
+                {/* --- Lógica de Búsqueda Global Eliminada --- */}
+
+                {/* --- Lógica de Filtro de Columna --- */}
                 Object.keys(columnFilters).forEach(key => {
                     // No aplicar filtro de columna para 'Legajo' si ya está oculta
                     if (key === 'Legajo') return; 
@@ -348,7 +336,7 @@
                                 query = query.eq(h, numericValue); // Usar 'eq' (equals) para números
                             }
                             // Si no es un número válido, el filtro no encontrará nada (intencional)
-                        } else { // Si es texto u otra
+                        } else { // Si es texto, fecha, u otra
                             query = query.ilike(h, `%${filterValue}%`); // Usar 'ilike' para texto
                         }
                     }
@@ -362,17 +350,6 @@
                     const nextDayString = nextDay.toISOString().split('T')[0];
                     query = query.lt('fechacreacion', nextDayString);
                 }
-
-                {/* --- Nueva Lógica para Filtro de Fecha de PRODUCCIÓN --- */}
-                {/* if (fechaProdDesde) query = query.gte('Fecha de produccion', fechaProdDesde); */} {/* ELIMINADO */}
-                {/* if (fechaProdHasta) { */} {/* ELIMINADO */}
-                {/* const nextProdDay = new Date(fechaProdHasta); */} {/* ELIMINADO */}
-                {/* nextProdDay.setDate(nextProdDay.getDate() + 1); */} {/* ELIMINADO */}
-                {/* const nextProdDayString = nextProdDay.toISOString().split('T')[0]; */} {/* ELIMINADO */}
-                {/* query = query.lt('Fecha de produccion', nextProdDayString); */} {/* ELIMINADO */}
-                {/* } */} {/* ELIMINADO */}
-                {/* --- Fin de la nueva lógica --- */}
-
 
                 const sortKey = sortConfig.key;
                 const h = /[\\s.]/.test(sortKey) ? `"${sortKey}"` : sortKey;
@@ -421,29 +398,14 @@
                     setIsGridLoading(false);
                     if (isLoading) setIsLoading(false);
                 }
-            }, [supabaseClient, columnFilters, debouncedGlobalFilter, fechaDesde, fechaHasta, /* fechaProdDesde, fechaProdHasta, */ sortConfig, currentPage, recordsPerPage, headers]); // <-- Dependencias eliminadas
+            }, [supabaseClient, columnFilters, fechaDesde, fechaHasta, sortConfig, currentPage, recordsPerPage, headers]); // <-- 'debouncedGlobalFilter' eliminado
 
             // Initial load and dependency-driven reloads
             useEffect(() => {
                 if (!isLoading) {
                      loadData(true); // Force reset to page 1 on filter change
                 }
-            }, [columnFilters, debouncedGlobalFilter, fechaDesde, fechaHasta, /* fechaProdDesde, fechaProdHasta, */ sortConfig, recordsPerPage]); // <-- Dependencias eliminadas
-
-            /*
-            useEffect(() => {
-                if (!isLoading) {
-                     loadData(true); // Force reset to page 1 on filter change
-                }
-            }, [columnFilters, debouncedGlobalFilter, fechaDesde, fechaHasta, fechaProdDesde, fechaProdHasta, sortConfig, recordsPerPage]); // <-- Añadidas dependencias de fecha prod
-            */
-            // ^^^ ESTE BLOQUE COMPLETO FUE ELIMINADO PORQUE ESTABA DUPLICADO Y ROTO ^^^
-
-            useEffect(() => {
-                if (!isLoading) {
-                     loadData(true); // Force reset to page 1 on filter change
-                }
-            }, [columnFilters, debouncedGlobalFilter, fechaDesde, fechaHasta, sortConfig, recordsPerPage]);
+            }, [columnFilters, fechaDesde, fechaHasta, sortConfig, recordsPerPage]); // <-- 'debouncedGlobalFilter' eliminado
 
             useEffect(() => {
                 if (!isLoading) {
@@ -494,13 +456,15 @@
                 return () => { clearTimeout(handler); };
             }, [internalColumnFilters, columnFilters]);
 
-            // Debounce for global filter
+            {/* Debounce para Búsqueda Global Eliminado */}
+            {/*
             useEffect(() => {
                 const handler = setTimeout(() => {
                     setDebouncedGlobalFilter(globalFilter);
                 }, 500);
                 return () => { clearTimeout(handler); };
             }, [globalFilter]);
+            */}
 
             const handleColumnFilterChange = (columnId, value) => {
                 setInternalColumnFilters(prev => ({ ...prev, [columnId]: value }));
@@ -521,12 +485,8 @@
                 setInternalColumnFilters(clearedFilters);
                 setFechaDesde('');
                 setFechaHasta('');
-                setGlobalFilter('');
+                {/* setGlobalFilter(''); */} {/* Eliminado */}
                 
-                {/* Limpiar nuevos filtros de fecha prod */}
-                {/* setFechaProdDesde(''); */} {/* ELIMINADO */}
-                {/* setFechaProdHasta(''); */} {/* ELIMINADO */}
-
                 if (currentPage !== 1) setCurrentPage(1);
             };
 
@@ -696,13 +656,14 @@
                         <div className="flex flex-wrap gap-y-2 justify-between items-center mb-4 p-4 border rounded-lg bg-gray-50">
                             {/* Left side controls */}
                             <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-                                <input 
+                                {/* --- Búsqueda Global Eliminada --- */}
+                                {/* <input 
                                     type="text" 
                                     value={globalFilter}
                                     onChange={e => setGlobalFilter(e.target.value)}
                                     placeholder="Búsqueda global..."
                                     className="p-2 border border-gray-300 rounded-md shadow-sm w-48"
-                                />
+                                /> */}
                                 <div className="flex items-center gap-x-2">
                                     <label className="text-sm font-medium text-gray-700">Desde:</label>
                                     <input type="date" value={fechaDesde} onChange={e => setFechaDesde(e.target.value)} className="rounded-md border-gray-300 shadow-sm p-2 border"/>
@@ -711,10 +672,6 @@
                                     <label className="text-sm font-medium text-gray-700">Hasta:</label>
                                     <input type="date" value={fechaHasta} onChange={e => setFechaHasta(e.target.value)} className="rounded-md border-gray-300 shadow-sm p-2 border"/>
                                 </div>
-
-                                {/* --- INICIO: Nuevos Filtros Fecha Producción --- */}
-                                {/* ELIMINADOS */}
-                                {/* --- FIN: Nuevos Filtros Fecha Producción --- */}
 
                                 <span className="text-sm font-medium text-gray-700 px-2">
                                     Página {currentPage} de {totalRecords > 0 ? Math.ceil(totalRecords / recordsPerPage) : 1}
@@ -786,6 +743,7 @@
                                         ))}
                                         <th className="p-1"></th>
                                     </tr>
+
                                 </thead>
                                 <tbody className="bg-white divide-y divide-gray-200">
                                     {isLoading ? (<tr><td colSpan={displayHeaders.length + 1} className="p-8 text-center text-gray-500">Cargando...</td></tr>) 
