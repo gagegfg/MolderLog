@@ -471,11 +471,27 @@
             };
             
             const handleSort = (key) => {
+                let sortKey = key; // Por defecto, usamos la cabecera en la que se hizo clic
+
+                // --- ¡NUEVA LÓGICA AQUÍ! ---
+                // Mapear cabeceras de fecha (que son texto) a las columnas de fecha REALES (que son timestamps)
+                // Esto permite que el ORDENAMIENTO funcione correctamente.
+                if (key === 'Fecha Creacion lista') {
+                    sortKey = 'fechacreacion'; // Usar la columna de timestamp real
+                }
+                if (key === 'Fecha de produccion') {
+                    // Esto requiere que la columna 'fechaproduccion' (raw) exista en la vista
+                    // Ver Parte 2 en la explicación.
+                    sortKey = 'fechaproduccion'; 
+                }
+                // --- FIN DE LA NUEVA LÓGICA ---
+
                 let direction = 'ascending';
-                if (sortConfig.key === key && sortConfig.direction === 'ascending') {
+                // Comparamos con sortKey, no con key, para que el toggle funcione
+                if (sortConfig.key === sortKey && sortConfig.direction === 'ascending') {
                     direction = 'descending';
                 }
-                setSortConfig({ key, direction });
+                setSortConfig({ key: sortKey, direction });
             };
 
             const clearFilters = () => {
