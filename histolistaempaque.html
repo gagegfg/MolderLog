@@ -123,14 +123,13 @@
                             .eq('idListaEmpaque', item.idlista)
                             .single();
 
-                        if (error) {
-                            console.error('Error fetching dispatch data:', error);
-                            // Si no encuentra datos, usa valores por defecto
-                            setFecha(new Date().toISOString().split('T')[0]);
-                            setTransporte(item.Cliente || ''); // Sugerir el nombre del cliente como transporte
+                        if (error) { // No se encontró el registro
+                            console.warn('No dispatch data found for idlista:', item.idlista, error.message);
+                            setFecha('');
+                            setTransporte('');
                             setRetira(false);
-                        } else if (data) {
-                            setFecha(data.fechaDespacho || new Date().toISOString().split('T')[0]);
+                        } else if (data) { // Se encontró el registro
+                            setFecha(data.fechaDespacho || '');
                             setTransporte(data.razonSocialTransporte || '');
                             setRetira(data.retiranDesdePlanta || false);
                         }
@@ -151,6 +150,8 @@
                     retira
                 });
             };
+
+            const isFormInvalid = !fecha || !transporte.trim();
 
             return (
                 <div className="fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center z-50 p-4">
@@ -201,7 +202,9 @@
                         )}
                         <div className="flex justify-end space-x-4 mt-8">
                             <button onClick={onClose} className="bg-gray-200 text-gray-800 font-semibold py-2 px-5 rounded-lg hover:bg-gray-300">Cancelar</button>
-                            <button onClick={handleSave} disabled={isLoading} className="bg-blue-600 text-white font-semibold py-2 px-5 rounded-lg hover:bg-blue-700 disabled:opacity-50">Guardar Cambios</button>
+                            <button onClick={handleSave} disabled={isLoading || isFormInvalid} className="bg-blue-600 text-white font-semibold py-2 px-5 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed">
+                                Guardar Cambios
+                            </button>
                         </div>
                     </div>
                 </div>
