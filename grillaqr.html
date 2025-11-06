@@ -913,7 +913,11 @@
                 doc.setFontSize(36); doc.text(String(data.palletId), margin, currentY + 22);
                 doc.setFontSize(22);
                 const [day, month, year] = data.fechaProd.split('/');
-                doc.text(new Date(year, month - 1, day).toLocaleDateString('es-ES'), pageW - margin, currentY + 22, { align: "right" });
+                let fullYear = parseInt(year, 10);
+                if (fullYear < 100) {
+                    fullYear += 2000;
+                }
+                doc.text(new Date(fullYear, parseInt(month, 10) - 1, parseInt(day, 10)).toLocaleDateString('es-AR'), pageW - margin, currentY + 22, { align: "right" });
                 
                 let yPos = currentY + 35;
 
@@ -931,35 +935,66 @@
             };
 
             const handleReprint = async (item) => {
-                const { data: articles, error } = await supabaseClient.from('articulos').select('descripcioncorta, rne, rnpa').eq('sku', item.sku).single();
-                if(error) {
-                    alert("No se pudo obtener la descripción corta, RNE y RNPA del artículo para la reimpresión.");
-                    console.error(error);
-                    return;
+                setIsSaving(true);
+                try {
+                    const { data: freshPalletData, error: palletError } = await supabaseClient
+                        .from('vista_detallelotes_completa')
+                        .select('*')
+                        .eq('id', item.id)
+                        .single();
+
+                    if (palletError || !freshPalletData) {
+                        throw new Error(palletError?.message || "No se encontró el pallet en la base de datos. Por favor, refresque la grilla.");
+                    }
+
+                    const { data: articles, error: articlesError } = await supabaseClient
+                        .from('articulos')
+                        .select('descripcioncorta, rne, rnpa')
+                        .eq('sku', freshPalletData.sku)
+                        .single();
+
+                    if (articlesError) {
+                        console.error("No se pudo obtener la descripción corta, RNE y RNPA del artículo para la reimpresión.", articlesError);
+                    }
+
+                    const cantidadParaQR = String(freshPalletData.cantidad).replace(',', '.');
+                    const fechaProduccionFormatted = freshPalletData.fechaproduccion_filter.split('-').reverse().join('/');
+                    
+                    const qrString = [ 
+                        freshPalletData.sku, 
+                        freshPalletData.descripcion, 
+                        freshPalletData.nropallet, 
+                        freshPalletData.lotesproduccion, 
+                        fechaProduccionFormatted, 
+                        cantidadParaQR, 
+                        freshPalletData.unidadmedida 
+                    ].join(';');
+                    
+                    const descripcionParaEtiqueta = articles?.descripcioncorta || freshPalletData.descripcion;
+
+                    const dataForLabel = { 
+                        sku: freshPalletData.sku, 
+                        descripcion: descripcionParaEtiqueta, 
+                        lotes: freshPalletData.lotesproduccion.split('#').filter(Boolean), 
+                        cantidad: String(freshPalletData.cantidad), 
+                        uom: freshPalletData.unidadmedida, 
+                        fechaProd: fechaProduccionFormatted, 
+                        palletId: freshPalletData.nropallet, 
+                        qrString: qrString, 
+                        hasNote: freshPalletData.has_note,
+                        rne: articles?.rne,
+                        rnpa: articles?.rnpa
+                    };
+                    
+                    const previewDoc = new jsPDF('p', 'mm', 'a4'); await drawLabelOnDoc(previewDoc, dataForLabel);
+                    const printDoc = new jsPDF('p', 'mm', 'a4'); await drawLabelOnDoc(printDoc, dataForLabel);
+                    printDoc.autoPrint();
+                    setReprintModal({ isOpen: true, pdfUrl: previewDoc.output('datauristring'), printablePdfUrl: printDoc.output('bloburl'), palletId: freshPalletData.nropallet });
+                } catch (error) {
+                    alert(`Error al reimprimir: ${error.message}`);
+                } finally {
+                    setIsSaving(false);
                 }
-
-                const cantidadParaQR = String(item.cantidad).replace(',', '.');
-                const qrString = [ item.sku, item.descripcion, item.numeroDePallet, item.lotesProduccion, item.fechaProduccion, cantidadParaQR, item.unidadMedida ].join(';');
-                
-                const descripcionParaEtiqueta = articles.descripcioncorta || item.descripcion;
-
-                const data = { 
-                    sku: item.sku, 
-                    descripcion: descripcionParaEtiqueta, 
-                    lotes: item.lotesProduccion.split('#').filter(Boolean), 
-                    cantidad: String(item.cantidad), 
-                    uom: item.unidadMedida, 
-                    fechaProd: item.fechaProduccion, 
-                    palletId: item.numeroDePallet, 
-                    qrString: qrString, 
-                    hasNote: item.hasNote,
-                    rne: articles.rne,
-                    rnpa: articles.rnpa
-                };
-                const previewDoc = new jsPDF('p', 'mm', 'a4'); await drawLabelOnDoc(previewDoc, data);
-                const printDoc = new jsPDF('p', 'mm', 'a4'); await drawLabelOnDoc(printDoc, data);
-                printDoc.autoPrint();
-                setReprintModal({ isOpen: true, pdfUrl: previewDoc.output('datauristring'), printablePdfUrl: printDoc.output('bloburl'), palletId: item.numeroDePallet });
             };
 
             const ActionModal = ({ isOpen, type, title, message, onConfirm, onClose }) => {
