@@ -69,7 +69,8 @@
                 try {
                     const item = window.localStorage.getItem(key);
                     return item ? JSON.parse(item) : initialValue;
-                } catch (error) {
+                } catch (error)
+ {
                     console.log(error);
                     return initialValue;
                 }
@@ -272,9 +273,6 @@
 
             const [columnFilters, setColumnFilters] = useState({});
             const [internalColumnFilters, setInternalColumnFilters] = useState({});
-            {/* Búsqueda Global Eliminada */}
-            {/* const [globalFilter, setGlobalFilter] = useState(''); */}
-            {/* const [debouncedGlobalFilter, setDebouncedGlobalFilter] = useState(''); */}
             const [fechaDesde, setFechaDesde] = useState('');
             const [fechaHasta, setFechaHasta] = useState('');
             
@@ -303,8 +301,12 @@
                     'Fecha de produccion', 'cantidad', 'U.M.'
                 ];
                 
+                // --- ¡CAMBIO AQUÍ! ---
+                // Ocultamos las columnas "raw" que solo usamos para ordenar
+                const hiddenColumns = ['fechacreacion', 'Legajo', 'fechaproduccion'];
+                
                 return [...headers]
-                    .filter(h => h !== 'fechacreacion' && h !== 'Legajo') // Sigue ocultando 'Legajo' y 'fechacreacion'
+                    .filter(h => !hiddenColumns.includes(h)) // Ocultar columnas
                     .sort((a, b) => {
                         const indexA = preferredOrder.indexOf(a);
                         const indexB = preferredOrder.indexOf(b);
@@ -319,12 +321,10 @@
                 
                 const numericColumns = ['idlista', 'cantidad']; // Definimos columnas numéricas
 
-                {/* --- Lógica de Búsqueda Global Eliminada --- */}
-
                 {/* --- Lógica de Filtro de Columna --- */}
                 Object.keys(columnFilters).forEach(key => {
-                    // No aplicar filtro de columna para 'Legajo' si ya está oculta
-                    if (key === 'Legajo') return; 
+                    // No filtrar por columnas ocultas
+                    if (key === 'Legajo' || key === 'fechacreacion' || key === 'fechaproduccion') return; 
                     
                     const filterValue = columnFilters[key] ? columnFilters[key].trim() : '';
                     if (filterValue) {
@@ -335,7 +335,6 @@
                             if (!isNaN(numericValue)) {
                                 query = query.eq(h, numericValue); // Usar 'eq' (equals) para números
                             }
-                            // Si no es un número válido, el filtro no encontrará nada (intencional)
                         } else { // Si es texto, fecha, u otra
                             query = query.ilike(h, `%${filterValue}%`); // Usar 'ilike' para texto
                         }
@@ -398,14 +397,14 @@
                     setIsGridLoading(false);
                     if (isLoading) setIsLoading(false);
                 }
-            }, [supabaseClient, columnFilters, fechaDesde, fechaHasta, sortConfig, currentPage, recordsPerPage, headers]); // <-- 'debouncedGlobalFilter' eliminado
+            }, [supabaseClient, columnFilters, fechaDesde, fechaHasta, sortConfig, currentPage, recordsPerPage, headers]);
 
             // Initial load and dependency-driven reloads
             useEffect(() => {
                 if (!isLoading) {
                      loadData(true); // Force reset to page 1 on filter change
                 }
-            }, [columnFilters, fechaDesde, fechaHasta, sortConfig, recordsPerPage]); // <-- 'debouncedGlobalFilter' eliminado
+            }, [columnFilters, fechaDesde, fechaHasta, sortConfig, recordsPerPage]); 
 
             useEffect(() => {
                 if (!isLoading) {
@@ -456,38 +455,22 @@
                 return () => { clearTimeout(handler); };
             }, [internalColumnFilters, columnFilters]);
 
-            {/* Debounce para Búsqueda Global Eliminado */}
-            {/*
-            useEffect(() => {
-                const handler = setTimeout(() => {
-                    setDebouncedGlobalFilter(globalFilter);
-                }, 500);
-                return () => { clearTimeout(handler); };
-            }, [globalFilter]);
-            */}
-
             const handleColumnFilterChange = (columnId, value) => {
                 setInternalColumnFilters(prev => ({ ...prev, [columnId]: value }));
             };
             
             const handleSort = (key) => {
-                let sortKey = key; // Por defecto, usamos la cabecera en la que se hizo clic
+                let sortKey = key; 
 
-                // --- ¡NUEVA LÓGICA AQUÍ! ---
                 // Mapear cabeceras de fecha (que son texto) a las columnas de fecha REALES (que son timestamps)
-                // Esto permite que el ORDENAMIENTO funcione correctamente.
                 if (key === 'Fecha Creacion lista') {
                     sortKey = 'fechacreacion'; // Usar la columna de timestamp real
                 }
                 if (key === 'Fecha de produccion') {
-                    // Esto requiere que la columna 'fechaproduccion' (raw) exista en la vista
-                    // Ver Parte 2 en la explicación.
-                    sortKey = 'fechaproduccion'; 
+                    sortKey = 'fechaproduccion'; // Usar la columna de timestamp real
                 }
-                // --- FIN DE LA NUEVA LÓGICA ---
-
+                
                 let direction = 'ascending';
-                // Comparamos con sortKey, no con key, para que el toggle funcione
                 if (sortConfig.key === sortKey && sortConfig.direction === 'ascending') {
                     direction = 'descending';
                 }
@@ -501,7 +484,6 @@
                 setInternalColumnFilters(clearedFilters);
                 setFechaDesde('');
                 setFechaHasta('');
-                {/* setGlobalFilter(''); */} {/* Eliminado */}
                 
                 if (currentPage !== 1) setCurrentPage(1);
             };
@@ -616,15 +598,11 @@
             const getColumnClasses = (header) => {
                 let classes = 'px-3 py-2 text-sm text-gray-700 align-middle';
                 switch(header.toLowerCase()) {
-                    case 'idlista':
-                    // case 'legajo': // Comentado ya que la columna está oculta
-                    //     return `${classes} w-20 font-semibold text-gray-900 whitespace-nowrap`;
                     case 'fecha creacion lista':
                         return `${classes} w-40 whitespace-nowrap`;
                     case 'cantidad':
                     case 'u.m.':
                         return `${classes} w-24 text-center`;
-                    // Añadimos 'idlista' aquí si queremos que también tenga ese estilo
                     case 'idlista':
                         return `${classes} w-20 font-semibold text-gray-900 whitespace-nowrap`;
                     default:
@@ -672,14 +650,6 @@
                         <div className="flex flex-wrap gap-y-2 justify-between items-center mb-4 p-4 border rounded-lg bg-gray-50">
                             {/* Left side controls */}
                             <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-                                {/* --- Búsqueda Global Eliminada --- */}
-                                {/* <input 
-                                    type="text" 
-                                    value={globalFilter}
-                                    onChange={e => setGlobalFilter(e.target.value)}
-                                    placeholder="Búsqueda global..."
-                                    className="p-2 border border-gray-300 rounded-md shadow-sm w-48"
-                                /> */}
                                 <div className="flex items-center gap-x-2">
                                     <label className="text-sm font-medium text-gray-700">Desde:</label>
                                     <input type="date" value={fechaDesde} onChange={e => setFechaDesde(e.target.value)} className="rounded-md border-gray-300 shadow-sm p-2 border"/>
