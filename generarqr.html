@@ -271,7 +271,7 @@
                     if (articulos.length > 0) {
                         fetchPalletData();
                     }
-                } else {
+                } else if (!editMode) {
                     handleRefreshPalletNumber(true);
                 }
             }, [articulos, showToast]);
@@ -632,7 +632,7 @@
             }
 
             const handleGeneratePreview = async (isRegeneration = false) => {
-                if (!isRegeneration) {
+                if (!isRegeneration && !editMode) {
                     const updatedPalletNum = await handleRefreshPalletNumber(true);
                     if (updatedPalletNum && parseInt(numeroDePallet, 10) !== updatedPalletNum) {
                         return;
