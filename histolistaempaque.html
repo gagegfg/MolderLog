@@ -87,6 +87,100 @@
             return [storedValue, setValue];
         };
 
+        const ConfirmationModal = ({ isOpen, title, message, onConfirm, onCancel }) => {
+            if (!isOpen) return null;
+            return (
+                <div className="fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center z-50 p-4">
+                    <div className="relative p-6 bg-white w-full max-w-md rounded-xl shadow-lg m-4">
+                        <h3 className="text-xl font-bold text-gray-800 mb-4">{title}</h3>
+                        <p className="text-gray-700 mb-6 whitespace-pre-wrap">{message}</p>
+                        <div className="flex justify-end space-x-4">
+                            <button onClick={onCancel} className="bg-gray-300 text-gray-800 font-semibold py-2 px-5 rounded-lg hover:bg-gray-400">
+                                Cancelar
+                            </button>
+                            <button onClick={onConfirm} className="bg-red-600 text-white font-semibold py-2 px-5 rounded-lg hover:bg-red-700">
+                                Confirmar
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const EditDispatchModal = ({ isOpen, item, onClose, onSave }) => {
+            const [fecha, setFecha] = useState('');
+            const [transporte, setTransporte] = useState('');
+            const [retira, setRetira] = useState(false);
+
+            useEffect(() => {
+                if (item) {
+                    setFecha(item.fecha_despacho || new Date().toISOString().split('T')[0]);
+                    setTransporte(item.razon_social_transporte || '');
+                    setRetira(item.retiran_desde_planta || false);
+                }
+            }, [item]);
+
+            if (!isOpen || !item) return null;
+
+            const handleSave = () => {
+                onSave({
+                    idlista: item.idlista,
+                    fecha,
+                    transporte,
+                    retira
+                });
+            };
+
+            return (
+                <div className="fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center z-50 p-4">
+                    <div className="bg-white p-6 rounded-2xl shadow-xl w-full max-w-lg">
+                        <h2 className="text-2xl font-bold text-gray-800 mb-4">Editar Datos de Despacho</h2>
+                        <div className="mb-6 bg-gray-50 p-4 rounded-lg border">
+                            <p className="text-sm text-gray-600">ID Lista: <span className="font-semibold text-black">{item.idlista}</span></p>
+                            <p className="text-sm text-gray-600">Cliente: <span className="font-semibold text-black">{item.Cliente}</span></p>
+                        </div>
+                        <div className="space-y-4">
+                            <div>
+                                <label htmlFor="fecha-despacho" className="block text-sm font-medium text-gray-700 mb-1">Fecha de Despacho</label>
+                                <input
+                                    type="date"
+                                    id="fecha-despacho"
+                                    value={fecha}
+                                    onChange={e => setFecha(e.target.value)}
+                                    className="w-full p-2 border border-gray-300 rounded-md shadow-sm"
+                                />
+                            </div>
+                            <div>
+                                <label htmlFor="transporte" className="block text-sm font-medium text-gray-700 mb-1">Transporte</label>
+                                <input
+                                    type="text"
+                                    id="transporte"
+                                    value={transporte}
+                                    onChange={e => setTransporte(e.target.value.toUpperCase())}
+                                    className="w-full p-2 border border-gray-300 rounded-md shadow-sm"
+                                    placeholder="Nombre del transporte"
+                                />
+                            </div>
+                            <div className="flex items-center">
+                                <input
+                                    id="retira-planta"
+                                    type="checkbox"
+                                    checked={retira}
+                                    onChange={e => setRetira(e.target.checked)}
+                                    className="h-5 w-5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                                />
+                                <label htmlFor="retira-planta" className="ml-2 block text-sm text-gray-900">El transporte retira en planta</label>
+                            </div>
+                        </div>
+                        <div className="flex justify-end space-x-4 mt-8">
+                            <button onClick={onClose} className="bg-gray-200 text-gray-800 font-semibold py-2 px-5 rounded-lg hover:bg-gray-300">Cancelar</button>
+                            <button onClick={handleSave} className="bg-blue-600 text-white font-semibold py-2 px-5 rounded-lg hover:bg-blue-700">Guardar Cambios</button>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
         const App = () => {
             const [data, setData] = useState([]);
             const [headers, setHeaders] = useState([]);
@@ -107,6 +201,11 @@
 
             const [isExportOpen, setIsExportOpen] = useState(false);
             const exportMenuRef = useRef(null);
+            const [activeActionMenu, setActiveActionMenu] = useState(null);
+            const actionMenuRef = useRef(null);
+
+            const [modalState, setModalState] = useState({ isOpen: false, title: '', message: '', onConfirm: () => {} });
+            const [editModalState, setEditModalState] = useState({ isOpen: false, item: null });
             
             const displayHeaders = useMemo(() => {
                 if (headers.length === 0) return [];
@@ -294,6 +393,60 @@
                 if (currentPage !== 1) setCurrentPage(1);
             };
 
+            const handleDeleteList = (idlista) => {
+                setModalState({
+                    isOpen: true,
+                    title: 'Confirmar Eliminación de Lista',
+                    message: `¿Estás seguro de que quieres eliminar la lista de empaque completa N° ${idlista}? Esta acción es irreversible y borrará todos sus pallets asociados.`,
+                    onConfirm: async () => {
+                        const { error } = await supabaseClient.rpc('borrar_lista_empaque_completa', { id_lista_a_borrar: idlista });
+                        if (error) {
+                            alert(`Error al eliminar la lista: ${error.message}`);
+                        } else {
+                            loadData(true);
+                        }
+                        setModalState({ isOpen: false });
+                    }
+                });
+            };
+
+            const handleDeleteItem = (item) => {
+                setModalState({
+                    isOpen: true,
+                    title: 'Confirmar Eliminación de Pallet',
+                    message: `¿Estás seguro de que quieres eliminar el pallet N° ${item['nro de pallet']} de la lista N° ${item.idlista}?`,
+                    onConfirm: async () => {
+                        const { error } = await supabaseClient.rpc('borrar_item_lista_empaque_por_pallet', { p_idlista: item.idlista, p_nropallet: item['nro de pallet'] });
+                        if (error) {
+                            alert(`Error al eliminar el pallet: ${error.message}`);
+                        } else {
+                            loadData(true);
+                        }
+                        setModalState({ isOpen: false });
+                    }
+                });
+            };
+
+            const handleOpenEditModal = (item) => {
+                setEditModalState({ isOpen: true, item: item });
+            };
+
+            const handleSaveDispatch = async (dispatchData) => {
+                const { error } = await supabaseClient.rpc('actualizar_despacho_lista_empaque', {
+                    p_idlista: dispatchData.idlista,
+                    p_fecha_despacho: dispatchData.fecha,
+                    p_transporte: dispatchData.transporte,
+                    p_retira_planta: dispatchData.retira
+                });
+
+                if (error) {
+                    alert(`Error al actualizar los datos de despacho: ${error.message}`);
+                } else {
+                    setEditModalState({ isOpen: false, item: null });
+                    loadData(true);
+                }
+            };
+
             const fetchAllFilteredData = async () => {
                 setIsGridLoading(true);
                 try {
@@ -353,6 +506,19 @@
 
             return (
                 <div className="min-h-screen p-4 sm:p-6 bg-black bg-opacity-50">
+                    <ConfirmationModal 
+                        isOpen={modalState.isOpen}
+                        title={modalState.title}
+                        message={modalState.message}
+                        onConfirm={modalState.onConfirm}
+                        onCancel={() => setModalState({ isOpen: false })}
+                    />
+                    <EditDispatchModal
+                        isOpen={editModalState.isOpen}
+                        item={editModalState.item}
+                        onClose={() => setEditModalState({ isOpen: false, item: null })}
+                        onSave={handleSaveDispatch}
+                    />
                     <div className="bg-white p-6 rounded-2xl shadow-xl flex flex-col flex-grow">
                         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 border-b pb-4 border-gray-200">
                             <h1 className="text-3xl font-extrabold text-gray-800">Histórico de Listas de Empaque</h1>
@@ -439,20 +605,24 @@
                             )}
                             <table className={`min-w-full divide-y divide-gray-200 table-auto ${isGridLoading ? 'opacity-50' : ''}`}>
                                 <thead className="bg-gray-800 text-white sticky top-0 z-10">
-                                    <tr>{displayHeaders.map(header => (<th key={header} className="px-3 py-3 text-left text-xs font-medium uppercase tracking-wider" onClick={() => handleSort(header)}>
-                                        <div className="flex items-center">{header}<i className={`fas ${sortConfig.key === header ? (sortConfig.direction === 'ascending' ? 'fa-sort-up' : 'fa-sort-down') : 'fa-sort'} ml-2 sort-icon`}></i></div>
-                                    </th>))}</tr>
+                                    <tr>
+                                        {displayHeaders.map(header => (<th key={header} className="px-3 py-3 text-left text-xs font-medium uppercase tracking-wider" onClick={() => handleSort(header)}>
+                                            <div className="flex items-center">{header}<i className={`fas ${sortConfig.key === header ? (sortConfig.direction === 'ascending' ? 'fa-sort-up' : 'fa-sort-down') : 'fa-sort'} ml-2 sort-icon`}></i></div>
+                                        </th>))}
+                                        <th className="px-3 py-3 text-left text-xs font-medium uppercase tracking-wider">Acciones</th>
+                                    </tr>
                                     <tr className="bg-gray-200">
                                         {displayHeaders.map(header => (<th key={`filter-${header}`} className="p-1"><input type="text" placeholder="Filtrar..." value={internalColumnFilters[header] || ''} onChange={e => handleColumnFilterChange(header, e.target.value)} className="w-full p-1 text-sm text-gray-700 border rounded"/></th>
                                         ))}
+                                        <th className="p-1"></th>
                                     </tr>
                                 </thead>
                                 <tbody className="bg-white divide-y divide-gray-200">
-                                    {isLoading ? (<tr><td colSpan={displayHeaders.length} className="p-8 text-center text-gray-500">Cargando...</td></tr>) 
+                                    {isLoading ? (<tr><td colSpan={displayHeaders.length + 1} className="p-8 text-center text-gray-500">Cargando...</td></tr>) 
                                     : ( data.length > 0 ? data.map((item, index) => {
                                         const prevItem = index > 0 ? data[index - 1] : null;
                                         const isNewList = !prevItem || prevItem.idlista !== item.idlista;
-                                        const rowClasses = `hover:bg-blue-50 ${isNewList && index > 0 ? 'border-t-2 border-blue-300' : ''}`;
+                                        const rowClasses = `group hover:bg-blue-50 ${isNewList && index > 0 ? 'border-t-2 border-blue-300' : ''}`;
 
                                         return (
                                             <tr key={item.uniqueId} className={rowClasses}>
@@ -482,9 +652,26 @@
                                                         </td>
                                                     );
                                                 })}
+                                                <td className="px-2 py-2 text-center align-middle">
+                                                    <div className="relative" ref={activeActionMenu === item.uniqueId ? actionMenuRef : null}>
+                                                        <button onClick={(e) => { e.stopPropagation(); setActiveActionMenu(activeActionMenu === item.uniqueId ? null : item.uniqueId); }} className="text-gray-500 hover:text-blue-600 p-2 rounded-full">
+                                                            <i className="fas fa-ellipsis-v"></i>
+                                                        </button>
+                                                        {activeActionMenu === item.uniqueId && (
+                                                            <div className="absolute right-full mr-2 mt-[-2rem] w-64 bg-white rounded-md shadow-lg border z-30">
+                                                                <ul className="text-gray-700 text-left">
+                                                                    <li><button onClick={() => { handleOpenEditModal(item); setActiveActionMenu(null); }} className="w-full text-left hover:bg-gray-100 p-3 flex items-center"><i className="fas fa-truck-loading w-6 mr-2 text-blue-500"></i>Editar Despacho</button></li>
+                                                                    <li><hr className="my-1"/></li>
+                                                                    <li><button onClick={() => { handleDeleteItem(item); setActiveActionMenu(null); }} className="w-full text-left hover:bg-gray-100 p-3 flex items-center"><i className="fas fa-minus-circle w-6 mr-2 text-yellow-600"></i>Eliminar Pallet de la Lista</button></li>
+                                                                    <li><button onClick={() => { handleDeleteList(item.idlista); setActiveActionMenu(null); }} className="w-full text-left hover:bg-gray-100 p-3 flex items-center"><i className="fas fa-trash-alt w-6 mr-2 text-red-600"></i>Eliminar Lista Completa</button></li>
+                                                                </ul>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </td>
                                             </tr>
                                         );
-                                    }) : (<tr><td colSpan={displayHeaders.length} className="p-8 text-center text-gray-500">No se encontraron registros.</td></tr>)
+                                    }) : (<tr><td colSpan={displayHeaders.length + 1} className="p-8 text-center text-gray-500">No se encontraron registros.</td></tr>)
                                     )}
                                 </tbody>
                             </table>
