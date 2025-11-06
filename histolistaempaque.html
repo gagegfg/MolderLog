@@ -277,6 +277,11 @@
             const [debouncedGlobalFilter, setDebouncedGlobalFilter] = useState('');
             const [fechaDesde, setFechaDesde] = useState('');
             const [fechaHasta, setFechaHasta] = useState('');
+            
+            {/* Nuevos estados para el rango de fecha de producción */}
+            const [fechaProdDesde, setFechaProdDesde] = useState('');
+            const [fechaProdHasta, setFechaProdHasta] = useState('');
+
             const [sortConfig, setSortConfig] = useState({ key: 'idlista', direction: 'descending' });
             
             const [currentPage, setCurrentPage] = useState(1);
@@ -326,6 +331,9 @@
                     query = query.or(orFilter);
                 }
 
+                {/* --- Lógica de Filtro de Columna Modificada --- */}
+                const numericColumns = ['idlista', 'cantidad']; // Definimos columnas numéricas
+
                 Object.keys(columnFilters).forEach(key => {
                     // No aplicar filtro de columna para 'Legajo' si ya está oculta
                     if (key === 'Legajo') return; 
@@ -333,11 +341,20 @@
                     const filterValue = columnFilters[key] ? columnFilters[key].trim() : '';
                     if (filterValue) {
                         const h = /[\\s.]/.test(key) ? `"${key}"` : key;
-                        query = query.ilike(h, `%${filterValue}%`);
+                        
+                        if (numericColumns.includes(key)) { // Si es columna numérica
+                            const numericValue = parseFloat(filterValue);
+                            if (!isNaN(numericValue)) {
+                                query = query.eq(h, numericValue); // Usar 'eq' (equals) para números
+                            }
+                            // Si no es un número válido, el filtro no encontrará nada (intencional)
+                        } else { // Si es texto u otra
+                            query = query.ilike(h, `%${filterValue}%`); // Usar 'ilike' para texto
+                        }
                     }
                 });
 
-                // Usar la columna de fecha original para el filtro de rango
+                // Usar la columna de fecha original para el filtro de rango de CREACIÓN
                 if (fechaDesde) query = query.gte('fechacreacion', fechaDesde);
                 if (fechaHasta) {
                     const nextDay = new Date(fechaHasta);
@@ -345,6 +362,17 @@
                     const nextDayString = nextDay.toISOString().split('T')[0];
                     query = query.lt('fechacreacion', nextDayString);
                 }
+
+                {/* --- Nueva Lógica para Filtro de Fecha de PRODUCCIÓN --- */}
+                if (fechaProdDesde) query = query.gte('Fecha de produccion', fechaProdDesde);
+                if (fechaProdHasta) {
+                    const nextProdDay = new Date(fechaProdHasta);
+                    nextProdDay.setDate(nextProdDay.getDate() + 1);
+                    const nextProdDayString = nextProdDay.toISOString().split('T')[0];
+                    query = query.lt('Fecha de produccion', nextProdDayString);
+                }
+                {/* --- Fin de la nueva lógica --- */}
+
 
                 const sortKey = sortConfig.key;
                 const h = /[\\s.]/.test(sortKey) ? `"${sortKey}"` : sortKey;
@@ -393,9 +421,15 @@
                     setIsGridLoading(false);
                     if (isLoading) setIsLoading(false);
                 }
-            }, [supabaseClient, columnFilters, debouncedGlobalFilter, fechaDesde, fechaHasta, sortConfig, currentPage, recordsPerPage, headers]);
+            }, [supabaseClient, columnFilters, debouncedGlobalFilter, fechaDesde, fechaHasta, fechaProdDesde, fechaProdHasta, sortConfig, currentPage, recordsPerPage, headers]); // <-- Añadidas dependencias de fecha prod
 
             // Initial load and dependency-driven reloads
+            useEffect(() => {
+                if (!isLoading) {
+                     loadData(true); // Force reset to page 1 on filter change
+                }
+            }, [columnFilters, debouncedGlobalFilter, fechaDesde, fechaHasta, fechaProdDesde, fechaProdHasta, sortConfig, recordsPerPage]); // <-- Añadidas dependencias de fecha prod
+
             useEffect(() => {
                 if (!isLoading) {
                      loadData(true); // Force reset to page 1 on filter change
@@ -479,6 +513,11 @@
                 setFechaDesde('');
                 setFechaHasta('');
                 setGlobalFilter('');
+                
+                {/* Limpiar nuevos filtros de fecha prod */}
+                setFechaProdDesde('');
+                setFechaProdHasta('');
+
                 if (currentPage !== 1) setCurrentPage(1);
             };
 
@@ -663,6 +702,18 @@
                                     <label className="text-sm font-medium text-gray-700">Hasta:</label>
                                     <input type="date" value={fechaHasta} onChange={e => setFechaHasta(e.target.value)} className="rounded-md border-gray-300 shadow-sm p-2 border"/>
                                 </div>
+
+                                {/* --- INICIO: Nuevos Filtros Fecha Producción --- */}
+                                <div className="flex items-center gap-x-2">
+                                    <label className="text-sm font-medium text-gray-700" title="Fecha de Producción Desde">Prod. Desde:</label>
+                                    <input type="date" value={fechaProdDesde} onChange={e => setFechaProdDesde(e.target.value)} className="rounded-md border-gray-300 shadow-sm p-2 border" title="Fecha de Producción Desde"/>
+                                </div>
+                                <div className="flex items-center gap-x-2">
+                                    <label className="text-sm font-medium text-gray-700" title="Fecha de Producción Hasta">Prod. Hasta:</label>
+                                    <input type="date" value={fechaProdHasta} onChange={e => setFechaProdHasta(e.target.value)} className="rounded-md border-gray-300 shadow-sm p-2 border" title="Fecha de Producción Hasta"/>
+                                </div>
+                                {/* --- FIN: Nuevos Filtros Fecha Producción --- */}
+
                                 <span className="text-sm font-medium text-gray-700 px-2">
                                     Página {currentPage} de {totalRecords > 0 ? Math.ceil(totalRecords / recordsPerPage) : 1}
                                 </span>
