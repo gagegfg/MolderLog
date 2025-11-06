@@ -491,20 +491,28 @@
             };
 
             const handleDeleteItem = (item) => {
-                setModalState({
-                    isOpen: true,
-                    title: 'Confirmar Eliminación de Pallet',
-                    message: `¿Estás seguro de que quieres eliminar el pallet N° ${item['nro de pallet']} de la lista N° ${item.idlista}?`,
-                    onConfirm: async () => {
-                        const { error } = await supabaseClient.rpc('borrar_item_lista_empaque_por_pallet', { p_idlista: item.idlista, p_nropallet: item['nro de pallet'] });
-                        if (error) {
-                            alert(`Error al eliminar el pallet: ${error.message}`);
-                        } else {
-                            loadData(true);
+                const itemsInList = data.filter(d => d.idlista === item.idlista).length;
+
+                if (itemsInList === 1) {
+                    // Si solo hay un item, borra la lista completa
+                    handleDeleteList(item.idlista);
+                } else {
+                    // Si hay más de un item, solo borra el pallet
+                    setModalState({
+                        isOpen: true,
+                        title: 'Confirmar Eliminación de Pallet',
+                        message: `¿Estás seguro de que quieres eliminar el pallet N° ${item['nro de pallet']} de la lista N° ${item.idlista}?`,
+                        onConfirm: async () => {
+                            const { error } = await supabaseClient.rpc('borrar_item_lista_empaque_por_pallet', { p_idlista: item.idlista, p_nropallet: item['nro de pallet'] });
+                            if (error) {
+                                alert(`Error al eliminar el pallet: ${error.message}`);
+                            } else {
+                                loadData(true);
+                            }
+                            setModalState({ isOpen: false });
                         }
-                        setModalState({ isOpen: false });
-                    }
-                });
+                    });
+                }
             };
 
             const handleOpenEditModal = (item) => {
