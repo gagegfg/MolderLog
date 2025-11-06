@@ -314,12 +314,21 @@
                     });
             }, [headers]);
 
+            const columnConfig = {
+                'idlista': { sortKey: 'idlista_sort', filterType: 'numeric' },
+                'Legajo': { sortKey: 'legajo_sort', filterType: 'numeric' },
+                'Fecha Creacion lista': { sortKey: 'fechacreacion_sort' },
+                'nro de pallet': { sortKey: 'nropallet_sort', filterType: 'numeric' },
+                'Fecha de produccion': { sortKey: 'fechaproduccion_sort' },
+                'cantidad': { sortKey: 'cantidad_sort', filterType: 'numeric' },
+            };
+
             const applyFiltersToQuery = (query) => {
                 if (debouncedGlobalFilter && headers.length > 0) {
                     const orFilter = headers
                         .filter(h => h !== 'fechacreacion') // No incluir la columna de fecha original en el filtro global
                         .map(header => {
-                            const h = /[\\s.]/.test(header) ? `"${header}"` : header;
+                            const h = /[\s.]/.test(header) ? `"${header}"` : header;
                             return `${h}.ilike.%${debouncedGlobalFilter}%`;
                         })
                         .join(',');
@@ -329,8 +338,15 @@
                 Object.keys(columnFilters).forEach(key => {
                     const filterValue = columnFilters[key] ? columnFilters[key].trim() : '';
                     if (filterValue) {
-                        const h = /[\\s.]/.test(key) ? `"${key}"` : key;
-                        query = query.ilike(h, `%${filterValue}%`);
+                        const config = columnConfig[key];
+                        if (config && config.filterType === 'numeric') {
+                            // Usar filtro de igualdad para campos numéricos en su columna _sort
+                            query = query.eq(config.sortKey, filterValue);
+                        } else {
+                            // Mantener el filtro ilike para los demás campos de texto
+                            const h = /[\s.]/.test(key) ? `"${key}"` : key;
+                            query = query.ilike(h, `%${filterValue}%`);
+                        }
                     }
                 });
 
@@ -343,8 +359,8 @@
                     query = query.lt('fechacreacion', nextDayString);
                 }
 
-                const sortKey = sortConfig.key;
-                const h = /[\\s.]/.test(sortKey) ? `"${sortKey}"` : sortKey;
+                const sortColumn = columnConfig[sortConfig.key]?.sortKey || sortConfig.key;
+                const h = /[\s.]/.test(sortColumn) ? `"${sortColumn}"` : sortColumn;
                 query = query.order(h, { ascending: sortConfig.direction === 'ascending' });
                 
                 return query;
@@ -359,7 +375,7 @@
                 setIsGridLoading(true);
 
                 try {
-                    let query = supabaseClient.from('vista_historial_listas_empaque').select('*', { count: 'exact' });
+                    let query = supabaseClient.from('vista_historial_listas_empaque_mejorada').select('*', { count: 'exact' });
                     query = applyFiltersToQuery(query);
                     
                     const page = isManualRefresh ? 1 : currentPage;
@@ -548,7 +564,7 @@
             const fetchAllFilteredData = async () => {
                 setIsGridLoading(true);
                 try {
-                    let query = supabaseClient.from('vista_historial_listas_empaque').select('*');
+                    let query = supabaseClient.from('vista_historial_listas_empaque_mejorada').select('*');
                     query = applyFiltersToQuery(query);
                     const { data, error } = await query;
                     if (error) throw error;
