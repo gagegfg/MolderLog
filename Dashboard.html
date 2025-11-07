@@ -14,6 +14,9 @@
     <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/date-fns@2.30.0/locale/es/index.js"></script>
 
+    <!-- XLSX (para exportar a Excel) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
     <!-- Scripts para Supabase -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="config.js"></script>
@@ -358,6 +361,123 @@
             const handleFiltrar = () => {
                 fetchData(fechaDesde, fechaHasta);
             };
+
+            // --- INICIO: LÓGICA DE EXPORTACIÓN ---
+            const handleExport = () => {
+                if (currentTab === 'dispatch') {
+                    exportDispatchData();
+                } else if (currentTab === 'inventory') {
+                    exportInventoryData();
+                } else if (currentTab === 'operations') {
+                    exportOperationsData();
+                } else if (currentTab === 'client-transport') {
+                    exportClientTransportData();
+                }
+            };
+
+            const exportDispatchData = () => {
+                const wb = XLSX.utils.book_new();
+
+                // 1. KPIs
+                const kpisData = [{
+                    "Total Despachos": kpisDespacho.total_despachos,
+                    "Bultos Movilizados": kpisDespacho.total_bultos,
+                    "Total Cantidad": kpisDespacho.total_cantidad,
+                    "Clientes Activos": kpisDespacho.clientes_activos
+                }];
+                const ws_kpis = XLSX.utils.json_to_sheet(kpisData);
+                XLSX.utils.book_append_sheet(wb, ws_kpis, "KPIs Despacho");
+
+                // 2. Bultos por Mes
+                const bultosMesData = bultosPorMes.labels.map((label, i) => ({
+                    Mes: label.toISOString().split('T')[0],
+                    Bultos: bultosPorMes.datasets[0].data[i]
+                }));
+                const ws_bultos_mes = XLSX.utils.json_to_sheet(bultosMesData);
+                XLSX.utils.book_append_sheet(wb, ws_bultos_mes, "Bultos por Mes");
+
+                // 3. Top Clientes
+                const topClientesData = topClientes.labels.map((label, i) => ({
+                    Cliente: label,
+                    Bultos: topClientes.datasets[0].data[i]
+                }));
+                const ws_top_clientes = XLSX.utils.json_to_sheet(topClientesData);
+                XLSX.utils.book_append_sheet(wb, ws_top_clientes, "Top Clientes");
+
+                // 4. Top Transportes
+                const topTransportesData = topTransportes.labels.map((label, i) => ({
+                    Transporte: label,
+                    Bultos: topTransportes.datasets[0].data[i]
+                }));
+                const ws_top_transportes = XLSX.utils.json_to_sheet(topTransportesData);
+                XLSX.utils.book_append_sheet(wb, ws_top_transportes, "Top Transportes");
+                
+                // 5. Top SKUs
+                const topSkusData = topSkusDespachados.labels.map((label, i) => ({
+                    SKU_Descripcion: label,
+                    Cantidad: topSkusDespachados.datasets[0].data[i]
+                }));
+                const ws_top_skus = XLSX.utils.json_to_sheet(topSkusData);
+                XLSX.utils.book_append_sheet(wb, ws_top_skus, "Top SKUs Despachados");
+
+                XLSX.writeFile(wb, `Export_Despachos_${fechaDesde}_a_${fechaHasta}.xlsx`);
+            };
+
+            const exportInventoryData = () => {
+                const wb = XLSX.utils.book_new();
+                
+                // 1. KPIs
+                const kpisData = [{
+                    "Bultos en Stock": kpisInventario.stock_bultos,
+                    "Cantidad en Stock": kpisInventario.stock_cantidad,
+                    "Antigüedad Promedio (días)": kpisInventario.antiguedad_promedio
+                }];
+                const ws_kpis = XLSX.utils.json_to_sheet(kpisData);
+                XLSX.utils.book_append_sheet(wb, ws_kpis, "KPIs Inventario");
+
+                // 2. Antigüedad
+                const agingData = inventarioAging.labels.map((label, i) => ({
+                    "Rango Antigüedad": label,
+                    Bultos: inventarioAging.datasets[0].data[i]
+                }));
+                const ws_aging = XLSX.utils.json_to_sheet(agingData);
+                XLSX.utils.book_append_sheet(wb, ws_aging, "Antigüedad Stock");
+                
+                // 3. Stock por SKU
+                const stockSkuData = stockPorSku.labels.map((label, i) => ({
+                    SKU_Descripcion: label,
+                    Cantidad: stockPorSku.datasets[0].data[i]
+                }));
+                const ws_stock_sku = XLSX.utils.json_to_sheet(stockSkuData);
+                XLSX.utils.book_append_sheet(wb, ws_stock_sku, "Stock por SKU");
+                
+                XLSX.writeFile(wb, "Export_Inventario_Actual.xlsx");
+            };
+
+            const exportOperationsData = () => {
+                const wb = XLSX.utils.book_new();
+                
+                // 1. Top Operarios
+                const operariosData = topOperarios.labels.map((label, i) => ({
+                    Legajo: label,
+                    Bultos: topOperarios.datasets[0].data[i]
+                }));
+                const ws_operarios = XLSX.utils.json_to_sheet(operariosData);
+                XLSX.utils.book_append_sheet(wb, ws_operarios, "Top Operarios");
+                
+                XLSX.writeFile(wb, `Export_Operaciones_${fechaDesde}_a_${fechaHasta}.xlsx`);
+            };
+
+            const exportClientTransportData = () => {
+                const wb = XLSX.utils.book_new();
+                
+                // 1. Datos Crudos
+                const ws_data = XLSX.utils.json_to_sheet(clienteTransporteData);
+                XLSX.utils.book_append_sheet(wb, ws_data, "Cliente-Transporte Data");
+                
+                XLSX.writeFile(wb, `Export_Cliente_Transporte_${fechaDesde}_a_${fechaHasta}.xlsx`);
+            };
+            // --- FIN: LÓGICA DE EXPORTACIÓN ---
             
             // --- Procesamiento para el gráfico Stacked (Cliente-Transporte) ---
             const stackedBarData = useMemo(() => {
@@ -470,13 +590,25 @@
                                     <i className={`fas ${isLoading ? 'fa-sync-alt animate-spin' : 'fa-filter'} mr-2`}></i>
                                     {isLoading ? 'Cargando...' : 'Filtrar'}
                                 </button>
+                                {/* --- BOTÓN EXPORTAR --- */}
+                                <button onClick={handleExport} disabled={isLoading} className="w-full sm:w-auto bg-green-600 text-white font-semibold py-2 px-6 rounded-lg shadow-md hover:bg-green-700 disabled:opacity-50 flex items-center justify-center">
+                                    <i className="fas fa-file-excel mr-2"></i>
+                                    Exportar
+                                </button>
                             </div>
                         )}
                         
                         {currentTab === 'inventory' && (
-                            <div className="mb-6 p-4 border rounded-lg bg-blue-50 border-blue-200 text-blue-800 shadow-sm">
-                                <i className="fas fa-info-circle mr-2"></i>
-                                El análisis de inventario muestra el estado actual del stock (no se ve afectado por el filtro de fechas).
+                            <div className="flex flex-col sm:flex-row items-center justify-between mb-6 p-4 border rounded-lg bg-blue-50 border-blue-200 text-blue-800 shadow-sm">
+                                <span>
+                                    <i className="fas fa-info-circle mr-2"></i>
+                                    El análisis de inventario muestra el estado actual del stock (no se ve afectado por el filtro de fechas).
+                                </span>
+                                {/* --- BOTÓN EXPORTAR (Pestaña Inventario) --- */}
+                                <button onClick={handleExport} disabled={isLoading} className="w-full sm:w-auto mt-2 sm:mt-0 bg-green-600 text-white font-semibold py-2 px-6 rounded-lg shadow-md hover:bg-green-700 disabled:opacity-50 flex items-center justify-center">
+                                    <i className="fas fa-file-excel mr-2"></i>
+                                    Exportar
+                                </button>
                             </div>
                         )}
 
