@@ -94,7 +94,24 @@
 
             useEffect(() => {
                 if (!canvasRef.current) return;
-                if (!data) return; // No dibujar si no hay datos
+                
+                // No dibujar si no hay datos
+                if (!data || !data.datasets || data.datasets.length === 0 || data.datasets[0].data.length === 0) {
+                     if (chartRef.current) {
+                        chartRef.current.destroy(); // Destruir gráfico anterior si existe
+                        chartRef.current = null;
+                    }
+                    // Mostrar mensaje de "No hay datos"
+                    const ctx = canvasRef.current.getContext('2d');
+                    ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+                    ctx.save();
+                    ctx.textAlign = 'center';
+                    ctx.fillStyle = '#6b7280'; // gray-500
+                    ctx.font = "16px 'Inter', sans-serif";
+                    ctx.fillText('No hay datos para mostrar', canvasRef.current.width / 2, canvasRef.current.height / 2);
+                    ctx.restore();
+                    return;
+                }
 
                 if (chartRef.current) {
                     chartRef.current.destroy();
@@ -110,19 +127,16 @@
                 return () => {
                     if (chartRef.current) {
                         chartRef.current.destroy();
+                        chartRef.current = null;
                     }
                 };
-            }, [data, options, type]);
+            }, [data, options, type]); // Depender de 'data' para redibujar
 
             return (
                 <div className="bg-white p-6 rounded-2xl shadow-xl border border-gray-200 h-full flex flex-col">
                     <h3 className="text-xl font-bold text-gray-800 mb-4">{title}</h3>
                     <div className="flex-grow relative h-64 md:h-80">
-                        {data ? (
-                            <canvas ref={canvasRef}></canvas>
-                        ) : (
-                            <div className="flex items-center justify-center h-full text-gray-500">No hay datos para mostrar.</div>
-                        )}
+                        <canvas ref={canvasRef}></canvas>
                     </div>
                 </div>
             );
@@ -175,18 +189,18 @@
             // --- ESTADO PARA TODOS LOS DATOS ---
             // Pestaña 1: Despachos
             const [kpisDespacho, setKpisDespacho] = useState({ total_despachos: 0, total_bultos: 0, total_cantidad: 0, clientes_activos: 0 });
-            const [bultosPorMes, setBultosPorMes] = useState(null);
-            const [topClientes, setTopClientes] = useState(null);
-            const [topTransportes, setTopTransportes] = useState(null);
-            const [topSkusDespachados, setTopSkusDespachados] = useState(null);
+            const [bultosPorMes, setBultosPorMes] = useState({ labels: [], datasets: [] });
+            const [topClientes, setTopClientes] = useState({ labels: [], datasets: [] });
+            const [topTransportes, setTopTransportes] = useState({ labels: [], datasets: [] });
+            const [topSkusDespachados, setTopSkusDespachados] = useState({ labels: [], datasets: [] });
 
             // Pestaña 2: Inventario (¡NUEVO!)
             const [kpisInventario, setKpisInventario] = useState({ stock_bultos: 0, stock_cantidad: 0, antiguedad_promedio: 0 });
-            const [inventarioAging, setInventarioAging] = useState(null);
-            const [stockPorSku, setStockPorSku] = useState(null);
+            const [inventarioAging, setInventarioAging] = useState({ labels: [], datasets: [] });
+            const [stockPorSku, setStockPorSku] = useState({ labels: [], datasets: [] });
 
             // Pestaña 3: Operaciones (¡NUEVO!)
-            const [topOperarios, setTopOperarios] = useState(null);
+            const [topOperarios, setTopOperarios] = useState({ labels: [], datasets: [] });
             
             // Opciones comunes de Chart.js
             Chart.defaults.font.family = "'Inter', sans-serif";
@@ -409,63 +423,55 @@
                                 <KpiCard title="Clientes Activos" value={formatNumber(kpisDespacho.clientes_activos)} icon="fa-users" color="amber" />
                             </div>
                             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                                {bultosPorMes && (
+                                <ChartComponent
+                                    type="line"
+                                    title="Evolutivo de Bultos Despachados"
+                                    data={bultosPorMes}
+                                    options={{
+                                        scales: {
+                                            x: { type: 'time', time: { unit: 'month', displayFormats: { month: 'MMM yyyy' }, tooltipFormat: 'MMMM yyyy' }, title: { display: true, text: 'Mes' }, 
+                                                // --- ¡CORRECCIÓN DE ROBUSTEZ! ---
+                                                // Ahora verificamos si 'dateFns.locale.es' existe antes de usarlo.
+                                                adapters: { date: { locale: (window.dateFns && dateFns.locale && dateFns.locale.es) ? dateFns.locale.es : undefined } } 
+                                            },
+                                            y: { beginAtZero: true, title: { display: true, text: 'Nº de Bultos (Pallets)' } }
+                                        }
+                                    }}
+                                />
+                                <ChartComponent
+                                    type="doughnut"
+                                    title="Top 5 Clientes (por Bultos)"
+                                    data={topClientes}
+                                    options={{ plugins: { legend: { position: 'right' } } }}
+                                />
+                                <div className="lg:col-span-2">
                                     <ChartComponent
-                                        type="line"
-                                        title="Evolutivo de Bultos Despachados"
-                                        data={bultosPorMes}
+                                        type="bar"
+                                        title="Top 5 Transportes (por Bultos)"
+                                        data={topTransportes}
                                         options={{
-                                            scales: {
-                                                x: { type: 'time', time: { unit: 'month', displayFormats: { month: 'MMM yyyy' }, tooltipFormat: 'MMMM yyyy' }, title: { display: true, text: 'Mes' }, 
-                                                    // --- ¡CORRECCIÓN AQUÍ! ---
-                                                    // Era dateFns.localeEs, se corrigió a dateFns.locale.es
-                                                    adapters: { date: { locale: dateFns.locale.es } } 
-                                                },
-                                                y: { beginAtZero: true, title: { display: true, text: 'Nº de Bultos (Pallets)' } }
-                                            }
+                                            indexAxis: 'y',
+                                            scales: { 
+                                                x: { beginAtZero: true, title: { display: true, text: 'Nº de Bultos (Pallets)' } },
+                                                y: { Ticks: { autoSkip: false } }
+                                            },
+                                            plugins: { legend: { display: false } }
                                         }}
                                     />
-                                )}
-                                {topClientes && (
-                                    <ChartComponent
-                                        type="doughnut"
-                                        title="Top 5 Clientes (por Bultos)"
-                                        data={topClientes}
-                                        options={{ plugins: { legend: { position: 'right' } } }}
-                                    />
-                                )}
-                                <div className="lg:col-span-2">
-                                    {topTransportes && (
-                                        <ChartComponent
-                                            type="bar"
-                                            title="Top 5 Transportes (por Bultos)"
-                                            data={topTransportes}
-                                            options={{
-                                                indexAxis: 'y',
-                                                scales: { 
-                                                    x: { beginAtZero: true, title: { display: true, text: 'Nº de Bultos (Pallets)' } },
-                                                    y: { Ticks: { autoSkip: false } }
-                                                },
-                                                plugins: { legend: { display: false } }
-                                            }}
-                                        />
-                                    )}
                                 </div>
                                 <div className="lg:col-span-2">
-                                    {topSkusDespachados && (
-                                        <ChartComponent
-                                            type="bar"
-                                            title="Top 10 SKUs Despachados (por Cantidad)"
-                                            data={topSkusDespachados}
-                                            options={{
-                                                scales: { 
-                                                    x: { Ticks: { autoSkip: false } },
-                                                    y: { beginAtZero: true, title: { display: true, text: 'Cantidad Total' } } 
-                                                },
-                                                plugins: { legend: { display: false } }
-                                            }}
-                                        />
-                                    )}
+                                    <ChartComponent
+                                        type="bar"
+                                        title="Top 10 SKUs Despachados (por Cantidad)"
+                                        data={topSkusDespachados}
+                                        options={{
+                                            scales: { 
+                                                x: { Ticks: { autoSkip: false } },
+                                                y: { beginAtZero: true, title: { display: true, text: 'Cantidad Total' } } 
+                                            },
+                                            plugins: { legend: { display: false } }
+                                        }}
+                                    />
                                 </div>
                             </div>
                         </div>
@@ -478,36 +484,32 @@
                                 <KpiCard title="Antigüedad Promedio" value={formatNumber(kpisInventario.antiguedad_promedio)} icon="fa-hourglass-half" unit="días" color="blue" />
                             </div>
                             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                                {inventarioAging && (
+                                <ChartComponent
+                                    type="bar"
+                                    title="Antigüedad de Inventario (Aging)"
+                                    data={inventarioAging}
+                                    options={{
+                                        scales: { 
+                                            x: { title: { display: true, text: 'Rango de Antigüedad' } },
+                                            y: { beginAtZero: true, title: { display: true, text: 'Nº de Bultos (Pallets)' } } 
+                                        },
+                                        plugins: { legend: { display: false } }
+                                    }}
+                                />
+                                <div className="lg:row-span-2">
                                     <ChartComponent
                                         type="bar"
-                                        title="Antigüedad de Inventario (Aging)"
-                                        data={inventarioAging}
+                                        title="Top 10 SKUs en Stock (por Cantidad)"
+                                        data={stockPorSku}
                                         options={{
+                                            indexAxis: 'y',
                                             scales: { 
-                                                x: { title: { display: true, text: 'Rango de Antigüedad' } },
-                                                y: { beginAtZero: true, title: { display: true, text: 'Nº de Bultos (Pallets)' } } 
+                                                x: { beginAtZero: true, title: { display: true, text: 'Cantidad Total en Stock' } },
+                                                y: { Ticks: { autoSkip: false } }
                                             },
                                             plugins: { legend: { display: false } }
                                         }}
                                     />
-                                )}
-                                <div className="lg:row-span-2">
-                                    {stockPorSku && (
-                                        <ChartComponent
-                                            type="bar"
-                                            title="Top 10 SKUs en Stock (por Cantidad)"
-                                            data={stockPorSku}
-                                            options={{
-                                                indexAxis: 'y',
-                                                scales: { 
-                                                    x: { beginAtZero: true, title: { display: true, text: 'Cantidad Total en Stock' } },
-                                                    y: { Ticks: { autoSkip: false } }
-                                                },
-                                                plugins: { legend: { display: false } }
-                                            }}
-                                        />
-                                    )}
                                 </div>
                             </div>
                         </div>
@@ -515,20 +517,18 @@
                         {/* --- Pestaña 3: OPERACIONES --- */}
                         <div role="tabpanel" hidden={currentTab !== 'operations'}>
                             <div className="grid grid-cols-1 gap-6">
-                                {topOperarios && (
-                                    <ChartComponent
-                                        type="bar"
-                                        title="Top 10 Operarios (por Bultos Despachados)"
-                                        data={topOperarios}
-                                        options={{
-                                            scales: { 
-                                                x: { Ticks: { autoSkip: false } },
-                                                y: { beginAtZero: true, title: { display: true, text: 'Nº de Bultos (Pallets)' } } 
-                                            },
-                                            plugins: { legend: { display: false } }
-                                        }}
-                                    />
-                                )}
+                                <ChartComponent
+                                    type="bar"
+                                    title="Top 10 Operarios (por Bultos Despachados)"
+                                    data={topOperarios}
+                                    options={{
+                                        scales: { 
+                                            x: { Ticks: { autoSkip: false } },
+                                            y: { beginAtZero: true, title: { display: true, text: 'Nº de Bultos (Pallets)' } } 
+                                        },
+                                        plugins: { legend: { display: false } }
+                                    }}
+                                />
                             </div>
                         </div>
 
