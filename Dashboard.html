@@ -201,7 +201,8 @@
             // Función para cargar todos los datos
             const fetchData = useCallback(async (inicio, fin) => {
                 if (!supabaseClient) {
-                    alert("Error: No se pudo conectar a Supabase.");
+                    // Reemplazamos el alert() por un console.error para que no bloquee
+                    console.error("Error: No se pudo conectar a Supabase.");
                     setIsLoading(false);
                     return;
                 }
@@ -415,30 +416,66 @@
                                         data={bultosPorMes}
                                         options={{
                                             scales: {
-                                                x: { type: 'time', time: { unit: 'month', displayFormats: { month: 'MMM yyyy' }, tooltipFormat: 'MMMM yyyy' }, title: { display: true, text: 'Mes' }, adapters: { date: { locale: dateFns.localeEs } } },
+                                                x: { type: 'time', time: { unit: 'month', displayFormats: { month: 'MMM yyyy' }, tooltipFormat: 'MMMM yyyy' }, title: { display: true, text: 'Mes' }, 
+                                                    // --- ¡CORRECCIÓN AQUÍ! ---
+                                                    // Era dateFns.localeEs, se corrigió a dateFns.locale.es
+                                                    adapters: { date: { locale: dateFns.locale.es } } 
+                                                },
                                                 y: { beginAtZero: true, title: { display: true, text: 'Nº de Bultos (Pallets)' } }
                                             }
                                         }}
                                     />
                                 )}
                                 {topClientes && (
-                                    <ChartComponent type="doughnut" title="Top 5 Clientes (por Bultos)" data={topClientes} options={{ plugins: { legend: { position: 'bottom' } } }} />
+                                    <ChartComponent
+                                        type="doughnut"
+                                        title="Top 5 Clientes (por Bultos)"
+                                        data={topClientes}
+                                        options={{ plugins: { legend: { position: 'right' } } }}
+                                    />
                                 )}
-                                {topTransportes && (
-                                    <ChartComponent type="bar" title="Top 5 Transportes (por Bultos)" data={topTransportes} options={{ indexAxis: 'y', scales: { x: { beginAtZero: true, title: { display: true, text: 'Nº de Bultos (Pallets)' } }, y: { grid: { display: false } } }, plugins: { legend: { display: false } } }} />
-                                )}
-                                {topSkusDespachados && (
-                                    <ChartComponent type="bar" title="Top 10 SKUs Despachados (por Cantidad)" data={topSkusDespachados} options={{ indexAxis: 'y', scales: { x: { beginAtZero: true, title: { display: true, text: 'Cantidad Total' } }, y: { grid: { display: false } } }, plugins: { legend: { display: false } } }} />
-                                )}
+                                <div className="lg:col-span-2">
+                                    {topTransportes && (
+                                        <ChartComponent
+                                            type="bar"
+                                            title="Top 5 Transportes (por Bultos)"
+                                            data={topTransportes}
+                                            options={{
+                                                indexAxis: 'y',
+                                                scales: { 
+                                                    x: { beginAtZero: true, title: { display: true, text: 'Nº de Bultos (Pallets)' } },
+                                                    y: { Ticks: { autoSkip: false } }
+                                                },
+                                                plugins: { legend: { display: false } }
+                                            }}
+                                        />
+                                    )}
+                                </div>
+                                <div className="lg:col-span-2">
+                                    {topSkusDespachados && (
+                                        <ChartComponent
+                                            type="bar"
+                                            title="Top 10 SKUs Despachados (por Cantidad)"
+                                            data={topSkusDespachados}
+                                            options={{
+                                                scales: { 
+                                                    x: { Ticks: { autoSkip: false } },
+                                                    y: { beginAtZero: true, title: { display: true, text: 'Cantidad Total' } } 
+                                                },
+                                                plugins: { legend: { display: false } }
+                                            }}
+                                        />
+                                    )}
+                                </div>
                             </div>
                         </div>
-                        
+
                         {/* --- Pestaña 2: INVENTARIO --- */}
                         <div role="tabpanel" hidden={currentTab !== 'inventory'}>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 mb-6">
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 mb-6">
                                 <KpiCard title="Bultos en Stock" value={formatNumber(kpisInventario.stock_bultos)} icon="fa-boxes-stacked" color="blue" />
                                 <KpiCard title="Cantidad en Stock" value={formatNumber(kpisInventario.stock_cantidad)} icon="fa-box-open" unit="U." color="blue" />
-                                <KpiCard title="Antigüedad Promedio" value={formatNumber(kpisInventario.antiguedad_promedio)} icon="fa-clock" unit="días" color="green" />
+                                <KpiCard title="Antigüedad Promedio" value={formatNumber(kpisInventario.antiguedad_promedio)} icon="fa-hourglass-half" unit="días" color="blue" />
                             </div>
                             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                                 {inventarioAging && (
@@ -447,22 +484,47 @@
                                         title="Antigüedad de Inventario (Aging)"
                                         data={inventarioAging}
                                         options={{
-                                            scales: {
-                                                x: { title: { display: true, text: 'Rango de Antigüedad' }, grid: { display: false } },
-                                                y: { beginAtZero: true, title: { display: true, text: 'Nº de Bultos (Pallets)' } }
+                                            scales: { 
+                                                x: { title: { display: true, text: 'Rango de Antigüedad' } },
+                                                y: { beginAtZero: true, title: { display: true, text: 'Nº de Bultos (Pallets)' } } 
                                             },
                                             plugins: { legend: { display: false } }
                                         }}
                                     />
                                 )}
-                                {stockPorSku && (
+                                <div className="lg:row-span-2">
+                                    {stockPorSku && (
+                                        <ChartComponent
+                                            type="bar"
+                                            title="Top 10 SKUs en Stock (por Cantidad)"
+                                            data={stockPorSku}
+                                            options={{
+                                                indexAxis: 'y',
+                                                scales: { 
+                                                    x: { beginAtZero: true, title: { display: true, text: 'Cantidad Total en Stock' } },
+                                                    y: { Ticks: { autoSkip: false } }
+                                                },
+                                                plugins: { legend: { display: false } }
+                                            }}
+                                        />
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* --- Pestaña 3: OPERACIONES --- */}
+                        <div role="tabpanel" hidden={currentTab !== 'operations'}>
+                            <div className="grid grid-cols-1 gap-6">
+                                {topOperarios && (
                                     <ChartComponent
                                         type="bar"
-                                        title="Top 10 SKUs en Stock (por Cantidad)"
-                                        data={stockPorSku}
+                                        title="Top 10 Operarios (por Bultos Despachados)"
+                                        data={topOperarios}
                                         options={{
-                                            indexAxis: 'y',
-                                            scales: { x: { beginAtZero: true, title: { display: true, text: 'Cantidad Total' } }, y: { grid: { display: false } } },
+                                            scales: { 
+                                                x: { Ticks: { autoSkip: false } },
+                                                y: { beginAtZero: true, title: { display: true, text: 'Nº de Bultos (Pallets)' } } 
+                                            },
                                             plugins: { legend: { display: false } }
                                         }}
                                     />
@@ -470,24 +532,6 @@
                             </div>
                         </div>
 
-                        {/* --- Pestaña 3: OPERACIONES --- */}
-                        <div role="tabpanel" hidden={currentTab !== 'operations'}>
-                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                                {topOperarios && (
-                                    <ChartComponent
-                                        type="bar"
-                                        title="Rendimiento de Operarios (Bultos despachados)"
-                                        data={topOperarios}
-                                        options={{
-                                            indexAxis: 'y',
-                                            scales: { x: { beginAtZero: true, title: { display: true, text: 'Nº de Bultos (Pallets)' } }, y: { grid: { display: false } } },
-                                            plugins: { legend: { display: false } }
-                                        }}
-                                    />
-                                )}
-                            </div>
-                        </div>
-                        
                     </div>
                 </div>
             );
