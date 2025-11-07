@@ -246,6 +246,9 @@
                             <p className="mt-1 pl-4">Cada fila tiene un menú de acciones (<i className="fas fa-ellipsis-v"></i>) en la última columna. Desde allí puedes:</p>
                             <ul className="list-disc list-inside mt-2 space-y-2 pl-8">
                                 <li>
+                                    <strong><i className="fas fa-file-pdf text-green-600 w-6 mr-1"></i>Reimprimir Lista (PDF):</strong> Descarga un PDF de la lista de empaque completa, tal como se generó originalmente.
+                                </li>
+                                <li>
                                     <strong><i className="fas fa-truck-loading text-blue-500 w-6 mr-1"></i>Editar Despacho:</strong> Abre una ventana para cambiar la fecha, el transporte y si retira en planta. Ambos campos son obligatorios para guardar.
                                 </li>
                                 <li>
@@ -301,7 +304,6 @@
                     'Fecha de produccion', 'cantidad', 'U.M.'
                 ];
                 
-                // --- ¡CAMBIO AQUÍ! ---
                 // Ocultamos las columnas "raw" que solo usamos para ordenar
                 const hiddenColumns = ['fechacreacion', 'Legajo', 'fechaproduccion'];
                 
@@ -570,6 +572,227 @@
                 }
             };
 
+            // --- INICIO: NUEVA LÓGICA DE REIMPRESIÓN DE PDF ---
+
+            const formatSpanishNumber = (num) => {
+                if (isNaN(num)) return '';
+                return new Intl.NumberFormat('es-ES', {minimumFractionDigits: 0, maximumFractionDigits: 2}).format(num);
+            };
+
+            const createReimpresionPdf = async (idListaEmpaque, clienteNombre, operarioLegajo, fechaCarga, transporte, retiraEnPlanta, itemsLista) => {
+              try {
+                const { jsPDF } = window.jspdf;
+                const pdf = new jsPDF('l', 'mm', 'a4');
+                const pdfWidth = pdf.internal.pageSize.getWidth();
+                const pdfHeight = pdf.internal.pageSize.getHeight();
+                let y = 10;
+                const m = 10;
+                const pageWidth = pdfWidth - (2 * m);
+                const midPoint = pdfWidth / 2;
+      
+                pdf.setDrawColor(150, 150, 150);
+                pdf.rect(m, y, pageWidth, 30);
+                pdf.line(midPoint, y, midPoint, y + 30);
+      
+                let yLeft = y + 7;
+                pdf.setFont('helvetica', 'bold');
+                pdf.setFontSize(26);
+                pdf.text("MOLDERIL S.A.", m + 5, yLeft);
+                pdf.setFont('helvetica', 'normal');
+                pdf.setFontSize(8);
+                yLeft += 8;
+                pdf.text("ADMINISTRACION Y VENTAS:", m + 5, yLeft);
+                yLeft += 4;
+                pdf.text("AV. Hermanos Lescano 550 - Rio Primero (Cordoba)", m + 5, yLeft);
+                yLeft += 4;
+                pdf.text("Tel/Fax: 03574-420768 (lineas Rotativas)", m + 5, yLeft);
+      
+                let yRight = y + 7;
+                pdf.setFont('helvetica', 'bold');
+                pdf.setFontSize(14);
+                pdf.text(`LISTA DE EMPAQUE N°: ${idListaEmpaque || ''}`, midPoint + 5, yRight);
+                pdf.setLineWidth(0.5);
+                pdf.line(midPoint + 5, yRight + 1.5, midPoint + 60, yRight + 1.5);
+                pdf.setLineWidth(0.2);
+      
+                pdf.setFont('helvetica', 'normal');
+                pdf.setFontSize(9);
+                yRight += 8;
+                pdf.text(`Cliente:`, midPoint + 5, yRight);
+                pdf.setFont('helvetica', 'bold');
+                pdf.setFontSize(11);
+                pdf.text(`${clienteNombre || 'N/A'}`, midPoint + 20, yRight);
+                pdf.setFont('helvetica', 'normal');
+                pdf.setFontSize(9);
+                yRight += 5;
+                pdf.text(`Operario (Legajo):`, midPoint + 5, yRight);
+                pdf.setFont('helvetica', 'bold');
+                pdf.text(`${operarioLegajo || 'N/A'}`, midPoint + 33, yRight);
+                
+                pdf.setFont('helvetica', 'normal');
+                yRight += 5;
+                pdf.text(`Transporte:`, midPoint + 5, yRight);
+                pdf.setFont('helvetica', 'bold');
+                pdf.text(`${transporte || 'N/A'}`, midPoint + 25, yRight);
+      
+                pdf.setFont('helvetica', 'normal');
+                yRight += 5;
+                const formattedFechaCarga = fechaCarga ? new Date(fechaCarga.replace(/-/g, '/')).toLocaleDateString('es-AR') : 'N/A';
+                pdf.text(`Fecha de Carga:`, midPoint + 5, yRight);
+                pdf.setFont('helvetica', 'bold');
+                pdf.text(formattedFechaCarga, midPoint + 30, yRight);
+      
+                pdf.setFont('helvetica', 'normal');
+                yRight += 5;
+                pdf.text(`Retira en Planta:`, midPoint + 5, yRight);
+                pdf.setFont('helvetica', 'bold');
+                pdf.text(retiraEnPlanta ? 'Sí' : 'No', midPoint + 32, yRight);
+      
+                pdf.setFont('helvetica', 'normal');
+                yRight += 5;
+                const now = new Date();
+                const formattedDate = `${now.getDate().toString().padStart(2, '0')}/${(now.getMonth() + 1).toString().padStart(2, '0')}/${now.getFullYear()}`;
+                const formattedTime = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+                pdf.text(`Fecha y Hora Doc:`, midPoint + 5, yRight);
+                pdf.setFont('helvetica', 'bold');
+                pdf.text(`${formattedDate} ${formattedTime}`, midPoint + 32, yRight);
+      
+                y = 45;
+                const headers = ["SKU", "Descripción", "Nº Pallet", "Lotes Prod.", "F. Prod", "Cant.", "U.M.", "Control"];
+                const colWidths = [0.12, 0.33, 0.12, 0.13, 0.08, 0.06, 0.05, 0.11];
+                const colPos = colWidths.reduce((acc, width, i) => {
+                    acc.push( (i === 0 ? m : acc[i - 1]) + (i === 0 ? 0 : pageWidth * colWidths[i - 1]) );
+                    return acc;
+                }, []);
+      
+                const drawHeader = (currentY) => {
+                    pdf.setFont('helvetica', 'bold');
+                    pdf.setFontSize(8);
+                    pdf.setFillColor(230, 230, 230);
+                    pdf.rect(m, currentY, pageWidth, 6, 'F');
+                    headers.forEach((h, i) => pdf.text(h, colPos[i] + 2, currentY + 4.5));
+                    return currentY + 6;
+                };
+                y = drawHeader(y);
+      
+                const rowHeight = 5;
+                const startTableY = y;
+                pdf.setFont('helvetica', 'normal');
+                pdf.setFontSize(7);
+      
+                itemsLista.forEach((item) => {
+                  if (y + rowHeight > pdfHeight - m - 20) {
+                    pdf.addPage();
+                    y = m;
+                    y = drawHeader(y);
+                    pdf.setFontSize(7);
+                  }
+                  
+                  pdf.line(m, y, pdfWidth - m, y);
+                  const palletDisplay = item['nro de pallet'];
+                  const lotes = (item['Lotes de produccion'] || '').replace(/#/g, ', ');
+                  const cantidad = formatSpanishNumber(item['cantidad']);
+                  
+                  const itemData = [
+                      item['Sku'], 
+                      item['descripcion sku'], 
+                      palletDisplay, 
+                      lotes, 
+                      item['Fecha de produccion'], 
+                      cantidad, 
+                      item['U.M.']
+                    ].map(d => String(d || ''));
+
+                  itemData.forEach((data, i) => pdf.text(data, colPos[i] + 2, y + 3.5));
+                  const boxSize = 3;
+                  pdf.rect(colPos[7] + (pageWidth * colWidths[7] / 2) - (boxSize / 2), y + (rowHeight / 2) - (boxSize / 2), boxSize, boxSize);
+                  y += rowHeight;
+                });
+      
+                pdf.line(m, y, pdfWidth - m, y);
+                colPos.forEach(pos => pdf.line(pos, startTableY, pos, y));
+                pdf.line(pdfWidth - m, startTableY, pdfWidth - m, y);
+      
+                pdf.setFont('helvetica', 'bold');
+                pdf.setFontSize(12);
+                pdf.text(`Total de bultos escaneados: ${itemsLista.length}`, m, y + 10);
+      
+                const totalPages = pdf.internal.getNumberOfPages();
+                for (let i = 1; i <= totalPages; i++) {
+                    pdf.setPage(i);
+                    let footerY = pdfHeight - 20;
+                    pdf.setFontSize(10);
+                    pdf.text("Responsable de Carga:", m, footerY);
+                    pdf.line(m + 45, footerY, m + 125, footerY);
+                    footerY += 5;
+                    pdf.setFontSize(8);
+                    pdf.text("Firma y Aclaración", m + 65, footerY);
+                }
+      
+                return pdf;
+              } catch (error) {
+                console.error("Error al crear el documento PDF:", error);
+                alert(`Error al crear el PDF: ${error.message}`);
+                return null;
+              }
+            };
+
+            const getPdfFilename = (idLista) => {
+              const date = new Date();
+              const dateString = `${date.getFullYear()}${(date.getMonth() + 1).toString().padStart(2, '0')}${date.getDate().toString().padStart(2, '0')}`;
+              return `Reimpresion_Lista_Empaque_N${idLista}_${dateString}.pdf`;
+            }
+
+            const handleReimprimirLista = async (item) => {
+                setActiveActionMenu(null);
+                setIsGridLoading(true);
+                try {
+                    const idListaEmpaque = item.idlista;
+
+                    // 1. Buscar todos los items de esa lista
+                    const { data: itemsLista, error: errorItems } = await supabaseClient
+                        .from('vista_historial_listas_empaque')
+                        .select('*')
+                        .eq('idlista', idListaEmpaque);
+
+                    if (errorItems) throw new Error(`Error al buscar items: ${errorItems.message}`);
+                    if (!itemsLista || itemsLista.length === 0) throw new Error("No se encontraron items para esta lista.");
+
+                    // 2. Buscar la info de despacho
+                    const { data: despachoInfo, error: errorDespacho } = await supabaseClient
+                        .from('despachoListaEmpaque')
+                        .select('fechaDespacho, razonSocialTransporte, retiranDesdePlanta')
+                        .eq('idListaEmpaque', idListaEmpaque)
+                        .maybeSingle(); // Usar maybeSingle por si no existe
+                    
+                    if (errorDespacho && errorDespacho.code !== 'PGRST 0') {
+                         throw new Error(`Error al buscar despacho: ${errorDespacho.message}`);
+                    }
+
+                    // 3. Obtener datos comunes
+                    const primerItem = itemsLista[0];
+                    const clienteNombre = primerItem.Cliente;
+                    const operarioLegajo = primerItem.Legajo;
+                    const fechaCarga = despachoInfo?.fechaDespacho || null;
+                    const transporte = despachoInfo?.razonSocialTransporte || 'N/A';
+                    const retiraEnPlanta = despachoInfo?.retiranDesdePlanta || false;
+                    
+                    // 4. Generar y descargar el PDF
+                    const pdf = await createReimpresionPdf(idListaEmpaque, clienteNombre, operarioLegajo, fechaCarga, transporte, retiraEnPlanta, itemsLista);
+                    if (pdf) {
+                        pdf.save(getPdfFilename(idListaEmpaque));
+                    }
+
+                } catch (error) {
+                    console.error('Error al reimprimir la lista:', error);
+                    alert(`Error al reimprimir la lista: ${error.message}`);
+                } finally {
+                    setIsGridLoading(false);
+                }
+            };
+
+            // --- FIN: NUEVA LÓGICA DE REIMPRESIÓN DE PDF ---
+
             const exportToPDF = async () => {
                 const allExportData = await fetchAllFilteredData();
                 if (!allExportData) return;
@@ -774,6 +997,9 @@
                                                         {activeActionMenu === item.uniqueId && (
                                                             <div className="absolute right-full mr-2 mt-[-2rem] w-64 bg-white rounded-md shadow-lg border z-30">
                                                                 <ul className="text-gray-700 text-left">
+                                                                    {/* --- ¡NUEVO BOTÓN AQUÍ! --- */}
+                                                                    <li><button onClick={() => { handleReimprimirLista(item); }} className="w-full text-left hover:bg-gray-100 p-3 flex items-center"><i className="fas fa-file-pdf w-6 mr-2 text-green-600"></i>Reimprimir Lista (PDF)</button></li>
+                                                                    <li><hr className="my-1"/></li>
                                                                     <li><button onClick={() => { handleOpenEditModal(item); setActiveActionMenu(null); }} className="w-full text-left hover:bg-gray-100 p-3 flex items-center"><i className="fas fa-truck-loading w-6 mr-2 text-blue-500"></i>Editar Despacho</button></li>
                                                                     <li><hr className="my-1"/></li>
                                                                     <li><button onClick={() => { handleDeleteItem(item); setActiveActionMenu(null); }} className="w-full text-left hover:bg-gray-100 p-3 flex items-center"><i className="fas fa-minus-circle w-6 mr-2 text-yellow-600"></i>Eliminar Pallet de la Lista</button></li>
