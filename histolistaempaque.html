@@ -54,7 +54,7 @@
     <div id="root"></div>
 
     <script type="text/babel">
-        const { useState, useEffect, useRef, useCallback, useMemo } = React;
+        const { useState, useEffect, useRef, useCallback, useMemo, useLayoutEffect } = React;
         const { createRoot } = ReactDOM;
         const { jsPDF } = window.jspdf;
 
@@ -113,6 +113,24 @@
             const [transporte, setTransporte] = useState('');
             const [retira, setRetira] = useState(false);
             const [isLoading, setIsLoading] = useState(false);
+            
+            // --- INICIO: CORRECCIÓN DE CURSOR ---
+            const [cursor, setCursor] = useState(null);
+            const transporteInputRef = useRef(null);
+
+            useLayoutEffect(() => {
+                // Restaurar la posición del cursor después del renderizado
+                if (transporteInputRef.current && cursor !== null) {
+                    transporteInputRef.current.setSelectionRange(cursor, cursor);
+                }
+            }, [transporte, cursor]);
+
+            const handleTransporteChange = (e) => {
+                // Guardar la posición del cursor antes de cambiar el estado
+                setCursor(e.target.selectionStart);
+                setTransporte(e.target.value.toUpperCase());
+            };
+            // --- FIN: CORRECCIÓN DE CURSOR ---
 
             useEffect(() => {
                 if (item && isOpen) {
@@ -184,8 +202,9 @@
                                     <input
                                         type="text"
                                         id="transporte"
+                                        ref={transporteInputRef} // <-- Ref para el input
                                         value={transporte}
-                                        onChange={e => setTransporte(e.target.value.toUpperCase())}
+                                        onChange={handleTransporteChange} // <-- Usar el handler corregido
                                         className="w-full p-2 border border-gray-300 rounded-md shadow-sm"
                                         placeholder="Nombre del transporte"
                                         disabled={readOnly}
@@ -288,7 +307,7 @@
             const [isExportOpen, setIsExportOpen] = useState(false);
             const exportMenuRef = useRef(null);
             const [activeActionMenu, setActiveActionMenu] = useState(null);
-            const actionMenuRef = useRef(null);
+            const actionMenuRef = useRef(null); // Ref unificado para todos los menús de fila
 
             const [modalState, setModalState] = useState({ isOpen: false, title: '', message: '', onConfirm: () => {} });
             const [editModalState, setEditModalState] = useState({ isOpen: false, item: null });
@@ -440,12 +459,21 @@
             }, []);
 
             useEffect(() => {
+                // --- INICIO: CORRECCIÓN DE MENÚ CONTEXTUAL ---
                 const handleClickOutside = (event) => {
-                    if (exportMenuRef.current && !exportMenuRef.current.contains(event.target)) setIsExportOpen(false);
+                    // Cerrar menú de exportar
+                    if (exportMenuRef.current && !exportMenuRef.current.contains(event.target)) {
+                        setIsExportOpen(false);
+                    }
+                    // Cerrar menú de acciones de fila
+                    if (actionMenuRef.current && !actionMenuRef.current.contains(event.target)) {
+                        setActiveActionMenu(null); // Cierra el menú de acciones abierto
+                    }
                 };
+                // --- FIN: CORRECCIÓN DE MENÚ CONTEXTUAL ---
                 document.addEventListener("mousedown", handleClickOutside);
                 return () => document.removeEventListener("mousedown", handleClickOutside);
-            }, []);
+            }, []); // El array de dependencias vacío está bien aquí
 
             // Debounce for column filters
             useEffect(() => {
@@ -572,7 +600,7 @@
                 }
             };
 
-            // --- INICIO: NUEVA LÓGICA DE REIMPRESIÓN DE PDF ---
+            // --- INICIO: LÓGICA DE REIMPRESIÓN DE PDF ---
 
             const formatSpanishNumber = (num) => {
                 if (isNaN(num)) return '';
@@ -765,7 +793,7 @@
                         .eq('idListaEmpaque', idListaEmpaque)
                         .maybeSingle(); // Usar maybeSingle por si no existe
                     
-                    if (errorDespacho && errorDespacho.code !== 'PGRST 0') {
+                    if (errorDespacho && errorDespacho.code !== 'PGRST0') { // Ignorar error si no encuentra fila
                          throw new Error(`Error al buscar despacho: ${errorDespacho.message}`);
                     }
 
@@ -791,7 +819,7 @@
                 }
             };
 
-            // --- FIN: NUEVA LÓGICA DE REIMPRESIÓN DE PDF ---
+            // --- FIN: LÓGICA DE REIMPRESIÓN DE PDF ---
 
             const exportToPDF = async () => {
                 const allExportData = await fetchAllFilteredData();
@@ -990,14 +1018,19 @@
                                                     );
                                                 })}
                                                 <td className="px-2 py-2 text-center align-middle">
-                                                    <div className="relative" ref={activeActionMenu === item.uniqueId ? actionMenuRef : null}>
+                                                    {/* --- INICIO: CORRECCIÓN DE MENÚ CONTEXTUAL --- */}
+                                                    {/* Se asigna el ref al div que contiene el menú */}
+                                                    <div 
+                                                        className="relative" 
+                                                        ref={activeActionMenu === item.uniqueId ? actionMenuRef : null}
+                                                    >
+                                                    {/* --- FIN: CORRECCIÓN DE MENÚ CONTEXTUAL --- */}
                                                         <button onClick={(e) => { e.stopPropagation(); setActiveActionMenu(activeActionMenu === item.uniqueId ? null : item.uniqueId); }} className="text-gray-500 hover:text-blue-600 p-2 rounded-full">
                                                             <i className="fas fa-ellipsis-v"></i>
                                                         </button>
                                                         {activeActionMenu === item.uniqueId && (
                                                             <div className="absolute right-full mr-2 mt-[-2rem] w-64 bg-white rounded-md shadow-lg border z-30">
                                                                 <ul className="text-gray-700 text-left">
-                                                                    {/* --- ¡NUEVO BOTÓN AQUÍ! --- */}
                                                                     <li><button onClick={() => { handleReimprimirLista(item); }} className="w-full text-left hover:bg-gray-100 p-3 flex items-center"><i className="fas fa-file-pdf w-6 mr-2 text-green-600"></i>Reimprimir Lista (PDF)</button></li>
                                                                     <li><hr className="my-1"/></li>
                                                                     <li><button onClick={() => { handleOpenEditModal(item); setActiveActionMenu(null); }} className="w-full text-left hover:bg-gray-100 p-3 flex items-center"><i className="fas fa-truck-loading w-6 mr-2 text-blue-500"></i>Editar Despacho</button></li>
