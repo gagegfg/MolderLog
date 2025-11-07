@@ -69,7 +69,7 @@
     <div id="root"></div>
 
     <script type="text/babel">
-        const { useState, useEffect, useRef, useCallback } = React;
+        const { useState, useEffect, useRef, useCallback, useMemo } = React;
         const { createRoot } = ReactDOM;
 
         // --- INICIALIZACIÓN DE SUPABASE ---
@@ -135,7 +135,7 @@
             return (
                 <div className="bg-white p-6 rounded-2xl shadow-xl border border-gray-200 h-full flex flex-col">
                     <h3 className="text-xl font-bold text-gray-800 mb-4">{title}</h3>
-                    <div className="flex-grow relative h-64 md:h-80">
+                    <div className="flex-grow relative h-64 md:h-80 lg:h-96"> {/* Aumentada altura para el gráfico nuevo */}
                         <canvas ref={canvasRef}></canvas>
                     </div>
                 </div>
@@ -176,11 +176,25 @@
                 </div>
             </div>
         );
+        
+        // --- COLORES PARA GRÁFICOS ---
+        const CHART_COLORS = [
+            '#3b82f6', // blue-500
+            '#10b981', // green-500
+            '#ef4444', // red-500
+            '#f97316', // orange-500
+            '#8b5cf6', // violet-500
+            '#06b6d4', // cyan-500
+            '#d946ef', // fuchsia-500
+            '#f59e0b', // amber-500
+            '#14b8a6', // teal-500
+            '#6366f1', // indigo-500
+        ];
 
         // --- COMPONENTE PRINCIPAL DE LA APP ---
         const App = () => {
             const [isLoading, setIsLoading] = useState(true);
-            const [currentTab, setCurrentTab] = useState('dispatch'); // dispatch, inventory, operations
+            const [currentTab, setCurrentTab] = useState('dispatch'); // dispatch, inventory, operations, client-transport
             
             // Filtros de fecha (solo para Despachos y Operaciones)
             const [fechaDesde, setFechaDesde] = useState(getTresMesesAtras());
@@ -194,13 +208,16 @@
             const [topTransportes, setTopTransportes] = useState({ labels: [], datasets: [] });
             const [topSkusDespachados, setTopSkusDespachados] = useState({ labels: [], datasets: [] });
 
-            // Pestaña 2: Inventario (¡NUEVO!)
+            // Pestaña 2: Inventario
             const [kpisInventario, setKpisInventario] = useState({ stock_bultos: 0, stock_cantidad: 0, antiguedad_promedio: 0 });
             const [inventarioAging, setInventarioAging] = useState({ labels: [], datasets: [] });
             const [stockPorSku, setStockPorSku] = useState({ labels: [], datasets: [] });
 
-            // Pestaña 3: Operaciones (¡NUEVO!)
+            // Pestaña 3: Operaciones
             const [topOperarios, setTopOperarios] = useState({ labels: [], datasets: [] });
+            
+            // Pestaña 4: Cliente-Transporte
+            const [clienteTransporteData, setClienteTransporteData] = useState([]); // Datos crudos
             
             // Opciones comunes de Chart.js
             Chart.defaults.font.family = "'Inter', sans-serif";
@@ -215,7 +232,6 @@
             // Función para cargar todos los datos
             const fetchData = useCallback(async (inicio, fin) => {
                 if (!supabaseClient) {
-                    // Reemplazamos el alert() por un console.error para que no bloquee
                     console.error("Error: No se pudo conectar a Supabase.");
                     setIsLoading(false);
                     return;
@@ -243,16 +259,23 @@
                     const operacionesPromises = [
                         supabaseClient.rpc('get_top_operarios', { fecha_inicio: inicio, fecha_fin: fin })
                     ];
+                    
+                    // --- Promesa de Cliente-Transporte (depende de la fecha) ---
+                    const clienteTransportePromise = [
+                        supabaseClient.rpc('get_cliente_transporte_analysis', { fecha_inicio: inicio, fecha_fin: fin })
+                    ];
 
                     // Ejecutar todas las promesas
                     const [
                         despachoResults,
                         inventarioResults,
-                        operacionesResults
+                        operacionesResults,
+                        clienteTransporteResults
                     ] = await Promise.all([
                         Promise.all(despachoPromises),
                         Promise.all(inventarioPromises),
-                        Promise.all(operacionesPromises)
+                        Promise.all(operacionesPromises),
+                        Promise.all(clienteTransportePromise)
                     ]);
 
                     // --- 1. Procesar Despachos ---
@@ -272,7 +295,7 @@
                     if (clientesRes.data) {
                         setTopClientes({
                             labels: clientesRes.data.map(d => d.cliente),
-                            datasets: [{ label: 'Bultos', data: clientesRes.data.map(d => d.bultos), backgroundColor: ['#3b82f6', '#10b981', '#ef4444', '#f97316', '#8b5cf6'], }]
+                            datasets: [{ label: 'Bultos', data: clientesRes.data.map(d => d.bultos), backgroundColor: CHART_COLORS, }]
                         });
                     }
                     if (transportesRes.data) {
@@ -312,6 +335,12 @@
                             datasets: [{ label: 'Bultos Despachados', data: operariosRes.data.map(d => d.bultos), backgroundColor: '#a855f7', borderRadius: 6, }]
                         });
                     }
+                    
+                    // --- 4. Procesar Cliente-Transporte ---
+                    const [clienteTransporteRes] = clienteTransporteResults;
+                    if (clienteTransporteRes.data) {
+                        setClienteTransporteData(clienteTransporteRes.data);
+                    }
 
                 } catch (error) {
                     console.error("Error al cargar datos del dashboard:", error);
@@ -329,6 +358,31 @@
             const handleFiltrar = () => {
                 fetchData(fechaDesde, fechaHasta);
             };
+            
+            // --- Procesamiento para el gráfico Stacked (Cliente-Transporte) ---
+            const stackedBarData = useMemo(() => {
+                if (!clienteTransporteData || clienteTransporteData.length === 0) {
+                    return { labels: [], datasets: [] };
+                }
+
+                const clients = [...new Set(clienteTransporteData.map(d => d.cliente))];
+                const transportes = [...new Set(clienteTransporteData.map(d => d.transporte))];
+                
+                const datasets = transportes.map((transporte, index) => {
+                    const data = clients.map(client => {
+                        const item = clienteTransporteData.find(d => d.cliente === client && d.transporte === transporte);
+                        return item ? item.bultos : 0;
+                    });
+                    return {
+                        label: transporte || "N/A",
+                        data: data,
+                        backgroundColor: CHART_COLORS[index % CHART_COLORS.length],
+                    };
+                });
+
+                return { labels: clients, datasets };
+            }, [clienteTransporteData]);
+            
             
             const formatNumber = (num) => {
                 if (isNaN(num)) return '0';
@@ -360,7 +414,6 @@
                                 <p className="text-gray-500">Análisis de Despachos, Inventario y Operaciones</p>
                             </div>
                             <div className="flex items-center space-x-3 mt-4 sm:mt-0">
-                                {/* --- INICIO: Botones rediseñados --- */}
                                 <a 
                                     href="grillaqr.html" 
                                     className="bg-green-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-green-700 transition-transform transform hover:scale-105 flex items-center"
@@ -379,16 +432,16 @@
                                 >
                                     <i className="fas fa-home mr-2"></i>Menú Principal
                                 </a>
-                                {/* --- FIN: Botones rediseñados --- */}
                             </div>
                         </div>
                         
                         {/* --- PESTAÑAS --- */}
                         <div className="border-b border-gray-200 mb-6">
-                            <nav className="-mb-px flex space-x-4" aria-label="Tabs">
+                            <nav className="-mb-px flex space-x-4 overflow-x-auto" aria-label="Tabs">
                                 <TabButton tabId="dispatch" title="Análisis de Despachos" icon="fa-shipping-fast" />
                                 <TabButton tabId="inventory" title="Análisis de Inventario" icon="fa-boxes-stacked" />
                                 <TabButton tabId="operations" title="Análisis de Operaciones" icon="fa-user-cog" />
+                                <TabButton tabId="client-transport" title="Cliente-Transporte" icon="fa-route" />
                             </nav>
                         </div>
                         
@@ -446,8 +499,6 @@
                                     options={{
                                         scales: {
                                             x: { type: 'time', time: { unit: 'month', displayFormats: { month: 'MMM yyyy' }, tooltipFormat: 'MMMM yyyy' }, title: { display: true, text: 'Mes' }, 
-                                                // --- ¡CORRECCIÓN DE ROBUSTEZ! ---
-                                                // Ahora verificamos si 'dateFns.locale.es' existe antes de usarlo.
                                                 adapters: { date: { locale: (window.dateFns && dateFns.locale && dateFns.locale.es) ? dateFns.locale.es : undefined } } 
                                             },
                                             y: { beginAtZero: true, title: { display: true, text: 'Nº de Bultos (Pallets)' } }
@@ -469,7 +520,7 @@
                                             indexAxis: 'y',
                                             scales: { 
                                                 x: { beginAtZero: true, title: { display: true, text: 'Nº de Bultos (Pallets)' } },
-                                                y: { Ticks: { autoSkip: false } }
+                                                y: { ticks: { autoSkip: false } }
                                             },
                                             plugins: { legend: { display: false } }
                                         }}
@@ -482,7 +533,7 @@
                                         data={topSkusDespachados}
                                         options={{
                                             scales: { 
-                                                x: { Ticks: { autoSkip: false } },
+                                                x: { ticks: { autoSkip: false } },
                                                 y: { beginAtZero: true, title: { display: true, text: 'Cantidad Total' } } 
                                             },
                                             plugins: { legend: { display: false } }
@@ -521,7 +572,7 @@
                                             indexAxis: 'y',
                                             scales: { 
                                                 x: { beginAtZero: true, title: { display: true, text: 'Cantidad Total en Stock' } },
-                                                y: { Ticks: { autoSkip: false } }
+                                                y: { ticks: { autoSkip: false } }
                                             },
                                             plugins: { legend: { display: false } }
                                         }}
@@ -539,10 +590,51 @@
                                     data={topOperarios}
                                     options={{
                                         scales: { 
-                                            x: { Ticks: { autoSkip: false } },
+                                            x: { ticks: { autoSkip: false } },
                                             y: { beginAtZero: true, title: { display: true, text: 'Nº de Bultos (Pallets)' } } 
                                         },
                                         plugins: { legend: { display: false } }
+                                    }}
+                                />
+                            </div>
+                        </div>
+                        
+                        {/* --- Pestaña 4: CLIENTE-TRANSPORTE --- */}
+                        <div role="tabpanel" hidden={currentTab !== 'client-transport'}>
+                            <div className="grid grid-cols-1 gap-6">
+                                <ChartComponent
+                                    type="bar"
+                                    title="Bultos por Cliente y Transporte"
+                                    data={stackedBarData}
+                                    options={{
+                                        indexAxis: 'y', // Gráfico de barras horizontales
+                                        scales: {
+                                            x: { 
+                                                stacked: true, // Apilar en eje X
+                                                title: { display: true, text: 'Nº de Bultos (Pallets)' }
+                                            },
+                                            y: { 
+                                                stacked: true, // Apilar en eje Y
+                                                ticks: { autoSkip: false } 
+                                            }
+                                        },
+                                        plugins: { 
+                                            legend: { position: 'top' },
+                                            tooltip: {
+                                                callbacks: {
+                                                    label: function(context) {
+                                                        let label = context.dataset.label || '';
+                                                        if (label) {
+                                                            label += ': ';
+                                                        }
+                                                        if (context.parsed.x !== null) {
+                                                            label += context.parsed.x + ' bultos';
+                                                        }
+                                                        return label;
+                                                    }
+                                                }
+                                            }
+                                        }
                                     }}
                                 />
                             </div>
