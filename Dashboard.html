@@ -360,10 +360,26 @@
                                 <p className="text-gray-500">Análisis de Despachos, Inventario y Operaciones</p>
                             </div>
                             <div className="flex items-center space-x-3 mt-4 sm:mt-0">
-                                <a href="histolistaempaque.html" className="bg-white text-gray-700 border border-gray-300 font-semibold py-2 px-4 rounded-lg hover:bg-gray-100 shadow-sm flex items-center">
+                                {/* --- INICIO: Botones rediseñados --- */}
+                                <a 
+                                    href="grillaqr.html" 
+                                    className="bg-green-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-green-700 transition-transform transform hover:scale-105 flex items-center"
+                                >
+                                    <i className="fas fa-qrcode mr-2"></i>Trazabilidad
+                                </a>
+                                <a 
+                                    href="histolistaempaque.html" 
+                                    className="bg-gray-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-gray-700 transition-transform transform hover:scale-105 flex items-center"
+                                >
                                     <i className="fas fa-history mr-2"></i>Histórico
                                 </a>
-                                <a href="index.html" className="bg-gray-200 text-gray-800 font-semibold py-2 px-4 rounded-lg hover:bg-gray-300">Menú Principal</a>
+                                <a 
+                                    href="index.html" 
+                                    className="bg-gray-500 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-gray-600 transition-transform transform hover:scale-105 flex items-center"
+                                >
+                                    <i className="fas fa-home mr-2"></i>Menú Principal
+                                </a>
+                                {/* --- FIN: Botones rediseñados --- */}
                             </div>
                         </div>
                         
