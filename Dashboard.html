@@ -325,10 +325,10 @@
 
                     // --- Promesas de Análisis Avanzado (dependen de la fecha) ---
                     const advancedAnalysisPromises = [
-                        supabaseClient.rpc('get_bultos_por_transporte', { fecha_inicio: inicio, fecha_fin: fin }),
-                        supabaseClient.rpc('get_evolucion_mensual_total', { fecha_inicio: inicio, fecha_fin: fin }),
-                        supabaseClient.rpc('get_clientes_para_filtro', { fecha_inicio: inicio, fecha_fin: fin }),
-                        supabaseClient.rpc('get_transportes_para_filtro', { fecha_inicio: inicio, fecha_fin: fin })
+                        supabaseClient.rpc('get_top_transportes_por_bultos', { fecha_inicio: inicio, fecha_fin: fin }),
+                        supabaseClient.rpc('get_evolucion_bultos_filtrado', { fecha_inicio: inicio, fecha_fin: fin, p_cliente: null, p_transporte: null }),
+                        supabaseClient.rpc('get_lista_clientes_despacho'),
+                        supabaseClient.rpc('get_lista_transportes_despacho')
                     ];
 
 
@@ -472,11 +472,11 @@
                     
                     setIsAdvancedLoading(true);
                     try {
-                        const { data, error } = await supabaseClient.rpc('get_evolucion_mensual_filtrada', {
+                        const { data, error } = await supabaseClient.rpc('get_evolucion_bultos_filtrado', {
                             fecha_inicio: fechaDesde,
                             fecha_fin: fechaHasta,
-                            cliente_filtro: selectedAdvancedClient || null,
-                            transporte_filtro: selectedAdvancedTransport || null
+                            p_cliente: selectedAdvancedClient || null,
+                            p_transporte: selectedAdvancedTransport || null
                         });
 
                         if (error) throw error;
