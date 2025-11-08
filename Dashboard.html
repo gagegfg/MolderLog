@@ -289,7 +289,7 @@
                         supabaseClient.rpc('get_dashboard_kpis', { fecha_inicio: inicio, fecha_fin: fin }).single(),
                         supabaseClient.rpc('get_bultos_por_mes', { fecha_inicio: inicio, fecha_fin: fin }),
                         supabaseClient.rpc('get_top_clientes', { fecha_inicio: inicio, fecha_fin: fin }),
-                        supabaseClient.rpc('get_top_transportes', { fecha_inicio: inicio, fecha_fin: fin }),
+                        supabaseClient.rpc('get_viajes_por_transporte', { fecha_inicio: inicio, fecha_fin: fin }),
                         supabaseClient.rpc('get_top_skus', { fecha_inicio: inicio, fecha_fin: fin })
                     ];
 
@@ -348,7 +348,7 @@
                     if (transportesRes.data) {
                         setTopTransportes({
                             labels: transportesRes.data.map(d => d.transporte),
-                            datasets: [{ label: 'Bultos Despachados', data: transportesRes.data.map(d => d.bultos), backgroundColor: '#6366f1', borderRadius: 6, }]
+                            datasets: [{ label: 'Nº de Viajes', data: transportesRes.data.map(d => d.viajes), backgroundColor: '#6366f1', borderRadius: 6, }]
                         });
                     }
                     if (skusRes.data) {
@@ -694,12 +694,12 @@
                                 <div className="lg:col-span-2">
                                     <ChartComponent
                                         type="bar"
-                                        title="Top 5 Transportes (por Bultos)"
+                                        title="Top 5 Transportes (por Viajes)"
                                         data={topTransportes}
                                         options={{
                                             indexAxis: 'y',
                                             scales: { 
-                                                x: { beginAtZero: true, title: { display: true, text: 'Nº de Bultos (Pallets)' } },
+                                                x: { beginAtZero: true, title: { display: true, text: 'Nº de Viajes' } },
                                                 y: { ticks: { autoSkip: false } }
                                             },
                                             plugins: { legend: { display: false } }
