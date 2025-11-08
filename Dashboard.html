@@ -237,7 +237,7 @@
         // --- COMPONENTE PRINCIPAL DE LA APP ---
         const App = () => {
             const [isLoading, setIsLoading] = useState(true);
-            const [currentTab, setCurrentTab] = useState('dispatch'); // dispatch, inventory, operations, client-transport
+            const [currentTab, setCurrentTab] = useState('dispatch'); // dispatch, inventory, operations, client-transport, advanced
             
             // Filtros de fecha (solo para Despachos y Operaciones)
             const [fechaDesde, setFechaDesde] = useState(getTresMesesAtras());
@@ -260,10 +260,21 @@
             const [topOperarios, setTopOperarios] = useState({ labels: [], datasets: [] });
             
             // Pestaña 4: Cliente-Transporte
-            const [clienteTransporteData, setClienteTransporteData] = useState([]); // Datos crudos (para la tabla)
-            const [transportClientCount, setTransportClientCount] = useState({ labels: [], datasets: [] }); // Gráfico 1
-            const [clientTransportCount, setClientTransportCount] = useState({ labels: [], datasets: [] }); // Gráfico 2
-            
+            const [clienteTransporteData, setClienteTransporteData] = useState([]);
+            const [transportClientCount, setTransportClientCount] = useState({ labels: [], datasets: [] });
+            const [clientTransportCount, setClientTransportCount] = useState({ labels: [], datasets: [] });
+
+            // Pestaña 5: Análisis Avanzado
+            const [advancedAnalysisData, setAdvancedAnalysisData] = useState({ labels: [], datasets: [] });
+            const [monthlyEvolutionData, setMonthlyEvolutionData] = useState({ labels: [], datasets: [] });
+            const [filteredMonthlyEvolutionData, setFilteredMonthlyEvolutionData] = useState({ labels: [], datasets: [] });
+            const [advancedClients, setAdvancedClients] = useState([]);
+            const [advancedTransports, setAdvancedTransports] = useState([]);
+            const [selectedAdvancedClient, setSelectedAdvancedClient] = useState('');
+            const [selectedAdvancedTransport, setSelectedAdvancedTransport] = useState('');
+            const [isAdvancedLoading, setIsAdvancedLoading] = useState(false);
+
+
             // Opciones comunes de Chart.js
             Chart.defaults.font.family = "'Inter', sans-serif";
             Chart.defaults.plugins.tooltip.backgroundColor = 'rgba(0, 0, 0, 0.7)';
@@ -306,23 +317,34 @@
                     ];
                     
                     // --- Promesas de Cliente-Transporte (dependen de la fecha) ---
-                    const clienteTransportePromises = [ // <-- Cambiado a plural
+                    const clienteTransportePromises = [
                         supabaseClient.rpc('get_cliente_transporte_analysis', { fecha_inicio: inicio, fecha_fin: fin }),
                         supabaseClient.rpc('get_transport_client_count', { fecha_inicio: inicio, fecha_fin: fin }),
                         supabaseClient.rpc('get_client_transport_count', { fecha_inicio: inicio, fecha_fin: fin })
                     ];
+
+                    // --- Promesas de Análisis Avanzado (dependen de la fecha) ---
+                    const advancedAnalysisPromises = [
+                        supabaseClient.rpc('get_bultos_por_transporte', { fecha_inicio: inicio, fecha_fin: fin }),
+                        supabaseClient.rpc('get_evolucion_mensual_total', { fecha_inicio: inicio, fecha_fin: fin }),
+                        supabaseClient.rpc('get_clientes_para_filtro', { fecha_inicio: inicio, fecha_fin: fin }),
+                        supabaseClient.rpc('get_transportes_para_filtro', { fecha_inicio: inicio, fecha_fin: fin })
+                    ];
+
 
                     // Ejecutar todas las promesas
                     const [
                         despachoResults,
                         inventarioResults,
                         operacionesResults,
-                        clienteTransporteResults
+                        clienteTransporteResults,
+                        advancedAnalysisResults
                     ] = await Promise.all([
                         Promise.all(despachoPromises),
                         Promise.all(inventarioPromises),
                         Promise.all(operacionesPromises),
-                        Promise.all(clienteTransportePromises) // <-- Cambiado a plural
+                        Promise.all(clienteTransportePromises),
+                        Promise.all(advancedAnalysisPromises)
                     ]);
 
                     // --- 1. Procesar Despachos ---
@@ -385,9 +407,7 @@
                     
                     // --- 4. Procesar Cliente-Transporte ---
                     const [clienteTransporteRes, transportCountRes, clientCountRes] = clienteTransporteResults;
-                    if (clienteTransporteRes.data) {
-                        setClienteTransporteData(clienteTransporteRes.data);
-                    }
+                    if (clienteTransporteRes.data) setClienteTransporteData(clienteTransporteRes.data);
                     if (transportCountRes.data) {
                         setTransportClientCount({
                             labels: transportCountRes.data.map(d => d.transporte),
@@ -401,6 +421,31 @@
                         });
                     }
 
+                    // --- 5. Procesar Análisis Avanzado ---
+                    const [bultosTransporteRes, evoMensualRes, clientesFiltroRes, transportesFiltroRes] = advancedAnalysisResults;
+                    if (bultosTransporteRes.data) {
+                        setAdvancedAnalysisData({
+                            labels: bultosTransporteRes.data.map(d => d.transporte),
+                            datasets: [{ label: 'Bultos Totales', data: bultosTransporteRes.data.map(d => d.bultos), backgroundColor: CHART_COLORS, borderRadius: 6 }]
+                        });
+                    }
+                    if (evoMensualRes.data) {
+                        const monthlyData = {
+                            labels: evoMensualRes.data.map(d => new Date(d.mes)),
+                            datasets: [{
+                                label: 'Bultos Totales',
+                                data: evoMensualRes.data.map(d => d.bultos),
+                                fill: true, backgroundColor: 'rgba(59, 130, 246, 0.2)', borderColor: '#3b82f6',
+                                tension: 0.3, pointBackgroundColor: '#3b82f6',
+                            }]
+                        };
+                        setMonthlyEvolutionData(monthlyData);
+                        setFilteredMonthlyEvolutionData(monthlyData); // Inicializa el gráfico filtrado con los datos totales
+                    }
+                    if (clientesFiltroRes.data) setAdvancedClients(clientesFiltroRes.data.map(c => c.cliente));
+                    if (transportesFiltroRes.data) setAdvancedTransports(transportesFiltroRes.data.map(t => t.transporte));
+
+
                 } catch (error) {
                     console.error("Error al cargar datos del dashboard:", error);
                     alert(`Error al cargar datos: ${error.message}`);
@@ -413,9 +458,61 @@
             useEffect(() => {
                 fetchData(fechaDesde, fechaHasta);
             }, []);
+
+            // Efecto para el gráfico dinámico de Análisis Avanzado
+            useEffect(() => {
+                const fetchFilteredData = async () => {
+                    if (!selectedAdvancedClient && !selectedAdvancedTransport) {
+                        // Si no hay filtros, mostrar los datos totales que ya tenemos
+                        setFilteredMonthlyEvolutionData(monthlyEvolutionData);
+                        return;
+                    }
+
+                    if (!supabaseClient) return;
+                    
+                    setIsAdvancedLoading(true);
+                    try {
+                        const { data, error } = await supabaseClient.rpc('get_evolucion_mensual_filtrada', {
+                            fecha_inicio: fechaDesde,
+                            fecha_fin: fechaHasta,
+                            cliente_filtro: selectedAdvancedClient || null,
+                            transporte_filtro: selectedAdvancedTransport || null
+                        });
+
+                        if (error) throw error;
+
+                        if (data) {
+                            setFilteredMonthlyEvolutionData({
+                                labels: data.map(d => new Date(d.mes)),
+                                datasets: [{
+                                    label: `Bultos ${selectedAdvancedClient || ''} ${selectedAdvancedTransport || ''}`.trim(),
+                                    data: data.map(d => d.bultos),
+                                    fill: true, backgroundColor: 'rgba(239, 68, 68, 0.2)', borderColor: '#ef4444',
+                                    tension: 0.3, pointBackgroundColor: '#ef4444',
+                                }]
+                            });
+                        }
+                    } catch (error) {
+                        console.error("Error al cargar datos filtrados:", error);
+                        alert(`Error al cargar datos filtrados: ${error.message}`);
+                    } finally {
+                        setIsAdvancedLoading(false);
+                    }
+                };
+
+                fetchFilteredData();
+            }, [selectedAdvancedClient, selectedAdvancedTransport, fechaDesde, fechaHasta, monthlyEvolutionData]); // Depende también de los datos totales
             
             const handleFiltrar = () => {
                 fetchData(fechaDesde, fechaHasta);
+                // Limpiar filtros de análisis avanzado al cambiar el rango de fechas principal
+                setSelectedAdvancedClient('');
+                setSelectedAdvancedTransport('');
+            };
+
+            const handleClearAdvancedFilters = () => {
+                setSelectedAdvancedClient('');
+                setSelectedAdvancedTransport('');
             };
 
             // --- INICIO: LÓGICA DE EXPORTACIÓN ---
@@ -428,6 +525,9 @@
                     exportOperationsData();
                 } else if (currentTab === 'client-transport') {
                     exportClientTransportData();
+                } else if (currentTab === 'advanced') {
+                    // Aquí podrías agregar una función de exportación para la nueva pestaña
+                    console.log("Exportación para Análisis Avanzado no implementada.");
                 }
             };
 
@@ -568,6 +668,17 @@
                     <span>{title}</span>
                 </button>
             );
+            
+            const Select = ({ value, onChange, options, placeholder, className }) => (
+                <select
+                    value={value}
+                    onChange={e => onChange(e.target.value)}
+                    className={`rounded-md border-gray-300 shadow-sm p-2 border ${className}`}
+                >
+                    <option value="">{placeholder}</option>
+                    {options.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                </select>
+            );
 
             return (
                 <div className="min-h-screen p-4 sm:p-6 bg-black bg-opacity-50">
@@ -607,6 +718,7 @@
                             <nav className="-mb-px flex space-x-4 overflow-x-auto" aria-label="Tabs">
                                 <TabButton tabId="dispatch" title="Análisis de Despachos" icon="fa-shipping-fast" />
                                 <TabButton tabId="inventory" title="Análisis de Inventario" icon="fa-boxes-stacked" />
+                                <TabButton tabId="advanced" title="Análisis Avanzado" icon="fa-chart-line" />
                                 <TabButton tabId="operations" title="Análisis de Operaciones" icon="fa-user-cog" />
                                 <TabButton tabId="client-transport" title="Cliente-Transporte" icon="fa-route" />
                             </nav>
@@ -678,7 +790,6 @@
                                     options={{
                                         scales: {
                                             x: { type: 'time', time: { unit: 'month', displayFormats: { month: 'MMM yyyy' }, tooltipFormat: 'MMMM yyyy' }, title: { display: true, text: 'Mes' }, 
-                                                // Corregido: Comprobar que dateFns.locale.es existe
                                                 adapters: { date: { locale: (window.dateFns && window.dateFns.locale && window.dateFns.locale.es) ? window.dateFns.locale.es : undefined } } 
                                             },
                                             y: { beginAtZero: true, title: { display: true, text: 'Nº de Bultos (Pallets)' } }
@@ -761,7 +872,76 @@
                             </div>
                         </div>
 
-                        {/* --- Pestaña 3: OPERACIONES --- */}
+                        {/* --- Pestaña 3: ANÁLISIS AVANZADO --- */}
+                        <div role="tabpanel" hidden={currentTab !== 'advanced'}>
+                            <div className="grid grid-cols-1 gap-6">
+                                <ChartComponent
+                                    type="bar"
+                                    title="Bultos Totales por Transporte"
+                                    data={advancedAnalysisData}
+                                    options={{
+                                        scales: { 
+                                            x: { ticks: { autoSkip: false } },
+                                            y: { beginAtZero: true, title: { display: true, text: 'Nº de Bultos (Pallets)' } } 
+                                        },
+                                        plugins: { legend: { display: false } }
+                                    }}
+                                />
+                                <ChartComponent
+                                    type="line"
+                                    title="Evolución Mensual Total de Bultos"
+                                    data={monthlyEvolutionData}
+                                    options={{
+                                        scales: {
+                                            x: { type: 'time', time: { unit: 'month', displayFormats: { month: 'MMM yyyy' }, tooltipFormat: 'MMMM yyyy' }, title: { display: true, text: 'Mes' }, 
+                                                adapters: { date: { locale: (window.dateFns && window.dateFns.locale && window.dateFns.locale.es) ? window.dateFns.locale.es : undefined } } 
+                                            },
+                                            y: { beginAtZero: true, title: { display: true, text: 'Nº de Bultos (Pallets)' } }
+                                        }
+                                    }}
+                                />
+                                {/* Gráfico dinámico con filtros */}
+                                <div className="bg-white p-6 rounded-2xl shadow-xl border border-gray-200 h-full flex flex-col">
+                                    <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-4">
+                                        <h3 className="text-xl font-bold text-gray-800 mb-2 md:mb-0">Evolución Mensual de Bultos (Filtrada)</h3>
+                                        <div className="flex items-center space-x-2">
+                                            <Select
+                                                value={selectedAdvancedClient}
+                                                onChange={setSelectedAdvancedClient}
+                                                options={advancedClients}
+                                                placeholder="Filtrar por Cliente"
+                                            />
+                                            <Select
+                                                value={selectedAdvancedTransport}
+                                                onChange={setSelectedAdvancedTransport}
+                                                options={advancedTransports}
+                                                placeholder="Filtrar por Transporte"
+                                            />
+                                            <button onClick={handleClearAdvancedFilters} className="bg-gray-200 text-gray-700 font-semibold py-2 px-4 rounded-lg hover:bg-gray-300">
+                                                <i className="fas fa-eraser"></i>
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div className="flex-grow relative h-64 md:h-80 lg:h-96">
+                                        {isAdvancedLoading && <LoadingOverlay message="Cargando gráfico..."/>}
+                                        <ChartComponent
+                                            type="line"
+                                            data={filteredMonthlyEvolutionData}
+                                            options={{
+                                                scales: {
+                                                    x: { type: 'time', time: { unit: 'month', displayFormats: { month: 'MMM yyyy' }, tooltipFormat: 'MMMM yyyy' }, title: { display: true, text: 'Mes' }, 
+                                                        adapters: { date: { locale: (window.dateFns && window.dateFns.locale && window.dateFns.locale.es) ? window.dateFns.locale.es : undefined } } 
+                                                    },
+                                                    y: { beginAtZero: true, title: { display: true, text: 'Nº de Bultos (Pallets)' } }
+                                                }
+                                            }}
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* --- Pestaña 4: OPERACIONES --- */}
                         <div role="tabpanel" hidden={currentTab !== 'operations'}>
                             <div className="grid grid-cols-1 gap-6">
                                 <ChartComponent
@@ -779,7 +959,7 @@
                             </div>
                         </div>
                         
-                        {/* --- Pestaña 4: CLIENTE-TRANSPORTE (NUEVO DISEÑO) --- */}
+                        {/* --- Pestaña 5: CLIENTE-TRANSPORTE --- */}
                         <div role="tabpanel" hidden={currentTab !== 'client-transport'}>
                             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
                                 <ChartComponent
