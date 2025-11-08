@@ -596,6 +596,46 @@
             };
 
             const getLabelData = () => {
+                const ensureFourDigitYear = (dateString) => {
+                    if (!dateString || typeof dateString !== 'string') {
+                        // Use today as a fallback if the date is invalid
+                        const today = new Date();
+                        const year = today.getFullYear();
+                        const month = String(today.getMonth() + 1).padStart(2, '0');
+                        const day = String(today.getDate()).padStart(2, '0');
+                        return `${year}-${month}-${day}`;
+                    }
+                    
+                    const parts = dateString.split('-');
+                    // Check if it's in YYYY-MM-DD format
+                    if (parts.length === 3) {
+                        let year = parseInt(parts[0], 10);
+                        // If year is 2 digits (e.g., 25) or 4 digits but small (e.g., 0025), fix it.
+                        if (year >= 0 && year < 100) {
+                            year += 2000;
+                        }
+                        return `${year}-${parts[1]}-${parts[2]}`;
+                    }
+                    
+                    // If not in YYYY-MM-DD, try to parse it as a generic date string
+                    const d = new Date(dateString);
+                    if (isNaN(d.getTime())) { // If parsing fails, fallback to today
+                        const today = new Date();
+                        const year = today.getFullYear();
+                        const month = String(today.getMonth() + 1).padStart(2, '0');
+                        const day = String(today.getDate()).padStart(2, '0');
+                        return `${year}-${month}-${day}`;
+                    }
+                    
+                    // Reformat the parsed date into YYYY-MM-DD
+                    const year = d.getFullYear();
+                    const month = String(d.getMonth() + 1).padStart(2, '0');
+                    const day = String(d.getDate()).padStart(2, '0');
+                    return `${year}-${month}-${day}`;
+                };
+
+                const finalFechaProd = ensureFourDigitYear(fechaProd);
+
                 const formatQrDate = (dateString) => {
                     if (!dateString) return '';
                     const date = new Date(dateString + 'T00:00:00');
@@ -612,7 +652,7 @@
                     selectedArticulo.descripcionLarga || '',
                     String(numeroDePallet) || '',
                     lotesParaQR,
-                    formatQrDate(fechaProd),
+                    formatQrDate(finalFechaProd), // Use sanitized date
                     cantidadParaQR || '',
                     uom || '',
                 ].join(';');
@@ -622,7 +662,7 @@
                     lotes: lotesProduccionFiltrados,
                     cantidad: cantidad,
                     uom,
-                    fechaProd,
+                    fechaProd: finalFechaProd, // Use sanitized date
                     palletId: numeroDePallet,
                     qrString: qrString,
                     observacion: observacion.trim(),
