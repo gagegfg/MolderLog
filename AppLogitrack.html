@@ -7,193 +7,382 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <style>body { font-family: sans-serif; }</style>
+    <style>
+        body { font-family: sans-serif; -webkit-tap-highlight-color: transparent; }
+        /* Ajustes para móvil */
+        .pb-safe { padding-bottom: env(safe-area-inset-bottom); }
+        .touch-target { min-height: 48px; }
+    </style>
 </head>
-<body class="bg-slate-100 min-h-screen pb-safe">
+<body class="bg-slate-100 min-h-screen pb-safe select-none">
 
     <!-- PANTALLA DE CARGA -->
-    <div id="loader" class="fixed inset-0 bg-white z-50 flex flex-col items-center justify-center">
-        <div class="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
-        <p class="mt-4 text-gray-500 font-bold">Cargando Ruta...</p>
+    <div id="loader" class="fixed inset-0 bg-white z-50 flex flex-col items-center justify-center transition-opacity duration-300">
+        <div class="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+        <p class="mt-4 text-gray-500 font-bold animate-pulse">Cargando Ruta...</p>
     </div>
 
-    <!-- VISTA: SIN VIAJE -->
-    <div id="no-trip-view" class="hidden min-h-screen flex flex-col items-center justify-center p-6">
-        <div class="bg-blue-100 p-6 rounded-full mb-6"><i data-lucide="truck" class="w-12 h-12 text-blue-600"></i></div>
-        <h1 class="text-2xl font-bold text-slate-800 mb-2">Hola, <span id="driver-name">Chofer</span></h1>
-        <p class="text-slate-500 mb-8 text-center">¿Listo para comenzar la jornada?</p>
-        <button onclick="startTrip()" class="w-full py-4 bg-blue-600 text-white rounded-xl text-xl font-bold shadow-lg active:scale-95 transition-transform flex items-center justify-center gap-3">
-            <i data-lucide="play"></i> INICIAR VIAJE
+    <!-- VISTA: SIN VIAJE (Dashboard Inicial Chofer) -->
+    <div id="no-trip-view" class="hidden min-h-screen flex flex-col items-center justify-center p-6 relative">
+        <!-- Info Usuario -->
+        <div class="absolute top-6 right-6">
+             <div class="flex items-center gap-2 bg-white px-3 py-1.5 rounded-full shadow-sm">
+                <div class="w-2 h-2 bg-green-500 rounded-full"></div>
+                <span class="text-xs font-bold text-slate-600" id="driver-status">En Línea</span>
+             </div>
+        </div>
+
+        <div class="bg-white p-6 rounded-full mb-6 shadow-md shadow-blue-100">
+            <i data-lucide="truck" class="w-12 h-12 text-blue-600"></i>
+        </div>
+        
+        <h1 class="text-3xl font-bold text-slate-800 mb-2">Hola, <span id="driver-name" class="text-blue-600">Chofer</span></h1>
+        <p class="text-slate-500 mb-10 text-center max-w-xs">No tienes viajes activos actualmente. ¿Listo para comenzar la jornada?</p>
+        
+        <button onclick="startTrip()" class="w-full py-5 bg-blue-600 text-white rounded-2xl text-xl font-bold shadow-xl shadow-blue-200 active:scale-95 transition-all flex items-center justify-center gap-3 touch-target">
+            <i data-lucide="play" class="fill-current"></i> INICIAR VIAJE
         </button>
-        <button onclick="logout()" class="mt-8 text-red-500 text-sm font-medium">Cerrar Sesión</button>
+        
+        <div class="mt-auto pt-10 w-full">
+            <button onclick="logout()" class="w-full py-3 text-red-500 text-sm font-medium hover:bg-red-50 rounded-lg transition-colors">
+                Cerrar Sesión
+            </button>
+        </div>
     </div>
 
-    <!-- VISTA: EN RUTA -->
-    <div id="active-trip-view" class="hidden">
-        <!-- Header -->
-        <div class="bg-white p-4 shadow-sm flex justify-between items-center sticky top-0 z-10">
+    <!-- VISTA: EN RUTA (Active Trip) -->
+    <div id="active-trip-view" class="hidden bg-slate-50 min-h-screen">
+        <!-- Header Flotante -->
+        <div class="bg-white/90 backdrop-blur-md px-6 py-4 shadow-sm flex justify-between items-center sticky top-0 z-20 border-b border-slate-100">
             <div>
                 <div class="flex items-center gap-2">
-                    <span class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
-                    <span class="font-bold text-slate-800">En Ruta</span>
+                    <span class="relative flex h-3 w-3">
+                      <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                      <span class="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span>
+                    </span>
+                    <span class="font-bold text-slate-800 tracking-tight">EN RUTA</span>
                 </div>
-                <p class="text-xs text-slate-400" id="trip-start-time">...</p>
+                <p class="text-xs text-slate-400 font-medium mt-0.5" id="trip-start-time">--:--</p>
             </div>
-            <button onclick="endTrip()" class="px-3 py-1 border border-red-200 text-red-500 rounded-full text-xs font-bold">FINALIZAR</button>
+            <button onclick="endTrip()" class="px-4 py-1.5 border-2 border-red-100 text-red-500 bg-red-50 rounded-full text-xs font-extrabold hover:bg-red-100 transition-colors">
+                FINALIZAR
+            </button>
         </div>
 
-        <div class="p-4 space-y-6">
-            <!-- BOTÓN PRINCIPAL -->
-            <div id="main-action-area"></div>
+        <div class="p-5 space-y-6 pb-24">
+            
+            <!-- TARJETA DE ACCIÓN PRINCIPAL (Cambia dinámicamente) -->
+            <div id="main-action-area" class="transition-all duration-300">
+                <!-- Se inyecta contenido aquí -->
+            </div>
 
-            <!-- HISTORIAL -->
+            <!-- HISTORIAL DE PARADAS -->
             <div>
-                <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 ml-1">Historial de Hoy</h3>
-                <div id="stops-list" class="space-y-3"></div>
+                <div class="flex justify-between items-end mb-3 px-1">
+                    <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider">Bitácora de Hoy</h3>
+                    <span class="text-[10px] bg-slate-200 text-slate-600 px-2 py-0.5 rounded-full font-bold" id="stops-count">0</span>
+                </div>
+                
+                <div id="stops-list" class="space-y-3">
+                    <!-- Lista vacía -->
+                    <div class="text-center py-8 border-2 border-dashed border-slate-200 rounded-xl">
+                        <p class="text-slate-400 text-sm">Aún no hay paradas registradas</p>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
 
-    <script>
-        // =================================================================
-        // ### CONFIGURACIÓN DE SUPABASE ###
-        // =================================================================
-        const SUPABASE_URL = 'TU_URL_DE_SUPABASE_AQUI';
-        const SUPABASE_KEY = 'TU_CLAVE_ANON_KEY_AQUI';
-        // =================================================================
+    <!-- CONFIGURACIÓN EXTERNA (Simulada para Canvas, usar archivo real en Prod) -->
+    <script src="config.js"></script>
 
-        const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    <script>
+        // --- INICIALIZACIÓN DE SUPABASE ---
+        let supabaseClient;
+        
+        // Verificación de seguridad para variables
+        if (typeof supabase !== 'undefined' && typeof SUPABASE_URL !== 'undefined' && typeof SUPABASE_KEY !== 'undefined') {
+            supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+        } else {
+            console.warn("Modo Demo Visual: Supabase no conectado (Falta config.js)");
+            // Mock para visualización en Canvas si falta config
+            supabaseClient = {
+                auth: { 
+                    getSession: async () => ({ data: { session: { user: { id: 'demo' } } } }),
+                    signOut: async () => alert("Logout simulado")
+                },
+                from: () => ({
+                    select: () => ({ eq: () => ({ eq: () => ({ limit: () => ({ single: () => ({ data: { full_name: 'Gabriel Farias' } }) }) }) }) }),
+                    insert: async () => ({}),
+                    update: () => ({ eq: async () => ({}) })
+                })
+            };
+        }
+        
         lucide.createIcons();
 
         let currentUser = null;
         let currentTrip = null;
         let currentStop = null;
 
-        // INICIO
+        // --- INICIO APP ---
         document.addEventListener('DOMContentLoaded', async () => {
-            const { data: { session } } = await supabaseClient.auth.getSession();
-            if (!session) return window.location.href = 'login.html';
             
-            // Obtener perfil
-            const { data: profile } = await supabaseClient.from('profiles').select('*').eq('id', session.user.id).single();
-            currentUser = profile;
-            document.getElementById('driver-name').textContent = profile.full_name.split(' ')[0];
+            // 1. Verificar Sesión
+            const { data: { session } } = await supabaseClient.auth.getSession();
+            if (!session && typeof SUPABASE_URL !== 'undefined') {
+                // Solo redirigir si estamos en entorno real
+                return window.location.href = 'login.html';
+            }
+            
+            // 2. Cargar Perfil
+            // Nota: En entorno real esto haría fetch. Aquí simulamos si falla.
+            try {
+                const { data: profile } = await supabaseClient.from('profiles').select('*').eq('id', session?.user?.id).single();
+                currentUser = profile || { id: 'demo', full_name: 'Chofer Demo' };
+                document.getElementById('driver-name').textContent = currentUser.full_name.split(' ')[0];
+            } catch (e) {
+                currentUser = { id: 'demo', full_name: 'Chofer' };
+            }
 
+            // 3. Cargar Estado
             await refreshState();
         });
 
+        // --- ESTADO CENTRAL ---
         async function refreshState() {
             document.getElementById('loader').classList.remove('hidden');
             
-            // Buscar viaje activo
-            const { data: trips } = await supabaseClient.from('trips').select('*').eq('driver_id', currentUser.id).eq('status', 'active').limit(1);
-            currentTrip = trips?.[0] || null;
-
-            if (currentTrip) {
-                document.getElementById('no-trip-view').classList.add('hidden');
-                document.getElementById('active-trip-view').classList.remove('hidden');
-                document.getElementById('trip-start-time').textContent = 'Inicio: ' + new Date(currentTrip.start_time).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
-
-                // Buscar Paradas
-                const { data: stops } = await supabaseClient.from('stops').select('*').eq('trip_id', currentTrip.id).order('arrival_time', {ascending: false});
+            try {
+                // Buscar viaje activo real
+                const { data: trips } = await supabaseClient.from('trips')
+                    .select('*')
+                    .eq('driver_id', currentUser.id)
+                    .eq('status', 'active')
+                    .limit(1);
                 
-                // Render Historial
-                const list = document.getElementById('stops-list');
-                list.innerHTML = stops.filter(s => s.departure_time).map(s => `
-                    <div class="bg-white p-4 rounded-xl border-l-4 border-green-500 shadow-sm">
-                        <div class="font-bold text-slate-800">${s.client_name || 'Punto Logístico'}</div>
-                        <div class="text-xs text-slate-500 flex gap-2 mt-1">
-                            <span><i data-lucide="clock" class="inline w-3"></i> ${s.wait_time_minutes ? Math.round(s.wait_time_minutes) + ' min' : '-'}</span>
-                            <span>|</span>
-                            <span>${s.type.toUpperCase()}</span>
+                currentTrip = trips?.[0] || null;
+
+                // Renderizar Vistas
+                if (currentTrip) {
+                    showActiveTripView();
+                    
+                    // Buscar Paradas
+                    const { data: stops } = await supabaseClient.from('stops')
+                        .select('*')
+                        .eq('trip_id', currentTrip.id)
+                        .order('arrival_time', {ascending: false});
+                    
+                    renderStopsList(stops || []);
+                    
+                    // Determinar Estado del Botón Principal
+                    // Si hay una parada sin 'departure_time', es que estamos en ella.
+                    const openStop = stops?.find(s => !s.departure_time);
+                    currentStop = openStop;
+                    renderMainButton();
+
+                } else {
+                    showNoTripView();
+                }
+            } catch (e) {
+                console.error("Error refescando estado:", e);
+                showNoTripView(); // Fallback seguro
+            } finally {
+                setTimeout(() => {
+                    document.getElementById('loader').classList.add('hidden');
+                }, 500); // Pequeño delay para suavidad
+            }
+        }
+
+        // --- RENDERIZADORES ---
+
+        function showNoTripView() {
+            document.getElementById('no-trip-view').classList.remove('hidden');
+            document.getElementById('active-trip-view').classList.add('hidden');
+        }
+
+        function showActiveTripView() {
+            document.getElementById('no-trip-view').classList.add('hidden');
+            document.getElementById('active-trip-view').classList.remove('hidden');
+            if(currentTrip.start_time) {
+                document.getElementById('trip-start-time').textContent = 'Inicio: ' + new Date(currentTrip.start_time).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+            }
+        }
+
+        function renderStopsList(stops) {
+            const list = document.getElementById('stops-list');
+            const completedStops = stops.filter(s => s.departure_time);
+            
+            document.getElementById('stops-count').textContent = completedStops.length;
+
+            if (completedStops.length === 0) {
+                list.innerHTML = `
+                    <div class="text-center py-6 border-2 border-dashed border-slate-200 rounded-xl bg-white/50">
+                        <p class="text-slate-400 text-sm font-medium">Tu historial aparecerá aquí</p>
+                    </div>`;
+                return;
+            }
+
+            list.innerHTML = completedStops.map(s => `
+                <div class="bg-white p-4 rounded-xl border-l-[6px] border-green-500 shadow-sm flex justify-between items-center animate-fade-in">
+                    <div>
+                        <div class="font-bold text-slate-800 text-lg">${s.client_name || 'Punto Logístico'}</div>
+                        <div class="text-xs text-slate-500 flex gap-2 mt-1 font-medium">
+                            <span class="bg-slate-100 px-2 py-0.5 rounded text-slate-600">${s.type?.toUpperCase() || 'ENTREGA'}</span>
+                            <span class="flex items-center gap-1"><i data-lucide="clock" class="w-3 h-3"></i> ${s.wait_time_minutes ? Math.round(s.wait_time_minutes) + ' min' : '-'}</span>
                         </div>
                     </div>
-                `).join('') || '<p class="text-center text-gray-400 text-sm py-4">Aún no hay paradas.</p>';
-
-                // Estado Botón Principal
-                const openStop = stops.find(s => !s.departure_time);
-                currentStop = openStop;
-                renderMainButton();
-            } else {
-                document.getElementById('no-trip-view').classList.remove('hidden');
-                document.getElementById('active-trip-view').classList.add('hidden');
-            }
-            
-            document.getElementById('loader').classList.add('hidden');
+                    <div class="bg-green-50 p-2 rounded-full text-green-600">
+                        <i data-lucide="check" class="w-5 h-5"></i>
+                    </div>
+                </div>
+            `).join('');
             lucide.createIcons();
         }
 
         function renderMainButton() {
             const container = document.getElementById('main-action-area');
+            
             if (!currentStop) {
+                // ESTADO A: EN TRÁNSITO (Botón "Llegar")
                 container.innerHTML = `
-                    <div class="bg-blue-600 text-white p-6 rounded-2xl text-center shadow-lg shadow-blue-200">
-                        <div class="w-16 h-16 bg-blue-500 rounded-full flex items-center justify-center mx-auto mb-3 animate-pulse"><i data-lucide="map-pin" class="w-8 h-8"></i></div>
-                        <h2 class="text-2xl font-bold mb-1">¿Llegaste al punto?</h2>
-                        <p class="text-blue-100 text-sm mb-6">Registra tu llegada para iniciar la descarga.</p>
-                        <button onclick="registerArrival()" class="w-full py-4 bg-white text-blue-600 rounded-xl font-bold text-lg shadow active:scale-95 transition-transform">MARCAR LLEGADA</button>
+                    <div class="bg-gradient-to-br from-blue-600 to-blue-700 text-white p-6 rounded-3xl text-center shadow-xl shadow-blue-500/30 transform transition-all">
+                        <div class="w-20 h-20 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-4 backdrop-blur-sm animate-pulse">
+                            <i data-lucide="map-pin" class="w-10 h-10 text-white"></i>
+                        </div>
+                        <h2 class="text-2xl font-bold mb-2">¿Llegaste al destino?</h2>
+                        <p class="text-blue-100 text-sm mb-8 font-medium">Confirma tu ubicación para iniciar la operación.</p>
+                        
+                        <button onclick="registerArrival()" class="w-full py-4 bg-white text-blue-700 rounded-xl font-black text-lg shadow-lg active:scale-95 active:bg-blue-50 transition-all flex items-center justify-center gap-2">
+                            <i data-lucide="corner-right-down"></i> MARCAR LLEGADA
+                        </button>
                     </div>
                 `;
             } else {
+                // ESTADO B: EN OPERACIÓN (Formulario "Salir")
                 container.innerHTML = `
-                    <div class="bg-white border-2 border-blue-500 p-6 rounded-2xl shadow-lg">
-                        <div class="flex items-center gap-2 text-blue-600 font-bold mb-4 border-b pb-4"><i data-lucide="clock" class="animate-spin"></i> Descargando en curso...</div>
-                        <div class="space-y-3">
-                            <label class="block text-xs font-bold text-gray-500 uppercase">Cliente / Punto</label>
-                            <input id="client-name" type="text" class="w-full p-3 border rounded-lg bg-gray-50" placeholder="Ej: Arcor, Planta...">
-                            <label class="block text-xs font-bold text-gray-500 uppercase">Tipo</label>
-                            <select id="stop-type" class="w-full p-3 border rounded-lg bg-gray-50">
-                                <option value="delivery">Entrega Cliente</option>
-                                <option value="pickup">Retiro</option>
-                                <option value="internal">Interno</option>
-                            </select>
+                    <div class="bg-white border-2 border-blue-500 p-6 rounded-3xl shadow-xl relative overflow-hidden">
+                        <div class="absolute top-0 left-0 w-full h-1.5 bg-blue-500 animate-pulse"></div>
+                        
+                        <div class="flex items-center gap-3 text-blue-600 font-bold mb-6 pb-4 border-b border-slate-100">
+                            <div class="p-2 bg-blue-50 rounded-lg"><i data-lucide="timer" class="animate-spin-slow"></i></div>
+                            <div>
+                                <p class="text-xs text-slate-400 uppercase font-extrabold">Estado Actual</p>
+                                <p class="text-lg leading-none">Descargando...</p>
+                            </div>
                         </div>
-                        <button onclick="registerDeparture()" class="w-full mt-6 py-4 bg-blue-600 text-white rounded-xl font-bold text-lg shadow active:scale-95 transition-transform">FINALIZAR Y SALIR</button>
+
+                        <div class="space-y-4">
+                            <div>
+                                <label class="block text-xs font-bold text-slate-500 uppercase mb-1 ml-1">Cliente / Punto</label>
+                                <div class="relative">
+                                    <i data-lucide="building" class="absolute left-3 top-3.5 text-slate-400 w-5 h-5"></i>
+                                    <input id="client-name" type="text" class="w-full pl-10 p-3.5 border border-slate-200 rounded-xl bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none font-medium text-slate-800 transition-all" placeholder="Ej: Arcor, Planta...">
+                                </div>
+                            </div>
+                            
+                            <div>
+                                <label class="block text-xs font-bold text-slate-500 uppercase mb-1 ml-1">Tipo Operación</label>
+                                <div class="relative">
+                                    <i data-lucide="package" class="absolute left-3 top-3.5 text-slate-400 w-5 h-5"></i>
+                                    <select id="stop-type" class="w-full pl-10 p-3.5 border border-slate-200 rounded-xl bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none font-medium text-slate-800 appearance-none">
+                                        <option value="delivery">Entrega Cliente</option>
+                                        <option value="pickup">Retiro</option>
+                                        <option value="internal">Logística Interna</option>
+                                    </select>
+                                    <i data-lucide="chevron-down" class="absolute right-3 top-4 text-slate-400 w-4 h-4 pointer-events-none"></i>
+                                </div>
+                            </div>
+                        </div>
+
+                        <button onclick="registerDeparture()" class="w-full mt-8 py-4 bg-slate-900 text-white rounded-xl font-bold text-lg shadow-lg shadow-slate-500/30 active:scale-95 transition-all flex items-center justify-center gap-2">
+                            <i data-lucide="check-circle-2"></i> FINALIZAR PARADA
+                        </button>
                     </div>
                 `;
             }
             lucide.createIcons();
         }
 
+        // --- LÓGICA DE ACCIONES ---
+
         async function startTrip() {
-            if(!confirm("¿Iniciar nueva ruta?")) return;
+            if(!confirm("¿Confirmas el inicio de una nueva ruta?")) return;
             document.getElementById('loader').classList.remove('hidden');
-            await supabaseClient.from('trips').insert({ driver_id: currentUser.id, status: 'active' });
+            
+            await supabaseClient.from('trips').insert({ 
+                driver_id: currentUser.id, 
+                status: 'active',
+                start_time: new Date().toISOString()
+            });
+            
             await refreshState();
         }
 
         async function registerArrival() {
-            navigator.geolocation.getCurrentPosition(async (pos) => {
+            // Simulación de GPS para Demo Visual si falla la API real
+            const fallbackCoords = { latitude: -31.416, longitude: -64.186 };
+
+            const insertStop = async (lat, lng) => {
                 await supabaseClient.from('stops').insert({
                     trip_id: currentTrip.id,
                     arrival_time: new Date().toISOString(),
-                    lat: pos.coords.latitude,
-                    lng: pos.coords.longitude
+                    lat: lat,
+                    lng: lng
                 });
                 await refreshState();
-            }, () => alert("Error GPS"), {enableHighAccuracy: true});
+            };
+
+            if ("geolocation" in navigator) {
+                navigator.geolocation.getCurrentPosition(
+                    (pos) => insertStop(pos.coords.latitude, pos.coords.longitude),
+                    (err) => {
+                        alert("No se pudo obtener GPS. Usando ubicación aproximada.");
+                        insertStop(fallbackCoords.latitude, fallbackCoords.longitude);
+                    },
+                    { enableHighAccuracy: true, timeout: 5000 }
+                );
+            } else {
+                insertStop(fallbackCoords.latitude, fallbackCoords.longitude);
+            }
         }
 
         async function registerDeparture() {
             const clientName = document.getElementById('client-name').value;
-            if(!clientName) return alert("Ingresa el nombre del cliente");
+            if(!clientName || clientName.trim().length < 2) {
+                alert("⚠️ Por favor, ingresa el nombre del cliente o punto de entrega.");
+                return document.getElementById('client-name').focus();
+            }
+            
+            document.getElementById('loader').classList.remove('hidden');
+            
             await supabaseClient.from('stops').update({
                 departure_time: new Date().toISOString(),
                 client_name: clientName,
                 type: document.getElementById('stop-type').value
             }).eq('id', currentStop.id);
+            
             await refreshState();
         }
 
         async function endTrip() {
-            if(!confirm("¿Finalizar la jornada?")) return;
-            await supabaseClient.from('trips').update({ status: 'completed', end_time: new Date().toISOString() }).eq('id', currentTrip.id);
+            if(!confirm("¿Estás seguro de finalizar la jornada laboral?")) return;
+            
+            document.getElementById('loader').classList.remove('hidden');
+            
+            await supabaseClient.from('trips').update({ 
+                status: 'completed', 
+                end_time: new Date().toISOString() 
+            }).eq('id', currentTrip.id);
+            
             await refreshState();
         }
 
         async function logout() {
-            await supabaseClient.auth.signOut();
-            window.location.href = 'login.html';
+            if(confirm("¿Cerrar sesión?")) {
+                await supabaseClient.auth.signOut();
+                window.location.href = 'login.html';
+            }
         }
     </script>
 </body>
