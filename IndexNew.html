@@ -1,152 +1,270 @@
 import React, { useState } from 'react';
-import { Truck, Lock, User, ArrowRight, ShieldCheck, Smartphone, LayoutDashboard } from 'lucide-react';
+import { 
+  Truck, 
+  ArrowRight, 
+  ClipboardCheck,
+  Settings,
+  HelpCircle,
+  X,
+  Phone,
+  FileText,
+  WifiOff,
+  Download
+} from 'lucide-react';
 
-export default function LoginPage() {
-  const [role, setRole] = useState('driver'); // 'driver' o 'admin'
-  const [loading, setLoading] = useState(false);
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+export default function LogisticsPortal() {
+  const [hoveredCard, setHoveredCard] = useState(null);
+  const [showHelp, setShowHelp] = useState(false); // Estado para el modal de ayuda
 
-  const handleLogin = (e) => {
-    e.preventDefault();
-    setLoading(true);
-    
-    // Simulación de verificación con Supabase
-    setTimeout(() => {
-      setLoading(false);
-      const destino = role === 'admin' ? 'PANEL DE CONTROL' : 'APP MÓVIL';
-      alert(`✅ Acceso Concedido\n\nUsuario: ${email}\nRol: ${role.toUpperCase()}\nRedirigiendo a: ${destino}...`);
-    }, 1500);
+  // Simulación de navegación
+  const handleNavigation = (systemName, targetUrl) => {
+    if (targetUrl) {
+        // window.location.href = targetUrl;
+        alert(`🔄 Redirigiendo a módulo: ${targetUrl}\n(${systemName})`);
+    } else {
+        alert(`🔄 Iniciando sistema: ${systemName}...`);
+    }
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4 font-sans">
+    <div className="min-h-screen flex flex-col font-sans relative overflow-hidden">
       
-      <div className="max-w-4xl w-full bg-white rounded-2xl shadow-2xl overflow-hidden flex flex-col md:flex-row">
-        
-        {/* LADO IZQUIERDO: Selector de Rol (Visual) */}
-        <div className={`md:w-1/2 p-10 text-white flex flex-col justify-between transition-colors duration-500 ${role === 'admin' ? 'bg-slate-900' : 'bg-blue-600'}`}>
-          <div>
-            <div className="flex items-center gap-3 mb-6">
-              <div className="p-3 bg-white/10 rounded-lg backdrop-blur-sm">
-                <Truck size={32} />
-              </div>
-              <h1 className="text-3xl font-bold tracking-tight">LogiTrack</h1>
-            </div>
-            <p className="text-blue-100 text-lg leading-relaxed opacity-90">
-              {role === 'admin' 
-                ? "Plataforma de gestión logística integral. Monitoreo en tiempo real y control de KPIs."
-                : "Tu compañero de ruta. Registra entregas, tiempos y novedades sin complicaciones."}
-            </p>
-          </div>
+      {/* IMAGEN DE FONDO (Molderil Theme) */}
+      <div 
+        className="absolute inset-0 z-0"
+        style={{
+            backgroundImage: 'url("https://images.unsplash.com/photo-1605256469542-82a266835000?q=80&w=2070&auto=format&fit=crop")', 
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
+            filter: 'brightness(0.4)'
+        }}
+      ></div>
 
-          {/* Selector de Perfil */}
-          <div className="space-y-4 mt-8">
-            <p className="text-xs font-bold uppercase tracking-widest opacity-50">Selecciona tu perfil de ingreso</p>
+      {/* Navbar Superior Compacta */}
+      <nav className="relative z-10 px-6 py-3 flex justify-between items-center border-b border-white/5 bg-black/20 backdrop-blur-sm">
+        <div className="flex items-center gap-3">
+            {/* LOGO MOLDERIL (Compacto) */}
+            <div className="bg-white p-1.5 rounded shadow-lg flex flex-col items-center justify-center w-10 h-10 md:w-12 md:h-12">
+                <div className="bg-red-800 w-full h-full rounded-sm flex items-end justify-center relative overflow-hidden">
+                    <div className="w-full h-1/2 bg-white rounded-t-full transform translate-y-1"></div>
+                </div>
+                <span className="text-[6px] font-bold text-red-900 mt-0.5 tracking-tighter">MOLDERIL</span>
+            </div>
             
-            <button 
-              onClick={() => setRole('driver')}
-              className={`w-full flex items-center gap-4 p-4 rounded-xl transition-all border-2 ${role === 'driver' ? 'bg-white text-blue-600 border-white shadow-lg' : 'bg-transparent border-white/30 text-white hover:bg-white/10'}`}
-            >
-              <Smartphone size={24} />
-              <div className="text-left">
-                <div className="font-bold">Soy Chofer</div>
-                <div className={`text-xs ${role === 'driver' ? 'text-blue-400' : 'text-blue-200'}`}>Acceso a App Móvil</div>
-              </div>
-              {role === 'driver' && <CheckCircleIcon />}
-            </button>
+            <div className="text-white">
+                <h1 className="text-lg md:text-xl font-bold tracking-wide text-white drop-shadow-md leading-tight">Portal Logística</h1>
+                <p className="text-[10px] md:text-xs text-slate-300 uppercase tracking-wider font-medium opacity-80">Planta Río Primero</p>
+            </div>
+        </div>
+        
+        {/* Botones de soporte */}
+        <div className="flex gap-2">
+             <button 
+                onClick={() => setShowHelp(true)}
+                className="p-2 text-white/60 hover:text-white transition-colors rounded-full hover:bg-white/10" 
+                title="Centro de Ayuda"
+             >
+                <HelpCircle size={20} />
+             </button>
+        </div>
+      </nav>
 
-            <button 
-              onClick={() => setRole('admin')}
-              className={`w-full flex items-center gap-4 p-4 rounded-xl transition-all border-2 ${role === 'admin' ? 'bg-white text-slate-900 border-white shadow-lg' : 'bg-transparent border-white/30 text-white hover:bg-white/10'}`}
-            >
-              <LayoutDashboard size={24} />
-              <div className="text-left">
-                <div className="font-bold">Soy Administrador</div>
-                <div className={`text-xs ${role === 'admin' ? 'text-slate-500' : 'text-slate-400'}`}>Acceso a Dashboard</div>
-              </div>
-              {role === 'admin' && <CheckCircleIcon />}
-            </button>
-          </div>
+      {/* Contenido Principal */}
+      <main className="flex-1 flex flex-col items-center justify-center p-4 animate-fade-in relative z-10">
+        
+        <div className="text-center mb-6 md:mb-8">
+          <h2 className="text-2xl md:text-3xl font-bold text-white mb-2 drop-shadow-lg">
+            Seleccione Sistema
+          </h2>
+          <p className="text-slate-200 max-w-2xl mx-auto text-sm md:text-base font-light drop-shadow opacity-90">
+            Gestión unificada de operaciones.
+          </p>
         </div>
 
-        {/* LADO DERECHO: Formulario */}
-        <div className="md:w-1/2 p-10 flex flex-col justify-center bg-white">
-          <div className="mb-8">
-            <h2 className="text-2xl font-bold text-gray-800 mb-2">Bienvenido de nuevo</h2>
-            <p className="text-gray-500">Ingresa tus credenciales para continuar.</p>
-          </div>
+        {/* Grid de Selección de Sistemas */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-8 max-w-4xl w-full">
 
-          <form onSubmit={handleLogin} className="space-y-6">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Correo Corporativo</label>
-              <div className="relative">
-                <User className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
-                <input 
-                  type="email" 
-                  required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder={role === 'admin' ? "admin@empresa.com" : "chofer@empresa.com"}
-                  className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
-                />
+          {/* TARJETA 1: LOGÍSTICA EXTERNA */}
+          <div 
+            className={`group relative bg-white rounded-xl shadow-2xl cursor-pointer overflow-hidden transition-all duration-300 transform ${hoveredCard === 'external' ? 'scale-[1.02] ring-4 ring-blue-500/30' : 'hover:shadow-blue-900/20'}`}
+            onMouseEnter={() => setHoveredCard('external')}
+            onMouseLeave={() => setHoveredCard(null)}
+            onClick={() => handleNavigation('LogiTrack (Externa)', 'LogiTrack.html')}
+          >
+            <div className="absolute top-0 left-0 w-full h-1.5 bg-blue-600"></div>
+            <div className="p-6 md:p-8">
+              <div className="flex justify-between items-start mb-4">
+                <div className={`p-3 rounded-xl transition-colors duration-300 ${hoveredCard === 'external' ? 'bg-blue-600 text-white shadow-lg shadow-blue-200' : 'bg-blue-50 text-blue-600'}`}>
+                  <Truck size={32} strokeWidth={1.5} />
+                </div>
+                <div className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide">
+                  Distribución
+                </div>
+              </div>
+              
+              <h3 className="text-xl font-bold text-slate-800 mb-1 group-hover:text-blue-600 transition-colors">
+                Logística Externa
+              </h3>
+              <p className="text-slate-500 text-sm mb-4 leading-relaxed">
+                Gestión de flota, GPS y entregas a clientes.
+              </p>
+
+              <div className="flex flex-col gap-2 text-sm text-slate-600 border-t border-slate-100 pt-4 mb-2">
+                <div className="flex items-center gap-2">
+                  <div className="w-1.5 h-1.5 rounded-full bg-blue-500"></div>
+                  <span>LogiTrack Dashboard</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-1.5 h-1.5 rounded-full bg-blue-500"></div>
+                  <span>App de Choferes</span>
+                </div>
+              </div>
+
+              <div className={`mt-2 flex items-center gap-2 text-sm font-bold text-blue-600 transition-all duration-300 ${hoveredCard === 'external' ? 'translate-x-2' : ''}`}>
+                Ingresar <ArrowRight size={16} />
               </div>
             </div>
+          </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Contraseña</label>
-              <div className="relative">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
-                <input 
-                  type="password" 
-                  required
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
-                  className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
-                />
+          {/* TARJETA 2: LOGÍSTICA INTERNA */}
+          <div 
+            className={`group relative bg-white rounded-xl shadow-2xl cursor-pointer overflow-hidden transition-all duration-300 transform ${hoveredCard === 'internal' ? 'scale-[1.02] ring-4 ring-emerald-500/30' : 'hover:shadow-emerald-900/20'}`}
+            onMouseEnter={() => setHoveredCard('internal')}
+            onMouseLeave={() => setHoveredCard(null)}
+            onClick={() => handleNavigation('Despacho Clientes', 'MenuQR.html')}
+          >
+            <div className="absolute top-0 left-0 w-full h-1.5 bg-emerald-600"></div>
+            <div className="p-6 md:p-8">
+              <div className="flex justify-between items-start mb-4">
+                <div className={`p-3 rounded-xl transition-colors duration-300 ${hoveredCard === 'internal' ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-200' : 'bg-emerald-50 text-emerald-600'}`}>
+                  <ClipboardCheck size={32} strokeWidth={1.5} />
+                </div>
+                <div className="bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide">
+                  Planta
+                </div>
               </div>
-              <div className="text-right mt-2">
-                <a href="#" className="text-sm text-blue-600 hover:underline">¿Olvidaste tu clave?</a>
+              
+              <h3 className="text-xl font-bold text-slate-800 mb-1 group-hover:text-emerald-600 transition-colors">
+                Rotulado y Despacho
+              </h3>
+              <p className="text-slate-500 text-sm mb-4 leading-relaxed">
+                Etiquetas, pedidos y despacho.
+              </p>
+
+              <div className="flex flex-col gap-2 text-sm text-slate-600 border-t border-slate-100 pt-4 mb-2">
+                <div className="flex items-center gap-2">
+                  <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>
+                  <span>Generador de Etiquetas (QR)</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>
+                  <span>Despacho Clientes</span>
+                </div>
+              </div>
+
+              <div className={`mt-2 flex items-center gap-2 text-sm font-bold text-emerald-600 transition-all duration-300 ${hoveredCard === 'internal' ? 'translate-x-2' : ''}`}>
+                Ingresar <ArrowRight size={16} />
               </div>
             </div>
-
-            <button 
-              type="submit" 
-              disabled={loading}
-              className={`w-full py-4 rounded-lg font-bold text-white shadow-lg flex items-center justify-center gap-2 transition-all active:scale-95 ${
-                loading ? 'bg-gray-400 cursor-not-allowed' : 
-                role === 'admin' ? 'bg-slate-900 hover:bg-slate-800 shadow-slate-200' : 'bg-blue-600 hover:bg-blue-700 shadow-blue-200'
-              }`}
-            >
-              {loading ? (
-                <>
-                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                  Verificando...
-                </>
-              ) : (
-                <>
-                  Ingresar al Sistema <ArrowRight size={20} />
-                </>
-              )}
-            </button>
-          </form>
-
-          <div className="mt-8 pt-6 border-t border-gray-100 text-center">
-            <p className="text-xs text-gray-400 flex items-center justify-center gap-1">
-              <ShieldCheck size={14} /> Conexión segura SSL 256-bit
-            </p>
           </div>
+
         </div>
 
-      </div>
+        {/* Footer Ultra Compacto */}
+        <div className="mt-8 md:mt-12 flex gap-3 opacity-60 hover:opacity-100 transition-opacity">
+            <button className="flex items-center gap-1.5 px-3 py-1.5 bg-black/30 hover:bg-black/50 backdrop-blur-sm rounded text-white text-xs font-medium transition-colors border border-white/10">
+                <Settings size={14} /> Config
+            </button>
+        </div>
+        
+        <div className="absolute bottom-2 text-white/20 text-[9px]">
+            v2.5.1
+        </div>
+
+      </main>
+
+      {/* MODAL DE AYUDA / SOPORTE */}
+      {showHelp && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in">
+            <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden">
+                
+                {/* Header Modal */}
+                <div className="px-6 py-4 bg-slate-50 border-b border-slate-100 flex justify-between items-center">
+                    <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                        <HelpCircle size={20} className="text-blue-600"/> Centro de Soporte
+                    </h3>
+                    <button onClick={() => setShowHelp(false)} className="p-1 hover:bg-slate-200 rounded-full text-slate-400 hover:text-red-500 transition-colors">
+                        <X size={20} />
+                    </button>
+                </div>
+
+                {/* Body Modal */}
+                <div className="p-6 space-y-6">
+                    
+                    {/* Sección 1: Contacto Urgente */}
+                    <div>
+                        <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Contacto Urgente</p>
+                        <div className="grid grid-cols-2 gap-3">
+                            <a href="#" className="flex items-center gap-3 p-3 border border-slate-200 rounded-lg hover:bg-blue-50 hover:border-blue-200 transition-colors group">
+                                <div className="bg-blue-100 p-2 rounded-full text-blue-600 group-hover:bg-blue-600 group-hover:text-white transition-colors">
+                                    <Phone size={18} />
+                                </div>
+                                <div>
+                                    <p className="font-bold text-slate-700 text-sm">Soporte TI</p>
+                                    <p className="text-xs text-slate-500">Int. 204</p>
+                                </div>
+                            </a>
+                             <a href="#" className="flex items-center gap-3 p-3 border border-slate-200 rounded-lg hover:bg-emerald-50 hover:border-emerald-200 transition-colors group">
+                                <div className="bg-emerald-100 p-2 rounded-full text-emerald-600 group-hover:bg-emerald-600 group-hover:text-white transition-colors">
+                                    <Truck size={18} />
+                                </div>
+                                <div>
+                                    <p className="font-bold text-slate-700 text-sm">Logística</p>
+                                    <p className="text-xs text-slate-500">Gabriel M.</p>
+                                </div>
+                            </a>
+                        </div>
+                    </div>
+
+                    {/* Sección 2: Recursos */}
+                    <div>
+                        <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Documentación</p>
+                        <ul className="space-y-2">
+                            <li className="flex items-center justify-between p-2 hover:bg-slate-50 rounded-lg cursor-pointer text-sm text-slate-600">
+                                <div className="flex items-center gap-2">
+                                    <FileText size={16} className="text-slate-400"/> Manual de Uso - LogiTrack
+                                </div>
+                                <Download size={14} className="text-slate-300" />
+                            </li>
+                            <li className="flex items-center justify-between p-2 hover:bg-slate-50 rounded-lg cursor-pointer text-sm text-slate-600">
+                                <div className="flex items-center gap-2">
+                                    <FileText size={16} className="text-slate-400"/> Guía de Impresión Etiquetas
+                                </div>
+                                <Download size={14} className="text-slate-300" />
+                            </li>
+                        </ul>
+                    </div>
+
+                    {/* Sección 3: Ayuda Rápida */}
+                    <div className="bg-orange-50 p-4 rounded-lg border border-orange-100">
+                        <h4 className="text-sm font-bold text-orange-800 mb-2 flex items-center gap-2">
+                            <WifiOff size={16} /> ¿Sin Conexión?
+                        </h4>
+                        <p className="text-xs text-orange-700 leading-relaxed">
+                            Si los datos no sincronizan, asegúrate de estar conectado a la red <strong>"Molderil_Operaciones"</strong>. Si el problema persiste, activa el "Modo Offline" en Configuración.
+                        </p>
+                    </div>
+
+                </div>
+                
+                {/* Footer Modal */}
+                <div className="bg-slate-50 px-6 py-3 text-center border-t border-slate-100">
+                    <p className="text-xs text-slate-400">Sistema monitoreado las 24hs.</p>
+                </div>
+            </div>
+        </div>
+      )}
+
     </div>
   );
 }
-
-// Icono auxiliar
-const CheckCircleIcon = () => (
-  <svg className="w-6 h-6 text-current ml-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-  </svg>
-);
