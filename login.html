@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Acceso LogiTrack - Molderil</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        .theme-transition { transition: background-color 0.5s ease; }
+    </style>
+</head>
+<body class="min-h-screen bg-slate-50 flex items-center justify-center p-4">
+
+    <div class="max-w-4xl w-full bg-white rounded-2xl shadow-2xl overflow-hidden flex flex-col md:flex-row min-h-[600px]">
+        <!-- PANEL IZQUIERDO -->
+        <div id="sidePanel" class="md:w-1/2 p-10 text-white flex flex-col justify-between theme-transition bg-blue-600">
+            <div>
+                <div class="flex items-center gap-4 mb-6">
+                    <div class="bg-white/20 p-2 rounded-lg border border-white/10 w-14 h-14 flex flex-col items-center justify-center">
+                         <div class="bg-red-800 w-full h-full rounded-sm flex items-end justify-center relative overflow-hidden"><div class="w-full h-1/2 bg-white rounded-t-full transform translate-y-1"></div></div>
+                    </div>
+                    <div>
+                        <h1 class="text-3xl font-bold">LogiTrack</h1>
+                        <p class="text-xs font-medium opacity-75 tracking-wider uppercase">Portal Logístico</p>
+                    </div>
+                </div>
+                <p id="roleDesc" class="text-blue-50 text-lg font-light">Tu compañero de ruta. Registra entregas sin complicaciones.</p>
+            </div>
+            <div class="space-y-4 mt-8">
+                <button onclick="setRole('driver')" id="btnDriver" class="w-full flex items-center gap-4 p-4 rounded-xl border-2 bg-white text-blue-600 border-white shadow-lg"><i data-lucide="smartphone"></i><span class="font-bold">Soy Chofer</span></button>
+                <button onclick="setRole('admin')" id="btnAdmin" class="w-full flex items-center gap-4 p-4 rounded-xl border-2 bg-transparent border-white/30 text-white hover:bg-white/10"><i data-lucide="layout-dashboard"></i><span class="font-bold">Soy Admin</span></button>
+            </div>
+        </div>
+
+        <!-- FORMULARIO -->
+        <div class="md:w-1/2 p-10 flex flex-col justify-center bg-white relative">
+            <div class="mb-8">
+                <h2 class="text-2xl font-bold text-gray-800">Bienvenido</h2>
+                <p class="text-gray-500">Ingresa tus credenciales.</p>
+            </div>
+            
+            <!-- Mensaje de Error -->
+            <div id="errorMsg" class="hidden mb-4 p-3 bg-red-50 text-red-500 text-sm rounded-lg border border-red-100 flex items-center gap-2">
+                <i data-lucide="alert-circle" class="w-4 h-4"></i> <span id="errorText">Error</span>
+            </div>
+
+            <form onsubmit="handleLogin(event)" class="space-y-6">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Correo</label>
+                    <div class="relative">
+                        <i data-lucide="user" class="absolute left-3 top-3 text-gray-400 w-5 h-5"></i>
+                        <input type="email" id="email" required class="w-full pl-10 p-3 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500 transition-all" placeholder="usuario@molderil.com">
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Contraseña</label>
+                    <div class="relative">
+                        <i data-lucide="lock" class="absolute left-3 top-3 text-gray-400 w-5 h-5"></i>
+                        <input type="password" id="password" required class="w-full pl-10 p-3 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500 transition-all" placeholder="••••••••">
+                    </div>
+                </div>
+                <button type="submit" id="submitBtn" class="w-full py-4 rounded-lg font-bold text-white bg-blue-600 hover:bg-blue-700 transition-colors shadow-lg flex justify-center gap-2 items-center">
+                    <span>Ingresar</span> <i data-lucide="arrow-right" class="w-5 h-5"></i>
+                </button>
+            </form>
+            <a href="index.html" class="absolute bottom-6 left-0 right-0 text-center text-xs text-gray-400 hover:text-gray-600 flex justify-center items-center gap-1">
+                <i data-lucide="arrow-left" class="w-3 h-3"></i> Volver al Portal Principal
+            </a>
+        </div>
+    </div>
+
+    <!-- IMPORTANTE: Carga de config.js -->
+    <script src="config.js"></script>
+
+    <script>
+        // --- INICIALIZACIÓN DE SUPABASE ---
+        let supabaseClient;
+        if (typeof supabase !== 'undefined' && typeof SUPABASE_URL !== 'undefined' && typeof SUPABASE_KEY !== 'undefined') {
+            supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+        } else {
+            // Mock para visualización si falta config.js
+            console.warn("Supabase no inicializado (Falta config.js). Modo Demo Visual.");
+        }
+        
+        lucide.createIcons();
+        let currentRole = 'driver';
+
+        // Verificar sesión existente al cargar
+        document.addEventListener('DOMContentLoaded', async () => {
+            if (!supabaseClient) return;
+            const { data: { session } } = await supabaseClient.auth.getSession();
+            if (session) {
+                redirectUser(session.user.id);
+            }
+        });
+
+        function setRole(role) {
+            currentRole = role;
+            const panel = document.getElementById('sidePanel');
+            const btnD = document.getElementById('btnDriver');
+            const btnA = document.getElementById('btnAdmin');
+            const btnS = document.getElementById('submitBtn');
+            const emailInput = document.getElementById('email');
+            
+            if (role === 'driver') {
+                panel.classList.remove('bg-slate-900'); panel.classList.add('bg-blue-600');
+                document.getElementById('roleDesc').textContent = "Tu compañero de ruta. Registra entregas sin complicaciones.";
+                btnD.className = "w-full flex items-center gap-4 p-4 rounded-xl border-2 bg-white text-blue-600 border-white shadow-lg transform scale-[1.02]";
+                btnA.className = "w-full flex items-center gap-4 p-4 rounded-xl border-2 bg-transparent border-white/30 text-white hover:bg-white/10 opacity-70 hover:opacity-100";
+                btnS.className = "w-full py-4 rounded-lg font-bold text-white bg-blue-600 hover:bg-blue-700 transition-colors shadow-lg flex justify-center gap-2 items-center";
+                emailInput.placeholder = "chofer@molderil.com";
+            } else {
+                panel.classList.remove('bg-blue-600'); panel.classList.add('bg-slate-900');
+                document.getElementById('roleDesc').textContent = "Plataforma de gestión integral. Monitoreo y control.";
+                btnA.className = "w-full flex items-center gap-4 p-4 rounded-xl border-2 bg-white text-slate-900 border-white shadow-lg transform scale-[1.02]";
+                btnD.className = "w-full flex items-center gap-4 p-4 rounded-xl border-2 bg-transparent border-white/30 text-white hover:bg-white/10 opacity-70 hover:opacity-100";
+                btnS.className = "w-full py-4 rounded-lg font-bold text-white bg-slate-900 hover:bg-slate-800 transition-colors shadow-lg flex justify-center gap-2 items-center";
+                emailInput.placeholder = "admin@molderil.com";
+            }
+        }
+
+        async function handleLogin(e) {
+            e.preventDefault();
+            if (!supabaseClient) {
+                alert("⚠️ Error: Base de datos no conectada. Verifica que el archivo config.js exista y tenga las claves.");
+                return;
+            }
+            
+            const btn = document.getElementById('submitBtn');
+            const err = document.getElementById('errorMsg');
+            const errText = document.getElementById('errorText');
+            
+            btn.disabled = true; 
+            btn.innerHTML = `<div class="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div> Verificando...`; 
+            err.classList.add('hidden');
+
+            try {
+                const { data, error } = await supabaseClient.auth.signInWithPassword({
+                    email: document.getElementById('email').value,
+                    password: document.getElementById('password').value
+                });
+
+                if (error) throw error;
+
+                await redirectUser(data.user.id);
+
+            } catch (error) {
+                console.error(error);
+                errText.textContent = error.message === "Invalid login credentials" ? "Credenciales inválidas. Revisa tu correo y contraseña." : error.message;
+                err.classList.remove('hidden');
+                
+                // Reset UI
+                btn.disabled = false; 
+                btn.innerHTML = `<span>Ingresar</span> <i data-lucide="arrow-right" class="w-5 h-5"></i>`;
+                lucide.createIcons();
+            }
+        }
+
+        async function redirectUser(userId) {
+            try {
+                const { data: profile, error } = await supabaseClient.from('profiles').select('role').eq('id', userId).single();
+                
+                if (error) throw error;
+
+                if (profile && profile.role === 'admin') {
+                    window.location.href = 'DashboardLogiTrack.html';
+                } else {
+                    window.location.href = 'AppLogitrack.html';
+                }
+            } catch (err) {
+                console.error("Error obteniendo perfil:", err);
+                alert("Error al obtener datos del usuario. Contacte a soporte.");
+                // Reset UI si falla
+                const btn = document.getElementById('submitBtn');
+                btn.disabled = false; 
+                btn.innerHTML = `<span>Ingresar</span> <i data-lucide="arrow-right" class="w-5 h-5"></i>`;
+                lucide.createIcons();
+            }
+        }
+    </script>
+</body>
+</html>
