@@ -900,7 +900,7 @@
                 currentY += 18; doc.line(margin, currentY, pageW - margin, currentY); currentY += 8;
                 const formatNumberES = (numStr) => { if (!numStr) return ''; const [integerPart, decimalPart] = numStr.split(','); const formattedInteger = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, "."); return decimalPart !== undefined ? `${formattedInteger},${decimalPart}` : formattedInteger; };
                 const formattedCantidad = formatNumberES(data.cantidad);
-                const uomText = data.uom === 'Unidad' ? 'Unidades' : 'Millares';
+                const uomText = data.uom === 'Unidad' ? 'Unidades' : (data.uom === 'Millar' ? 'Millares' : (data.uom === 'Kilogramo' ? 'Kilogramos' : data.uom));
                 const cantidadString = `${formattedCantidad} ${uomText}`;
                 doc.setFont("helvetica", "bold"); doc.setFontSize(44);
                 const cantidadWidth = doc.getStringUnitWidth(cantidadString) * doc.getFontSize() / doc.internal.scaleFactor;
