@@ -989,7 +989,21 @@
                     const previewDoc = new jsPDF('p', 'mm', 'a4'); await drawLabelOnDoc(previewDoc, dataForLabel);
                     const printDoc = new jsPDF('p', 'mm', 'a4'); await drawLabelOnDoc(printDoc, dataForLabel);
                     printDoc.autoPrint();
-                    setReprintModal({ isOpen: true, pdfUrl: previewDoc.output('datauristring'), printablePdfUrl: printDoc.output('bloburl'), palletId: freshPalletData.nropallet });
+
+                    // --- SOLUCIÓN TÉCNICA: Uso de Blobs nativos ---
+                    const previewPdfBlob = previewDoc.output('blob');
+                    const previewBlobUrl = URL.createObjectURL(previewPdfBlob);
+
+                    const printPdfBlob = printDoc.output('blob');
+                    const printBlobUrl = URL.createObjectURL(printPdfBlob);
+
+                    setReprintModal({ 
+                        isOpen: true, 
+                        pdfUrl: previewBlobUrl, 
+                        printablePdfUrl: printBlobUrl, 
+                        palletId: freshPalletData.nropallet 
+                    });
+                    
                 } catch (error) {
                     alert(`Error al reimprimir: ${error.message}`);
                 } finally {
@@ -1034,16 +1048,39 @@
             };
 
             const ReprintModal = ({ isOpen, pdfUrl, printablePdfUrl, palletId, onClose }) => {
+                // Prevención de Memory Leaks: Liberar los Blob URLs cuando el componente se cierra
+                useEffect(() => {
+                    return () => {
+                        if (pdfUrl) URL.revokeObjectURL(pdfUrl);
+                        if (printablePdfUrl) URL.revokeObjectURL(printablePdfUrl);
+                    };
+                }, [pdfUrl, printablePdfUrl]);
+
                 if (!isOpen) return null;
+                
                 const handlePrint = () => { if (printablePdfUrl) { window.open(printablePdfUrl, '_blank'); } };
+                
+                // Mejora UX/UI: Ocultar toolbar y ajustar a lo ancho
+                const iframeSrc = pdfUrl ? `${pdfUrl}#toolbar=0&view=FitH` : '';
+
                 return (
                     <div className="fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center z-50 p-4">
                         <div className="bg-white p-6 rounded-xl shadow-lg w-full max-w-2xl h-5/6 flex flex-col">
                             <h3 className="text-lg font-bold text-gray-800 mb-4">Reimprimir Etiqueta - Pallet Nº {palletId}</h3>
-                            <div className="flex-grow border rounded-lg overflow-hidden"><iframe src={pdfUrl} className="w-full h-full" title={`Etiqueta Pallet ${palletId}`}></iframe></div>
+                            
+                            <div className="flex-grow border rounded-lg overflow-hidden bg-gray-100 flex items-center justify-center">
+                                {pdfUrl ? (
+                                    <iframe src={iframeSrc} className="w-full h-full" title={`Etiqueta Pallet ${palletId}`}></iframe>
+                                ) : (
+                                    <i className="fas fa-spinner fa-spin text-3xl text-gray-400"></i>
+                                )}
+                            </div>
+
                             <div className="flex justify-end space-x-3 mt-6">
-                                <button onClick={onClose} className="bg-gray-200 text-gray-800 font-semibold py-2 px-4 rounded-lg hover:bg-gray-300">Cancelar</button>
-                                <button onClick={handlePrint} className="bg-green-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-green-700 flex items-center"><i className="fas fa-print mr-2"></i>Imprimir</button>
+                                <button onClick={onClose} className="bg-gray-200 text-gray-800 font-semibold py-2 px-4 rounded-lg hover:bg-gray-300 transition-colors">Cancelar</button>
+                                <button onClick={handlePrint} className="bg-green-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-green-700 flex items-center transition-colors">
+                                    <i className="fas fa-print mr-2"></i>Imprimir
+                                </button>
                             </div>
                         </div>
                     </div>
