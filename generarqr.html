@@ -676,6 +676,9 @@
                 };
             }
 
+            // =====================================================================
+            // MODIFICACIÓN APLICADA: CAMBIO DE DATAURISTRING A BLOB URL
+            // =====================================================================
             const handleGeneratePreview = async (isRegeneration = false) => {
                 if (!isRegeneration && !editMode) {
                     const updatedPalletNum = await handleRefreshPalletNumber(true);
@@ -692,9 +695,19 @@
                 const data = getLabelData();
                 const doc = new jsPDF('p', 'mm', 'a4');
                 await drawLabelOnDoc(doc, data);
-                const pdfDataUrl = doc.output('datauristring');
-                setPreviewPdfUrl(pdfDataUrl);
+                
+                // MODO SEGURO: Usar Blob nativo en lugar de Data URI
+                const pdfBlob = doc.output('blob');
+                const blobUrl = URL.createObjectURL(pdfBlob);
+                
+                // Limpiar memoria si ya existía una URL previa
+                if (previewPdfUrl) {
+                    URL.revokeObjectURL(previewPdfUrl);
+                }
+                
+                setPreviewPdfUrl(blobUrl);
             };
+            // =====================================================================
             
             const handleUpdateAndPrintPDF = async () => {
                 if (isSaving) return;
@@ -1075,7 +1088,7 @@
                                     <h3 className="text-lg font-medium text-gray-900 mb-2">Vista Previa de Etiqueta</h3>
                                     <div id="preview-container" className="border-2 border-dashed border-gray-400 w-full" style={{height: '65vh'}}>
                                         {previewPdfUrl ? (
-                                            <iframe id="preview-iframe" src={previewPdfUrl} title="Vista Previa de Etiqueta"></iframe>
+                                            <iframe id="preview-iframe" src={`${previewPdfUrl}#toolbar=0`} title="Vista Previa de Etiqueta" className="w-full h-full"></iframe>
                                         ) : (
                                             <div className="text-center text-gray-500 flex items-center justify-center h-full">
                                                 <p>Complete el formulario y genere la vista previa</p>
