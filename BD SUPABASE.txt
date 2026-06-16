@@ -1,6 +1,10 @@
 -- WARNING: This schema is for context only and is not meant to be run.
 -- Table order and constraints may not be valid for execution.
 
+CREATE TABLE public.nroPallet (
+  nrPallet bigint NOT NULL UNIQUE,
+  CONSTRAINT nroPallet_pkey PRIMARY KEY (nrPallet)
+);
 CREATE TABLE public.articulos (
   tiposku text,
   sku text NOT NULL UNIQUE,
@@ -9,6 +13,7 @@ CREATE TABLE public.articulos (
   idsku integer GENERATED ALWAYS AS IDENTITY NOT NULL,
   rnpa text,
   rne text,
+  descripcionLargaRotuloQR text,
   CONSTRAINT articulos_pkey PRIMARY KEY (idsku)
 );
 CREATE TABLE public.clientes (
@@ -16,38 +21,24 @@ CREATE TABLE public.clientes (
   idcli integer GENERATED ALWAYS AS IDENTITY NOT NULL UNIQUE,
   CONSTRAINT clientes_pkey PRIMARY KEY (razonsocial)
 );
+CREATE TABLE public.nropalettransferidos (
+  nropallet bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT nropalettransferidos_pkey PRIMARY KEY (nropallet),
+  CONSTRAINT nropalettransferidos_nropallet_fkey FOREIGN KEY (nropallet) REFERENCES public.detallelotes(nropallet)
+);
 CREATE TABLE public.definicion_estanterias (
   id_estanteria text NOT NULL,
-  pos_x text,
-  pos_z text,
-  niveles text,
-  columnas text,
   ancho_slot text,
   alto_slot text,
   profundidad_slot text,
   posiciones_profundidad text,
+  pos_x text,
   rotacion_y text,
+  pos_z text,
+  niveles text,
+  columnas text,
   CONSTRAINT definicion_estanterias_pkey PRIMARY KEY (id_estanteria)
-);
-CREATE TABLE public.despachoListaEmpaque (
-  idListaEmpaque bigint NOT NULL UNIQUE,
-  fechaDespacho date NOT NULL,
-  retiranDesdePlanta boolean,
-  razonSocialTransporte text,
-  created_at timestamp with time zone NOT NULL DEFAULT now(),
-  listaDespachada boolean,
-  CONSTRAINT despachoListaEmpaque_pkey PRIMARY KEY (idListaEmpaque),
-  CONSTRAINT despachoListaEmpaque_idListaEmpaque_fkey FOREIGN KEY (idListaEmpaque) REFERENCES public.listaempaque(idlista)
-);
-CREATE TABLE public.detallelistaempaque (
-  idlista bigint NOT NULL,
-  iditem bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
-  nropallet bigint NOT NULL,
-  lotesproduccion text NOT NULL,
-  cantidad double precision NOT NULL,
-  CONSTRAINT detallelistaempaque_pkey PRIMARY KEY (idlista, nropallet),
-  CONSTRAINT detallelistaempaque_idlista_fkey FOREIGN KEY (idlista) REFERENCES public.listaempaque(idlista),
-  CONSTRAINT detallelistaempaque_nropallet_fkey FOREIGN KEY (nropallet) REFERENCES public.detallelotes(nropallet)
 );
 CREATE TABLE public.detallelotes (
   idsku integer,
@@ -62,22 +53,6 @@ CREATE TABLE public.detallelotes (
   CONSTRAINT detallelotes_idsku_fkey FOREIGN KEY (idsku) REFERENCES public.articulos(idsku),
   CONSTRAINT detallelotes_nropallet_fkey FOREIGN KEY (nropallet) REFERENCES public.nroPallet(nrPallet)
 );
-CREATE TABLE public.listaempaque (
-  idlista bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
-  idcliente integer NOT NULL,
-  legajo real NOT NULL,
-  fechacreacion timestamp without time zone NOT NULL DEFAULT (now() AT TIME ZONE 'utc'::text),
-  listaAnulada boolean,
-  CONSTRAINT listaempaque_pkey PRIMARY KEY (idlista),
-  CONSTRAINT listaempaque_idcliente_fkey FOREIGN KEY (idcliente) REFERENCES public.clientes(idcli)
-);
-CREATE TABLE public.locks (
-  id text NOT NULL,
-  locked_by text,
-  locked_at timestamp with time zone,
-  operation_name text,
-  CONSTRAINT locks_pkey PRIMARY KEY (id)
-);
 CREATE TABLE public.notasskulote (
   nropallet bigint NOT NULL UNIQUE,
   nota text NOT NULL,
@@ -86,13 +61,95 @@ CREATE TABLE public.notasskulote (
   CONSTRAINT notasskulote_pkey PRIMARY KEY (nropallet),
   CONSTRAINT notasskulote_nropallet_fkey FOREIGN KEY (nropallet) REFERENCES public.detallelotes(nropallet)
 );
-CREATE TABLE public.nroPallet (
-  nrPallet bigint NOT NULL UNIQUE,
-  CONSTRAINT nroPallet_pkey PRIMARY KEY (nrPallet)
+CREATE TABLE public.listaempaque (
+  fechacreacion timestamp without time zone NOT NULL DEFAULT (now() AT TIME ZONE 'utc'::text),
+  listaAnulada boolean,
+  idlista bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
+  idcliente integer NOT NULL,
+  legajo real NOT NULL,
+  CONSTRAINT listaempaque_pkey PRIMARY KEY (idlista),
+  CONSTRAINT listaempaque_idcliente_fkey FOREIGN KEY (idcliente) REFERENCES public.clientes(idcli)
 );
-CREATE TABLE public.nropalettransferidos (
-  nropallet bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
+CREATE TABLE public.detallelistaempaque (
+  idlista bigint NOT NULL,
+  iditem bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
+  nropallet bigint NOT NULL,
+  lotesproduccion text NOT NULL,
+  cantidad double precision NOT NULL,
+  CONSTRAINT detallelistaempaque_pkey PRIMARY KEY (idlista, nropallet),
+  CONSTRAINT detallelistaempaque_idlista_fkey FOREIGN KEY (idlista) REFERENCES public.listaempaque(idlista),
+  CONSTRAINT detallelistaempaque_nropallet_fkey FOREIGN KEY (nropallet) REFERENCES public.detallelotes(nropallet)
+);
+CREATE TABLE public.locks (
+  id text NOT NULL,
+  locked_by text,
+  locked_at timestamp with time zone,
+  operation_name text,
+  CONSTRAINT locks_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.despachoListaEmpaque (
+  idListaEmpaque bigint NOT NULL UNIQUE,
+  fechaDespacho date NOT NULL,
+  retiranDesdePlanta boolean,
+  razonSocialTransporte text,
   created_at timestamp with time zone NOT NULL DEFAULT now(),
-  CONSTRAINT nropalettransferidos_pkey PRIMARY KEY (nropallet),
-  CONSTRAINT nropalettransferidos_nropallet_fkey FOREIGN KEY (nropallet) REFERENCES public.detallelotes(nropallet)
+  listaDespachada boolean,
+  CONSTRAINT despachoListaEmpaque_pkey PRIMARY KEY (idListaEmpaque),
+  CONSTRAINT despachoListaEmpaque_idListaEmpaque_fkey FOREIGN KEY (idListaEmpaque) REFERENCES public.listaempaque(idlista)
+);
+CREATE TABLE public.profiles (
+  id uuid NOT NULL,
+  role text NOT NULL,
+  full_name text,
+  phone text,
+  license_expiry date,
+  avatar_url text,
+  CONSTRAINT profiles_pkey PRIMARY KEY (id),
+  CONSTRAINT profiles_id_fkey FOREIGN KEY (id) REFERENCES auth.users(id)
+);
+CREATE TABLE public.trips (
+  driver_id uuid,
+  start_time timestamp with time zone,
+  end_time timestamp with time zone,
+  total_pallets integer,
+  id integer NOT NULL DEFAULT nextval('trips_id_seq'::regclass),
+  status text NOT NULL DEFAULT 'active'::text,
+  rating integer CHECK (rating >= 1 AND rating <= 5),
+  feedback text,
+  CONSTRAINT trips_pkey PRIMARY KEY (id),
+  CONSTRAINT trips_driver_id_fkey FOREIGN KEY (driver_id) REFERENCES public.profiles(id)
+);
+CREATE TABLE public.stops (
+  trip_id integer,
+  arrival_time timestamp with time zone,
+  departure_time timestamp with time zone,
+  type text,
+  client_type text,
+  lat numeric,
+  lng numeric,
+  wait_time_minutes integer,
+  id integer NOT NULL DEFAULT nextval('stops_id_seq'::regclass),
+  client_name text,
+  CONSTRAINT stops_pkey PRIMARY KEY (id),
+  CONSTRAINT stops_trip_id_fkey FOREIGN KEY (trip_id) REFERENCES public.trips(id)
+);
+CREATE TABLE public.forecasts (
+  periodo text NOT NULL,
+  version text NOT NULL,
+  id_cliente text NOT NULL,
+  id_sku text NOT NULL,
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  cantidad numeric NOT NULL DEFAULT 0,
+  created_at timestamp with time zone NOT NULL DEFAULT timezone('utc'::text, now()),
+  CONSTRAINT forecasts_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.prices (
+  id_sku text NOT NULL,
+  vigencia_desde date,
+  vigencia_hasta date,
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  precio numeric NOT NULL DEFAULT 0,
+  moneda text NOT NULL DEFAULT 'ARS'::text,
+  created_at timestamp with time zone NOT NULL DEFAULT timezone('utc'::text, now()),
+  CONSTRAINT prices_pkey PRIMARY KEY (id)
 );
