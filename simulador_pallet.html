@@ -1,0 +1,902 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Molderil - Simulador de Paletizado 3D</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #111827; color: #f3f4f6; font-family: 'Inter', sans-serif; }
+        canvas { display: block; }
+        .glass-panel {
+            background: rgba(17, 24, 39, 0.85);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        /* Ocultar barra de desplazamiento */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #6b7280; }
+    </style>
+</head>
+<body>
+
+    <!-- UI Overlay -->
+    <div id="ui-container" class="absolute inset-0 pointer-events-none flex p-4 gap-4 z-10">
+        
+        <!-- Panel Izquierdo: Controles y Cajas -->
+        <div class="glass-panel w-80 h-full flex flex-col rounded-xl shadow-2xl pointer-events-auto overflow-hidden">
+            <div class="p-4 border-b border-gray-700 bg-gray-800/50">
+                <h1 class="text-xl font-bold text-white flex items-center gap-2">
+                    <i class="fas fa-boxes text-blue-400"></i> Simulador 3D
+                </h1>
+                <a href="index.html" class="text-xs text-blue-400 hover:text-blue-300 mt-1 inline-block"><i class="fas fa-arrow-left"></i> Volver al menú</a>
+            </div>
+
+            <!-- Configuración del Pallet -->
+            <div class="p-4 border-b border-gray-700 space-y-3">
+                <h2 class="text-sm font-semibold text-gray-400 uppercase tracking-wider">Configuración</h2>
+                
+                <div>
+                    <label class="block text-xs text-gray-400 mb-1">Cargar Archivo Excel (.xlsx)</label>
+                    <input type="file" id="file-upload" accept=".xlsx, .xls" class="block w-full text-xs text-gray-400 file:mr-2 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-blue-600 file:text-white hover:file:bg-blue-700 cursor-pointer bg-gray-900 rounded-md border border-gray-700">
+                    <p class="text-[10px] text-gray-500 mt-1">Columnas req: Modelo, Ancho, Alto, Profundidad, Peso</p>
+                </div>
+
+                <div>
+                    <label class="block text-xs text-gray-400 mb-1">Altura Máxima (incluye pallet 15cm)</label>
+                    <select id="height-limit" class="w-full bg-gray-900 border border-gray-700 rounded-md py-1.5 px-2 text-sm text-white focus:outline-none focus:border-blue-500">
+                        <option value="2000">2.0 metros (2000 mm)</option>
+                        <option value="2400" selected>2.4 metros (2400 mm)</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Lista de Cajas -->
+            <div class="p-4 flex-1 overflow-y-auto">
+                <h2 class="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-2">Cajas Disponibles</h2>
+                <div id="box-list" class="space-y-2">
+                    <p class="text-xs text-gray-500 italic text-center py-4">Carga un Excel para ver las cajas</p>
+                </div>
+            </div>
+
+            <!-- Controles de Acción -->
+            <div class="p-4 border-t border-gray-700 bg-gray-800/50 space-y-3">
+                <div class="flex flex-col gap-1">
+                    <span class="text-[10px] text-gray-400 uppercase tracking-wider text-center">Rotación 3D</span>
+                    <div class="flex items-center gap-1">
+                        <button id="btn-rot-x" class="flex-1 bg-gray-700 hover:bg-gray-600 text-white text-xs font-semibold py-2 rounded-md transition-colors" title="Voltear hacia adelante/atrás (Eje X)">
+                            <i class="fas fa-sync-alt transform rotate-90"></i> X
+                        </button>
+                        <button id="btn-rot-y" class="flex-1 bg-gray-700 hover:bg-gray-600 text-white text-xs font-semibold py-2 rounded-md transition-colors" title="Girar sobre la base (Eje Y)">
+                            <i class="fas fa-undo"></i> Y
+                        </button>
+                        <button id="btn-rot-z" class="flex-1 bg-gray-700 hover:bg-gray-600 text-white text-xs font-semibold py-2 rounded-md transition-colors" title="Acostar de lado (Eje Z)">
+                            <i class="fas fa-sync-alt"></i> Z
+                        </button>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2">
+                    <button id="btn-fill-layer" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold py-2 rounded-md transition-colors disabled:opacity-50" disabled>
+                        <i class="fas fa-layer-group"></i> Llenar Capa
+                    </button>
+                </div>
+                <div class="flex items-center gap-2">
+                    <button id="btn-undo" class="w-1/3 bg-gray-700 hover:bg-red-600 text-white text-xs font-semibold py-2 rounded-md transition-colors" title="Deshacer último">
+                        <i class="fas fa-history"></i>
+                    </button>
+                    <button id="btn-export" class="w-2/3 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold py-2 rounded-md transition-colors flex items-center justify-center gap-2">
+                        <i class="fas fa-file-pdf"></i> Exportar Reporte
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Panel Derecho: Estadísticas HUD -->
+        <div class="absolute top-4 right-4 glass-panel w-64 rounded-xl shadow-2xl pointer-events-auto overflow-hidden">
+            <div class="p-3 border-b border-gray-700 bg-blue-600/20">
+                <h2 class="text-sm font-bold text-blue-400 text-center uppercase tracking-wider"><i class="fas fa-chart-pie mr-1"></i> Estado del Pallet</h2>
+            </div>
+            <div class="p-4 space-y-4">
+                
+                <!-- Altura -->
+                <div>
+                    <div class="flex justify-between text-xs mb-1">
+                        <span class="text-gray-400">Altura Actual</span>
+                        <span id="stat-height" class="font-bold text-white">150 mm</span>
+                    </div>
+                    <div class="w-full bg-gray-700 rounded-full h-2">
+                        <div id="bar-height" class="bg-blue-500 h-2 rounded-full transition-all duration-300" style="width: 5%"></div>
+                    </div>
+                    <p id="stat-height-rem" class="text-[10px] text-gray-500 text-right mt-1">Quedan 2250 mm</p>
+                </div>
+
+                <!-- Peso -->
+                <div class="flex items-center justify-between border-t border-gray-700 pt-3">
+                    <div class="flex flex-col">
+                        <span class="text-[10px] text-gray-400 uppercase">Peso Total</span>
+                        <span id="stat-weight" class="text-xl font-bold text-emerald-400">0.0 kg</span>
+                    </div>
+                    <i class="fas fa-weight-hanging text-gray-600 text-2xl"></i>
+                </div>
+
+                <!-- Cajas Totales -->
+                <div class="flex items-center justify-between border-t border-gray-700 pt-3">
+                    <div class="flex flex-col">
+                        <span class="text-[10px] text-gray-400 uppercase">Total Cajas</span>
+                        <span id="stat-count" class="text-xl font-bold text-purple-400">0</span>
+                    </div>
+                    <i class="fas fa-cubes text-gray-600 text-2xl"></i>
+                </div>
+                
+                <!-- Detalle por Modelo -->
+                <div class="border-t border-gray-700 pt-3">
+                    <span class="text-[10px] text-gray-400 uppercase block mb-2">Desglose</span>
+                    <ul id="stat-breakdown" class="space-y-1 text-xs text-gray-300 max-h-32 overflow-y-auto">
+                        <li class="text-gray-600 italic">No hay cajas</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- Instrucciones Centrales Inferiores -->
+        <div class="absolute bottom-6 left-1/2 transform -translate-x-1/2 glass-panel px-6 py-2 rounded-full pointer-events-auto flex items-center gap-4 text-xs">
+            <span class="text-gray-300"><i class="fas fa-mouse-pointer text-blue-400 mr-1"></i> Clic Izq. colocar</span>
+            <span class="w-px h-4 bg-gray-600"></span>
+            <span class="text-gray-300"><i class="fas fa-eraser text-red-400 mr-1"></i> Clic Der. borrar</span>
+            <span class="w-px h-4 bg-gray-600"></span>
+            <span class="text-gray-300"><i class="fas fa-sync-alt text-green-400 mr-1"></i> X/Y/Z rotar</span>
+            <span class="w-px h-4 bg-gray-600"></span>
+            <span class="text-gray-300"><i class="fas fa-arrows-alt text-purple-400 mr-1"></i> Arrastrar orbitar</span>
+        </div>
+
+    </div>
+
+    <!-- Canvas Three.js -->
+    <canvas id="render-canvas" class="w-full h-screen"></canvas>
+
+    <!-- Three.js (Versión compatible con local file://) -->
+    <script src="https://unpkg.com/three@0.128.0/build/three.min.js"></script>
+    <script src="https://unpkg.com/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+
+    <!-- Script Principal -->
+    <script>
+
+        // --- CONSTANTES DEL PALLET (en mm) ---
+        const PALLET_W = 1200; // Ancho (X)
+        const PALLET_D = 1000; // Profundidad (Z)
+        const PALLET_H = 150;  // Alto (Y)
+
+        // --- ESTADO GLOBAL ---
+        let scene, camera, renderer, controls;
+        let limitWireframe;
+        let palletMesh;
+        let maxHeight = 2400; // Límite actual
+        
+        let availableBoxes = []; // Cargadas desde Excel
+        let selectedBoxData = null; // Caja actualmente seleccionada para colocar
+        let currentEuler = new THREE.Euler(0, 0, 0); // Rotación física de la malla
+        
+        let placedBoxes = []; // Array de objetos { mesh, data }
+        let ghostMesh = null; // Malla transparente para previsualizar
+
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2();
+        
+        const colors = [0x3b82f6, 0x10b981, 0xf59e0b, 0xef4444, 0x8b5cf6, 0xec4899, 0x06b6d4];
+
+        // --- ELEMENTOS DOM ---
+        const uiBoxList = document.getElementById('box-list');
+        const uiHeightLimit = document.getElementById('height-limit');
+        const statHeight = document.getElementById('stat-height');
+        const statHeightRem = document.getElementById('stat-height-rem');
+        const barHeight = document.getElementById('bar-height');
+        const statWeight = document.getElementById('stat-weight');
+        const statCount = document.getElementById('stat-count');
+        const statBreakdown = document.getElementById('stat-breakdown');
+        const btnFillLayer = document.getElementById('btn-fill-layer');
+
+        init();
+        animate();
+
+        function init() {
+            // 1. Escena
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x111827);
+            scene.fog = new THREE.Fog(0x111827, 2000, 6000);
+
+            // 2. Cámara
+            camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 10, 10000);
+            camera.position.set(0, 2500, 2500);
+
+            // 3. Renderizador
+            renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('render-canvas'), antialias: true, preserveDrawingBuffer: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+            // 4. Luces
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+            scene.add(ambientLight);
+            const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
+            dirLight.position.set(1000, 3000, 1500);
+            dirLight.castShadow = true;
+            dirLight.shadow.mapSize.width = 2048;
+            dirLight.shadow.mapSize.height = 2048;
+            dirLight.shadow.camera.near = 100;
+            dirLight.shadow.camera.far = 5000;
+            dirLight.shadow.camera.left = -1500;
+            dirLight.shadow.camera.right = 1500;
+            dirLight.shadow.camera.top = 1500;
+            dirLight.shadow.camera.bottom = -1500;
+            scene.add(dirLight);
+
+            // 5. Controles
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+            controls.maxPolarAngle = Math.PI / 2 - 0.05; // No ir por debajo del piso
+            controls.target.set(0, 500, 0);
+
+            // 6. Escenario Base
+            createFloor();
+            createPallet();
+            updateLimitWireframe();
+
+            // 7. Eventos
+            window.addEventListener('resize', onWindowResize);
+            renderer.domElement.addEventListener('pointermove', onPointerMove);
+            renderer.domElement.addEventListener('pointerdown', onPointerDown);
+            renderer.domElement.addEventListener('contextmenu', (e) => e.preventDefault()); // Evitar menú de clic derecho
+            window.addEventListener('keydown', (e) => {
+                const k = e.key.toLowerCase();
+                if (k === 'x') rotateBox('x');
+                if (k === 'y') rotateBox('y');
+                if (k === 'z') rotateBox('z');
+            });
+
+            // UI Events
+            document.getElementById('file-upload').addEventListener('change', handleFileUpload);
+            uiHeightLimit.addEventListener('change', (e) => {
+                maxHeight = parseInt(e.target.value);
+                updateLimitWireframe();
+                updateStats();
+            });
+            document.getElementById('btn-rot-x').addEventListener('click', () => rotateBox('x'));
+            document.getElementById('btn-rot-y').addEventListener('click', () => rotateBox('y'));
+            document.getElementById('btn-rot-z').addEventListener('click', () => rotateBox('z'));
+            document.getElementById('btn-undo').addEventListener('click', undoLastBox);
+            document.getElementById('btn-export').addEventListener('click', exportPDF);
+            btnFillLayer.addEventListener('click', fillLayer);
+
+            // Intentar cargar archivo base automáticamente
+            loadDefaultExcel();
+        }
+
+        // --- LECTURA DE EXCEL AUTOMÁTICA ---
+        async function loadDefaultExcel() {
+            try {
+                const response = await fetch('MODELOS_CAJAS.xlsx');
+                if (response.ok) {
+                    const arrayBuffer = await response.arrayBuffer();
+                    const data = new Uint8Array(arrayBuffer);
+                    const workbook = XLSX.read(data, {type: 'array'});
+                    const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+                    const jsonData = XLSX.utils.sheet_to_json(firstSheet);
+                    
+                    processExcelData(jsonData);
+                    
+                    // Actualizar UI para reflejar que se cargó por defecto
+                    const label = document.querySelector('label.text-gray-400');
+                    if (label) label.innerHTML = 'MODELOS_CAJAS.xlsx cargado. (Subir otro)';
+                }
+            } catch (err) {
+                console.warn('No se pudo cargar MODELOS_CAJAS.xlsx automáticamente. Se requiere carga manual.');
+            }
+        }
+
+        // --- CREACIÓN DEL ENTORNO ---
+        function createFloor() {
+            const floorGeo = new THREE.PlaneGeometry(8000, 8000);
+            const floorMat = new THREE.MeshStandardMaterial({ color: 0x1f2937, roughness: 0.8 });
+            const floor = new THREE.Mesh(floorGeo, floorMat);
+            floor.rotation.x = -Math.PI / 2;
+            floor.receiveShadow = true;
+            scene.add(floor);
+
+            const grid = new THREE.GridHelper(8000, 80, 0x374151, 0x1f2937);
+            grid.position.y = 1;
+            scene.add(grid);
+        }
+
+        function createPallet() {
+            // El origen (0,0,0) será el centro del pallet en X y Z, y el piso en Y.
+            const geo = new THREE.BoxGeometry(PALLET_W, PALLET_H, PALLET_D);
+            const mat = new THREE.MeshStandardMaterial({ color: 0xd97706, roughness: 0.9 }); // Color madera
+            palletMesh = new THREE.Mesh(geo, mat);
+            palletMesh.position.set(0, PALLET_H / 2, 0);
+            palletMesh.castShadow = true;
+            palletMesh.receiveShadow = true;
+            palletMesh.userData = { isPallet: true };
+            scene.add(palletMesh);
+            
+            // Bordes para mayor claridad
+            const edges = new THREE.LineSegments(new THREE.EdgesGeometry(geo), new THREE.LineBasicMaterial({ color: 0x000000 }));
+            palletMesh.add(edges);
+        }
+
+        function updateLimitWireframe() {
+            if (limitWireframe) scene.remove(limitWireframe);
+            
+            const geo = new THREE.BoxGeometry(PALLET_W, maxHeight, PALLET_D);
+            // Movemos el wireframe para que empiece desde el piso (y=0) hasta maxHeight
+            geo.translate(0, maxHeight / 2, 0);
+            
+            const mat = new THREE.LineBasicMaterial({ color: 0x3b82f6, transparent: true, opacity: 0.3 });
+            const edges = new THREE.EdgesGeometry(geo);
+            limitWireframe = new THREE.LineSegments(edges, mat);
+            scene.add(limitWireframe);
+        }
+
+        // --- LECTURA DE EXCEL ---
+        function handleFileUpload(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const data = new Uint8Array(e.target.result);
+                const workbook = XLSX.read(data, {type: 'array'});
+                const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+                const jsonData = XLSX.utils.sheet_to_json(firstSheet);
+                
+                processExcelData(jsonData);
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        function processExcelData(data) {
+            availableBoxes = [];
+            // Buscar columnas que coincidan (comparación estricta de prefijos)
+            const getCol = (row, keys) => {
+                const k = Object.keys(row).find(key => {
+                    const clean = key.toLowerCase().trim();
+                    return keys.some(search => clean === search || clean.startsWith(search));
+                });
+                return k ? row[k] : null;
+            };
+
+            data.forEach((row, index) => {
+                const modelo = getCol(row, ['modelo', 'caja', 'nombre', 'sku', 'desc']) || `Caja ${index+1}`;
+                const ancho = parseFloat(getCol(row, ['ancho', 'width'])) || 0;
+                const alto = parseFloat(getCol(row, ['alto', 'height'])) || 0;
+                const prof = parseFloat(getCol(row, ['profundidad', 'largo', 'depth', 'long'])) || 0;
+                const peso = parseFloat(getCol(row, ['peso', 'weight'])) || 0;
+
+                if (ancho > 0 && alto > 0 && prof > 0) {
+                    const boxColor = colors[index % colors.length];
+                    availableBoxes.push({
+                        id: `box_${index}`,
+                        modelo,
+                        w: ancho,
+                        h: alto,
+                        d: prof,
+                        peso: peso,
+                        color: boxColor,
+                        materials: createBoxMaterials(modelo, boxColor)
+                    });
+                }
+            });
+
+            renderBoxList();
+            if (availableBoxes.length > 0) {
+                selectBox(availableBoxes[0]);
+                btnFillLayer.disabled = false;
+            } else {
+                uiBoxList.innerHTML = '<p class="text-xs text-red-400 italic text-center py-4">No se encontraron medidas válidas en el Excel.</p>';
+            }
+        }
+
+        function renderBoxList() {
+            uiBoxList.innerHTML = '';
+            availableBoxes.forEach(box => {
+                const div = document.createElement('div');
+                div.className = `p-2 rounded-md border border-gray-700 bg-gray-800 cursor-pointer hover:bg-gray-700 transition-colors flex items-center justify-between box-item`;
+                div.dataset.id = box.id;
+                div.innerHTML = `
+                    <div class="flex items-center gap-2">
+                        <div class="w-4 h-4 rounded-sm border border-gray-600" style="background-color: #${box.color.toString(16).padStart(6, '0')}"></div>
+                        <div class="flex flex-col">
+                            <span class="text-xs font-bold text-white">${box.modelo}</span>
+                            <span class="text-[10px] text-gray-400">${box.w}x${box.h}x${box.d} mm | ${box.peso} kg</span>
+                        </div>
+                    </div>
+                `;
+                div.onclick = () => selectBox(box);
+                uiBoxList.appendChild(div);
+            });
+        }
+
+        function selectBox(box) {
+            selectedBoxData = box;
+            currentEuler.set(0, 0, 0);
+            
+            // Estilos de selección
+            document.querySelectorAll('.box-item').forEach(el => {
+                el.classList.remove('border-blue-500', 'bg-gray-700');
+                if (el.dataset.id === box.id) el.classList.add('border-blue-500', 'bg-gray-700');
+            });
+
+            createGhostBox();
+        }
+
+        // --- MATERIALES CON TEXTO (CANVAS) ---
+        function createBoxMaterials(modelo, colorHex) {
+            const createTex = (text1, text2, isTop, isBot) => {
+                const canvas = document.createElement('canvas');
+                canvas.width = 256; canvas.height = 256;
+                const ctx = canvas.getContext('2d');
+                
+                ctx.fillStyle = '#' + colorHex.toString(16).padStart(6, '0');
+                ctx.fillRect(0, 0, 256, 256);
+                
+                ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+                ctx.lineWidth = 12;
+                ctx.strokeRect(0, 0, 256, 256);
+
+                ctx.textAlign = 'center'; 
+                ctx.textBaseline = 'middle';
+                
+                if (isTop) {
+                    ctx.fillStyle = 'yellow';
+                    ctx.font = 'bold 28px Arial';
+                    ctx.fillText("↑ ARRIBA ORIGINAL ↑", 128, 60);
+                }
+                if (isBot) {
+                    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+                    ctx.font = 'bold 28px Arial';
+                    ctx.fillText("↓ BASE ORIGINAL ↓", 128, 196);
+                }
+
+                ctx.fillStyle = 'white';
+                ctx.font = 'bold 32px Arial';
+                // Envolver texto si es muy largo
+                if (text1) ctx.fillText(text1.substring(0, 14), 128, text2 ? 110 : 128);
+                if (text2) ctx.fillText(text2.substring(0, 14), 128, 150);
+
+                return new THREE.CanvasTexture(canvas);
+            };
+
+            const tSide = createTex(modelo, null, false, false);
+            const tTop = createTex(modelo, null, true, false);
+            const tBot = createTex(modelo, null, false, true);
+
+            const mSide = new THREE.MeshStandardMaterial({ map: tSide, roughness: 0.6 });
+            const mTop = new THREE.MeshStandardMaterial({ map: tTop, roughness: 0.6 });
+            const mBot = new THREE.MeshStandardMaterial({ map: tBot, roughness: 0.6 });
+
+            // Right, Left, Top, Bottom, Front, Back
+            return [mSide, mSide, mTop, mBot, mSide, mSide];
+        }
+
+        // --- LÓGICA DE GHOST BOX Y COLOCACIÓN ---
+        function createGhostBox() {
+            if (ghostMesh) scene.remove(ghostMesh);
+            if (!selectedBoxData) return;
+
+            const geo = new THREE.BoxGeometry(selectedBoxData.w, selectedBoxData.h, selectedBoxData.d);
+            
+            // Clonamos materiales para hacerlos semitransparentes en el ghost
+            const ghostMats = selectedBoxData.materials.map(m => {
+                const gm = m.clone();
+                gm.transparent = true;
+                gm.opacity = 0.6;
+                gm.emissive = new THREE.Color(selectedBoxData.color);
+                gm.emissiveIntensity = 0.2;
+                return gm;
+            });
+            
+            ghostMesh = new THREE.Mesh(geo, ghostMats);
+            ghostMesh.rotation.copy(currentEuler);
+            
+            const edges = new THREE.LineSegments(new THREE.EdgesGeometry(geo), new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.8 }));
+            ghostMesh.add(edges);
+            
+            scene.add(ghostMesh);
+            updateGhostPosition(); // Actualiza su posición inmediatamente
+        }
+
+        function rotateBox(axis) {
+            if (!selectedBoxData) return;
+            const step = Math.PI / 2;
+            if (axis === 'x') currentEuler.x += step;
+            if (axis === 'y') currentEuler.y += step;
+            if (axis === 'z') currentEuler.z += step;
+            
+            // Normalizar ángulos
+            currentEuler.x = currentEuler.x % (Math.PI * 2);
+            currentEuler.y = currentEuler.y % (Math.PI * 2);
+            currentEuler.z = currentEuler.z % (Math.PI * 2);
+
+            createGhostBox();
+        }
+
+        let currentIntersection = null;
+
+        function getIntersectableObjects() {
+            return [palletMesh, ...placedBoxes.map(b => b.mesh)];
+        }
+
+        function updateGhostPosition() {
+            if (!ghostMesh) return;
+            
+            ghostMesh.visible = true;
+            raycaster.setFromCamera(mouse, camera);
+
+            // Buscar intersección con el pallet o cajas existentes
+            const intersects = raycaster.intersectObjects(getIntersectableObjects());
+
+            // Dimensiones físicas actuales del ghostMesh
+            ghostMesh.position.set(0,0,0);
+            ghostMesh.updateMatrixWorld();
+            const size = new THREE.Vector3();
+            new THREE.Box3().setFromObject(ghostMesh).getSize(size);
+            
+            const w = size.x;
+            const h = size.y;
+            const d = size.z;
+            
+            let targetX, targetZ, centerY;
+            let canPlace = false;
+
+            if (intersects.length > 0 && intersects[0].face && intersects[0].face.normal.y > 0.9) {
+                const hit = intersects[0];
+                centerY = hit.point.y + h / 2;
+                targetX = hit.point.x;
+                targetZ = hit.point.z;
+                
+                // Ajustar para no salirse del pallet
+                const minX = -PALLET_W/2 + w/2;
+                const maxX = PALLET_W/2 - w/2;
+                const minZ = -PALLET_D/2 + d/2;
+                const maxZ = PALLET_D/2 - d/2;
+
+                targetX = Math.max(minX, Math.min(maxX, targetX));
+                targetZ = Math.max(minZ, Math.min(maxZ, targetZ));
+
+                // Chequeo de colisión
+                ghostMesh.position.set(targetX, centerY, targetZ);
+                ghostMesh.updateMatrixWorld();
+                const virtualBox = new THREE.Box3().setFromObject(ghostMesh);
+                virtualBox.expandByScalar(-1);
+
+                canPlace = true;
+                for (const placed of placedBoxes) {
+                    const pbBox = new THREE.Box3().setFromObject(placed.mesh);
+                    if (virtualBox.intersectsBox(pbBox)) {
+                        canPlace = false;
+                        break;
+                    }
+                }
+
+                // Chequeo de altura máxima
+                if (hit.point.y + h > maxHeight) canPlace = false;
+                
+                if (canPlace) {
+                    currentIntersection = { x: targetX, y: centerY, z: targetZ, w, h, d, euler: currentEuler.clone() };
+                } else {
+                    currentIntersection = null;
+                }
+            } else {
+                // Proyectar en el piso infinito para que el usuario siempre vea la caja flotando en su cursor
+                const floorPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+                const planeIntersect = new THREE.Vector3();
+                raycaster.ray.intersectPlane(floorPlane, planeIntersect);
+                
+                if (planeIntersect) {
+                    targetX = planeIntersect.x;
+                    targetZ = planeIntersect.z;
+                    centerY = h / 2; // Apoyado en el piso (y=0)
+                } else {
+                    targetX = 0; targetZ = 0; centerY = h / 2;
+                }
+                canPlace = false;
+                currentIntersection = null;
+            }
+
+            // Actualizar posición y color visual final
+            ghostMesh.position.set(targetX, centerY, targetZ);
+
+            if (canPlace) {
+                ghostMesh.children[0].material.color.setHex(0xffffff); // Bordes normales
+                document.body.style.cursor = 'copy';
+            } else {
+                ghostMesh.children[0].material.color.setHex(0xff0000); // Bordes rojos (error / fuera del pallet)
+                document.body.style.cursor = 'not-allowed';
+            }
+        }
+
+        function onPointerMove(event) {
+            const rect = renderer.domElement.getBoundingClientRect();
+            mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+            mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+            updateGhostPosition();
+        }
+
+        function onPointerDown(event) {
+            // Click derecho para borrar caja específica
+            if (event.button === 2) {
+                raycaster.setFromCamera(mouse, camera);
+                const intersects = raycaster.intersectObjects(placedBoxes.map(b => b.mesh));
+                if (intersects.length > 0) {
+                    const hitMesh = intersects[0].object;
+                    removeSpecificBox(hitMesh);
+                }
+                return;
+            }
+
+            // Click izquierdo para colocar
+            if (event.button !== 0 || !ghostMesh || !ghostMesh.visible || !currentIntersection) return;
+
+            placeBox(currentIntersection);
+        }
+
+        function removeSpecificBox(mesh) {
+            scene.remove(mesh);
+            const index = placedBoxes.findIndex(b => b.mesh === mesh);
+            if (index !== -1) {
+                placedBoxes.splice(index, 1);
+            }
+            updateStats();
+            // Forzar reevaluación del mouse
+            updateGhostPosition();
+        }
+
+        function placeBox(pos) {
+            const geo = new THREE.BoxGeometry(selectedBoxData.w, selectedBoxData.h, selectedBoxData.d);
+            const mesh = new THREE.Mesh(geo, selectedBoxData.materials);
+            
+            mesh.rotation.copy(pos.euler);
+            mesh.position.set(pos.x, pos.y, pos.z);
+            mesh.castShadow = true;
+            mesh.receiveShadow = true;
+
+            const edges = new THREE.LineSegments(new THREE.EdgesGeometry(geo), new THREE.LineBasicMaterial({ color: 0x000000, linewidth: 2 }));
+            mesh.add(edges);
+
+            scene.add(mesh);
+            placedBoxes.push({
+                mesh: mesh,
+                data: selectedBoxData,
+                w: pos.w,
+                h: pos.h, // physical dimensions after rotation
+                d: pos.d,
+                y: pos.y - pos.h/2 // base Y
+            });
+
+            // Ocultar ghost para forzar re-evaluación en el próximo frame
+            ghostMesh.visible = false;
+            currentIntersection = null;
+
+            updateStats();
+        }
+
+        function undoLastBox() {
+            if (placedBoxes.length === 0) return;
+            const last = placedBoxes.pop();
+            scene.remove(last.mesh);
+            updateStats();
+        }
+
+        // --- LLENAR CAPA AUTOMÁTICAMENTE ---
+        function fillLayer() {
+            if (!selectedBoxData) return;
+            
+            // Determinar la altura base (Y) actual. 
+            // Buscamos el punto más alto del pallet o de la caja más alta colocada.
+            let highestY = PALLET_H; 
+            placedBoxes.forEach(b => {
+                if (b.y + b.h > highestY) highestY = b.y + b.h;
+            });
+
+            // Update ghostMesh temporarily to get physical size
+            ghostMesh.position.set(0,0,0);
+            ghostMesh.updateMatrixWorld();
+            const size = new THREE.Vector3();
+            new THREE.Box3().setFromObject(ghostMesh).getSize(size);
+            
+            const w = size.x;
+            const h = size.y;
+            const d = size.z;
+            
+            const baseY = highestY;
+            const centerY = baseY + h / 2;
+
+            if (baseY + h > maxHeight) {
+                alert('No se puede agregar otra capa. Se excede la altura máxima.');
+                return;
+            }
+
+            // Algoritmo de grilla simple: llenar desde la esquina superior izquierda
+            const startX = -PALLET_W/2 + w/2;
+            const startZ = -PALLET_D/2 + d/2;
+            
+            let boxesAdded = 0;
+
+            for (let z = startZ; z <= PALLET_D/2 - d/2 + 1; z += d) { // +1 for floating point safety
+                for (let x = startX; x <= PALLET_W/2 - w/2 + 1; x += w) {
+                    
+                    ghostMesh.position.set(x, centerY, z);
+                    ghostMesh.updateMatrixWorld();
+                    const virtualBox = new THREE.Box3().setFromObject(ghostMesh);
+                    virtualBox.expandByScalar(-1);
+                    
+                    let overlaps = false;
+                    for (const placed of placedBoxes) {
+                        const pbBox = new THREE.Box3().setFromObject(placed.mesh);
+                        if (virtualBox.intersectsBox(pbBox)) {
+                            overlaps = true;
+                            break;
+                        }
+                    }
+
+                    if (!overlaps) {
+                        placeBox({ x, y: centerY, z, w, h, d, euler: currentEuler.clone() });
+                        boxesAdded++;
+                    }
+                }
+            }
+
+            if (boxesAdded === 0) {
+                alert('No hay espacio para colocar una capa en esta orientación.');
+            }
+        }
+
+        // --- ACTUALIZAR ESTADÍSTICAS (HUD) ---
+        function updateStats() {
+            let currentHighestY = PALLET_H;
+            let totalWeight = 0;
+            const breakdown = {};
+
+            placedBoxes.forEach(b => {
+                if (b.y + b.h > currentHighestY) currentHighestY = b.y + b.h;
+                totalWeight += b.data.peso;
+                
+                if (breakdown[b.data.modelo]) breakdown[b.data.modelo]++;
+                else breakdown[b.data.modelo] = 1;
+            });
+
+            // Altura
+            statHeight.textContent = `${currentHighestY.toFixed(0)} mm`;
+            statHeightRem.textContent = `Quedan ${(maxHeight - currentHighestY).toFixed(0)} mm`;
+            
+            const pct = Math.min(100, (currentHighestY / maxHeight) * 100);
+            barHeight.style.width = `${pct}%`;
+            if (pct > 90) barHeight.className = "bg-red-500 h-2 rounded-full transition-all duration-300";
+            else if (pct > 75) barHeight.className = "bg-yellow-500 h-2 rounded-full transition-all duration-300";
+            else barHeight.className = "bg-blue-500 h-2 rounded-full transition-all duration-300";
+
+            // Peso y Cantidad
+            statWeight.textContent = `${totalWeight.toFixed(1)} kg`;
+            statCount.textContent = placedBoxes.length;
+
+            // Desglose
+            statBreakdown.innerHTML = '';
+            if (placedBoxes.length === 0) {
+                statBreakdown.innerHTML = '<li class="text-gray-600 italic">No hay cajas</li>';
+            } else {
+                for (const [modelo, qty] of Object.entries(breakdown)) {
+                    statBreakdown.innerHTML += `
+                        <li class="flex justify-between border-b border-gray-700/50 pb-1">
+                            <span class="truncate pr-2">${modelo}</span>
+                            <span class="font-bold text-blue-400">x${qty}</span>
+                        </li>
+                    `;
+                }
+            }
+        }
+
+        // --- EXPORTAR A PDF ---
+        async function exportPDF() {
+            if (placedBoxes.length === 0) {
+                alert("No hay cajas en el pallet para exportar.");
+                return;
+            }
+
+            const btn = document.getElementById('btn-export');
+            const originalText = btn.innerHTML;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generando...';
+            btn.disabled = true;
+
+            try {
+                // 1. Capturar el Canvas 3D
+                renderer.render(scene, camera);
+                const imgData3D = renderer.domElement.toDataURL('image/jpeg', 0.9);
+
+                // 2. Crear PDF
+                const { jsPDF } = window.jspdf;
+                const pdf = new jsPDF('p', 'mm', 'a4');
+                const pageWidth = pdf.internal.pageSize.getWidth();
+
+                // Cabecera
+                pdf.setFontSize(22);
+                pdf.setTextColor(41, 128, 185);
+                pdf.text("Reporte de Paletizado", 14, 20);
+                
+                pdf.setFontSize(10);
+                pdf.setTextColor(100, 100, 100);
+                pdf.text(`Fecha: ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}`, 14, 28);
+
+                // Imagen 3D (ajustando proporción)
+                const imgWidth = pageWidth - 28;
+                const imgHeight = (renderer.domElement.height / renderer.domElement.width) * imgWidth;
+                pdf.addImage(imgData3D, 'JPEG', 14, 35, imgWidth, imgHeight);
+
+                // Estadísticas
+                let startY = 35 + imgHeight + 15;
+                pdf.setFontSize(14);
+                pdf.setTextColor(0, 0, 0);
+                pdf.text("Resumen del Pallet", 14, startY);
+
+                startY += 10;
+                pdf.setFontSize(11);
+                const highestY = statHeight.textContent;
+                const weight = statWeight.textContent;
+                const count = statCount.textContent;
+                
+                pdf.text(`Altura Total: ${highestY} / ${maxHeight} mm`, 14, startY);
+                pdf.text(`Peso Total: ${weight}`, 14, startY + 8);
+                pdf.text(`Cantidad de Cajas: ${count}`, 14, startY + 16);
+
+                // Desglose
+                startY += 30;
+                pdf.setFontSize(14);
+                pdf.text("Detalle de Cajas", 14, startY);
+                
+                startY += 10;
+                pdf.setFontSize(11);
+                
+                const breakdown = {};
+                placedBoxes.forEach(b => {
+                    if (breakdown[b.data.modelo]) breakdown[b.data.modelo]++;
+                    else breakdown[b.data.modelo] = 1;
+                });
+
+                let i = 0;
+                for (const [modelo, qty] of Object.entries(breakdown)) {
+                    pdf.text(`- ${modelo}: ${qty} unidades`, 14, startY + (i * 8));
+                    i++;
+                }
+
+                pdf.save(`Palletizado_${new Date().getTime()}.pdf`);
+
+            } catch (err) {
+                console.error(err);
+                alert("Error al exportar PDF.");
+            } finally {
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+            }
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+            renderer.render(scene, camera);
+        }
+    </script>
+</body>
+</html>
