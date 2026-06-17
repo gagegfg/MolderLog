@@ -17,7 +17,10 @@
             backdrop-filter: blur(12px);
             -webkit-backdrop-filter: blur(12px);
             border: 1px solid rgba(255, 255, 255, 0.1);
+            transition: transform 0.3s ease-in-out, opacity 0.3s ease-in-out;
         }
+        .panel-hidden-left { transform: translateX(-110%); opacity: 0; pointer-events: none; }
+        .panel-hidden-right { transform: translateX(110%); opacity: 0; pointer-events: none; }
         /* Ocultar barra de desplazamiento */
         ::-webkit-scrollbar { width: 6px; }
         ::-webkit-scrollbar-track { background: transparent; }
@@ -28,10 +31,18 @@
 <body>
 
     <!-- UI Overlay -->
-    <div id="ui-container" class="absolute inset-0 pointer-events-none flex p-4 gap-4 z-10">
+    <div id="ui-container" class="absolute inset-0 pointer-events-none flex p-4 gap-4 z-10 overflow-hidden">
         
+        <button id="btn-toggle-left" class="absolute top-4 left-4 z-20 bg-gray-800 text-gray-400 p-2 rounded-md border border-gray-600 hover:text-white hover:bg-gray-700 pointer-events-auto transition-colors" title="Mostrar/Ocultar Panel Izquierdo">
+            <i class="fas fa-bars"></i>
+        </button>
+
+        <button id="btn-toggle-right" class="absolute top-4 right-4 z-20 bg-gray-800 text-gray-400 p-2 rounded-md border border-gray-600 hover:text-white hover:bg-gray-700 pointer-events-auto transition-colors" title="Mostrar/Ocultar Estadísticas">
+            <i class="fas fa-chart-pie"></i>
+        </button>
+
         <!-- Panel Izquierdo: Controles y Cajas -->
-        <div class="glass-panel w-80 h-full flex flex-col rounded-xl shadow-2xl pointer-events-auto overflow-hidden">
+        <div id="panel-left" class="glass-panel w-80 h-full flex flex-col rounded-xl shadow-2xl pointer-events-auto overflow-hidden mt-10">
             <div class="p-4 border-b border-gray-700 bg-gray-800/50">
                 <h1 class="text-xl font-bold text-white flex items-center gap-2">
                     <i class="fas fa-boxes text-blue-400"></i> Simulador 3D
@@ -51,10 +62,14 @@
 
                 <div>
                     <label class="block text-xs text-gray-400 mb-1">Altura Máxima (incluye pallet 15cm)</label>
-                    <select id="height-limit" class="w-full bg-gray-900 border border-gray-700 rounded-md py-1.5 px-2 text-sm text-white focus:outline-none focus:border-blue-500">
-                        <option value="2000">2.0 metros (2000 mm)</option>
-                        <option value="2400" selected>2.4 metros (2400 mm)</option>
-                    </select>
+                    <div class="flex gap-2">
+                        <input type="number" id="height-input" value="2400" min="500" step="50" class="w-full bg-gray-900 border border-gray-700 rounded-md py-1.5 px-2 text-sm text-white focus:outline-none focus:border-blue-500">
+                        <span class="text-xs text-gray-400 self-center">mm</span>
+                    </div>
+                    <div class="flex gap-2 mt-2">
+                        <button id="btn-h-2000" class="flex-1 text-[10px] bg-gray-700 hover:bg-gray-600 px-2 py-1 rounded text-gray-300 transition-colors">2000 mm</button>
+                        <button id="btn-h-2400" class="flex-1 text-[10px] bg-blue-600 hover:bg-blue-500 px-2 py-1 rounded text-white transition-colors">2400 mm</button>
+                    </div>
                 </div>
             </div>
 
@@ -69,18 +84,24 @@
             <!-- Controles de Acción -->
             <div class="p-4 border-t border-gray-700 bg-gray-800/50 space-y-3">
                 <div class="flex flex-col gap-1">
-                    <span class="text-[10px] text-gray-400 uppercase tracking-wider text-center">Rotación 3D</span>
+                    <span class="text-[10px] text-gray-400 uppercase tracking-wider text-center">Rotación Espacial</span>
                     <div class="flex items-center gap-1">
-                        <button id="btn-rot-x" class="flex-1 bg-gray-700 hover:bg-gray-600 text-white text-xs font-semibold py-2 rounded-md transition-colors" title="Voltear hacia adelante/atrás (Eje X)">
-                            <i class="fas fa-sync-alt transform rotate-90"></i> X
+                        <button id="btn-rot-x" class="flex-1 flex justify-center items-center bg-gray-700 hover:bg-gray-600 text-white py-2 rounded-md transition-colors" title="Eje X (Voltear frontal)">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                              <line x1="2" y1="12" x2="22" y2="12" />
+                              <path d="M12 4 c-3 0 -3 16 0 16 c 2 0 3 -2 3 -4" />
+                              <polyline points="12 18 15 16 17 19" />
+                            </svg>
                         </button>
-                        <button id="btn-rot-y" class="flex-1 bg-gray-700 hover:bg-gray-600 text-white text-xs font-semibold py-2 rounded-md transition-colors" title="Girar sobre la base (Eje Y)">
-                            <i class="fas fa-undo"></i> Y
-                        </button>
-                        <button id="btn-rot-z" class="flex-1 bg-gray-700 hover:bg-gray-600 text-white text-xs font-semibold py-2 rounded-md transition-colors" title="Acostar de lado (Eje Z)">
-                            <i class="fas fa-sync-alt"></i> Z
+                        <button id="btn-rot-y" class="flex-1 flex justify-center items-center bg-gray-700 hover:bg-gray-600 text-white py-2 rounded-md transition-colors" title="Eje Y (Girar base)">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                              <line x1="12" y1="2" x2="12" y2="22" />
+                              <path d="M4 12 c0 4 16 4 16 0 c0 -2 -2 -3 -4 -3" />
+                              <polyline points="18 12 16 9 19 7" />
+                            </svg>
                         </button>
                     </div>
+                    <span class="text-[10px] text-yellow-500 text-center block mt-1"><i class="fas fa-lightbulb"></i> Presiona <b>ESC</b> para soltar la caja actual y poder seleccionar/editar otras ya colocadas.</span>
                 </div>
                 <div class="flex items-center gap-2">
                     <button id="btn-fill-layer" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold py-2 rounded-md transition-colors disabled:opacity-50" disabled>
@@ -99,7 +120,7 @@
         </div>
 
         <!-- Panel Derecho: Estadísticas HUD -->
-        <div class="absolute top-4 right-4 glass-panel w-64 rounded-xl shadow-2xl pointer-events-auto overflow-hidden">
+        <div id="panel-right" class="absolute top-14 right-4 glass-panel w-64 rounded-xl shadow-2xl pointer-events-auto overflow-hidden">
             <div class="p-3 border-b border-gray-700 bg-blue-600/20">
                 <h2 class="text-sm font-bold text-blue-400 text-center uppercase tracking-wider"><i class="fas fa-chart-pie mr-1"></i> Estado del Pallet</h2>
             </div>
@@ -142,6 +163,29 @@
                         <li class="text-gray-600 italic">No hay cajas</li>
                     </ul>
                 </div>
+
+                <!-- Editor de Pesos (Colapsable) -->
+                <div class="border-t border-gray-700 pt-3">
+                    <button id="btn-toggle-weights" onclick="document.getElementById('panel-weights').classList.toggle('hidden'); document.getElementById('icon-weights-collapse').classList.toggle('fa-chevron-down'); document.getElementById('icon-weights-collapse').classList.toggle('fa-chevron-up');" class="w-full flex justify-between items-center text-[10px] text-gray-400 uppercase tracking-wider hover:text-white transition-colors">
+                        <span>Editar Pesos Base</span>
+                        <i id="icon-weights-collapse" class="fas fa-chevron-down"></i>
+                    </button>
+                    <div id="panel-weights" class="mt-2 hidden">
+                        <div class="max-h-32 overflow-y-auto">
+                            <table class="w-full text-xs text-left text-gray-300">
+                                <thead>
+                                    <tr class="border-b border-gray-700 text-[10px] text-gray-500 sticky top-0 bg-gray-800">
+                                        <th class="py-1">Caja</th>
+                                        <th class="py-1 w-16 text-right">Peso (kg)</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="table-weights-body">
+                                    <tr><td colspan="2" class="text-gray-600 italic py-1">Carga un Excel</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -151,7 +195,7 @@
             <span class="w-px h-4 bg-gray-600"></span>
             <span class="text-gray-300"><i class="fas fa-eraser text-red-400 mr-1"></i> Clic Der. borrar</span>
             <span class="w-px h-4 bg-gray-600"></span>
-            <span class="text-gray-300"><i class="fas fa-sync-alt text-green-400 mr-1"></i> X/Y/Z rotar</span>
+            <span class="text-gray-300"><i class="fas fa-sync-alt text-green-400 mr-1"></i> X/Y rotar</span>
             <span class="w-px h-4 bg-gray-600"></span>
             <span class="text-gray-300"><i class="fas fa-arrows-alt text-purple-400 mr-1"></i> Arrastrar orbitar</span>
         </div>
@@ -177,6 +221,7 @@
         let scene, camera, renderer, controls;
         let limitWireframe;
         let palletMesh;
+        let rulerGroup;
         let maxHeight = 2400; // Límite actual
         
         let availableBoxes = []; // Cargadas desde Excel
@@ -185,6 +230,8 @@
         
         let placedBoxes = []; // Array de objetos { mesh, data }
         let ghostMesh = null; // Malla transparente para previsualizar
+        let suggestedMesh = null; // Silueta sugerida por el optimizador
+        let isMouseOverUI = true; // Empieza true hasta que el usuario mueva el mouse al canvas
 
         const raycaster = new THREE.Raycaster();
         const mouse = new THREE.Vector2();
@@ -193,7 +240,7 @@
 
         // --- ELEMENTOS DOM ---
         const uiBoxList = document.getElementById('box-list');
-        const uiHeightLimit = document.getElementById('height-limit');
+        const uiHeightInput = document.getElementById('height-input');
         const statHeight = document.getElementById('stat-height');
         const statHeightRem = document.getElementById('stat-height-rem');
         const barHeight = document.getElementById('bar-height');
@@ -209,7 +256,6 @@
             // 1. Escena
             scene = new THREE.Scene();
             scene.background = new THREE.Color(0x111827);
-            scene.fog = new THREE.Fog(0x111827, 2000, 6000);
 
             // 2. Cámara
             camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 10, 10000);
@@ -249,29 +295,48 @@
             createFloor();
             createPallet();
             updateLimitWireframe();
+            updateRuler();
 
             // 7. Eventos
             window.addEventListener('resize', onWindowResize);
             renderer.domElement.addEventListener('pointermove', onPointerMove);
             renderer.domElement.addEventListener('pointerdown', onPointerDown);
+            renderer.domElement.addEventListener('pointerleave', () => { isMouseOverUI = true; updateGhostPosition(); });
+            renderer.domElement.addEventListener('pointerenter', () => { isMouseOverUI = false; updateGhostPosition(); });
             renderer.domElement.addEventListener('contextmenu', (e) => e.preventDefault()); // Evitar menú de clic derecho
+            
             window.addEventListener('keydown', (e) => {
-                const k = e.key.toLowerCase();
-                if (k === 'x') rotateBox('x');
-                if (k === 'y') rotateBox('y');
-                if (k === 'z') rotateBox('z');
+                if (e.key === 'Escape') deselectBox();
+                if (e.key.toLowerCase() === 'x') rotateBox('x');
+                if (e.key.toLowerCase() === 'y') rotateBox('y');
             });
 
             // UI Events
             document.getElementById('file-upload').addEventListener('change', handleFileUpload);
-            uiHeightLimit.addEventListener('change', (e) => {
-                maxHeight = parseInt(e.target.value);
+            
+            const changeHeight = (val) => {
+                maxHeight = val;
+                uiHeightInput.value = val;
                 updateLimitWireframe();
+                updateRuler();
                 updateStats();
+                
+                document.getElementById('btn-h-2000').className = `flex-1 text-[10px] px-2 py-1 rounded transition-colors ${val == 2000 ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300'}`;
+                document.getElementById('btn-h-2400').className = `flex-1 text-[10px] px-2 py-1 rounded transition-colors ${val == 2400 ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300'}`;
+            };
+            
+            uiHeightInput.addEventListener('change', (e) => changeHeight(parseInt(e.target.value)));
+            document.getElementById('btn-h-2000').addEventListener('click', () => changeHeight(2000));
+            document.getElementById('btn-h-2400').addEventListener('click', () => changeHeight(2400));
+            
+            document.getElementById('btn-toggle-left').addEventListener('click', () => {
+                document.getElementById('panel-left').classList.toggle('panel-hidden-left');
+            });
+            document.getElementById('btn-toggle-right').addEventListener('click', () => {
+                document.getElementById('panel-right').classList.toggle('panel-hidden-right');
             });
             document.getElementById('btn-rot-x').addEventListener('click', () => rotateBox('x'));
             document.getElementById('btn-rot-y').addEventListener('click', () => rotateBox('y'));
-            document.getElementById('btn-rot-z').addEventListener('click', () => rotateBox('z'));
             document.getElementById('btn-undo').addEventListener('click', undoLastBox);
             document.getElementById('btn-export').addEventListener('click', exportPDF);
             btnFillLayer.addEventListener('click', fillLayer);
@@ -345,6 +410,43 @@
             scene.add(limitWireframe);
         }
 
+        function updateRuler() {
+            if (rulerGroup) scene.remove(rulerGroup);
+            rulerGroup = new THREE.Group();
+            
+            // Posicionar regla en la esquina posterior izquierda del pallet
+            rulerGroup.position.set(-PALLET_W/2 - 100, 0, -PALLET_D/2);
+
+            const mat = new THREE.LineBasicMaterial({ color: 0x10b981, linewidth: 2 });
+            const points = [new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, maxHeight, 0)];
+            rulerGroup.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(points), mat));
+
+            for (let y = 0; y <= maxHeight; y += 100) {
+                const isMajor = (y % 500 === 0);
+                const tickLen = isMajor ? -50 : -20; // Hacia afuera
+                const tp = [new THREE.Vector3(0, y, 0), new THREE.Vector3(tickLen, y, 0)];
+                rulerGroup.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(tp), mat));
+
+                if (isMajor) {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = 256; canvas.height = 64;
+                    const ctx = canvas.getContext('2d');
+                    ctx.fillStyle = '#10b981';
+                    ctx.font = 'bold 36px Arial';
+                    ctx.textAlign = 'right';
+                    ctx.fillText(y + ' mm', 250, 40);
+                    
+                    const tex = new THREE.CanvasTexture(canvas);
+                    const spriteMat = new THREE.SpriteMaterial({ map: tex, transparent: true });
+                    const sprite = new THREE.Sprite(spriteMat);
+                    sprite.scale.set(256, 64, 1);
+                    sprite.position.set(tickLen - 150, y, 0);
+                    rulerGroup.add(sprite);
+                }
+            }
+            scene.add(rulerGroup);
+        }
+
         // --- LECTURA DE EXCEL ---
         function handleFileUpload(e) {
             const file = e.target.files[0];
@@ -396,6 +498,7 @@
             });
 
             renderBoxList();
+            renderWeightsTable();
             if (availableBoxes.length > 0) {
                 selectBox(availableBoxes[0]);
                 btnFillLayer.disabled = false;
@@ -415,7 +518,7 @@
                         <div class="w-4 h-4 rounded-sm border border-gray-600" style="background-color: #${box.color.toString(16).padStart(6, '0')}"></div>
                         <div class="flex flex-col">
                             <span class="text-xs font-bold text-white">${box.modelo}</span>
-                            <span class="text-[10px] text-gray-400">${box.w}x${box.h}x${box.d} mm | ${box.peso} kg</span>
+                            <span id="desc-${box.id}" class="text-[10px] text-gray-400">${box.w}x${box.h}x${box.d} mm | ${box.peso} kg</span>
                         </div>
                     </div>
                 `;
@@ -424,30 +527,112 @@
             });
         }
 
-        function selectBox(box) {
-            selectedBoxData = box;
-            currentEuler.set(0, 0, 0);
+        function renderWeightsTable() {
+            const tbody = document.getElementById('table-weights-body');
+            if (!tbody) return;
+            tbody.innerHTML = '';
+            
+            if (availableBoxes.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="2" class="text-gray-600 italic py-1">Sin datos</td></tr>';
+                return;
+            }
+
+            availableBoxes.forEach(box => {
+                const tr = document.createElement('tr');
+                tr.className = "border-b border-gray-700/50";
+                tr.innerHTML = `
+                    <td class="py-1 px-1 truncate max-w-[100px]" title="${box.modelo}">${box.modelo}</td>
+                    <td class="py-1 px-1">
+                        <input type="number" step="0.1" value="${box.peso}" data-id="${box.id}" class="w-full bg-gray-900 text-white border border-gray-600 rounded px-1 py-0.5 text-right focus:border-blue-500 focus:outline-none input-weight">
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+
+            // Listeners
+            document.querySelectorAll('.input-weight').forEach(input => {
+                input.addEventListener('input', (e) => {
+                    const id = e.target.dataset.id;
+                    const newWeight = parseFloat(e.target.value) || 0;
+                    const box = availableBoxes.find(b => b.id === id);
+                    if (box) {
+                        box.peso = newWeight;
+                        // Actualizar label de la lista lateral
+                        const boxItemInfo = document.getElementById(`desc-${id}`);
+                        if (boxItemInfo) boxItemInfo.innerText = `${box.w}x${box.h}x${box.d} mm | ${newWeight} kg`;
+                        
+                        // Actualizar estadísticas (afecta a todas las cajas colocadas)
+                        updateStats();
+                    }
+                });
+            });
+        }
+
+        function selectBox(boxData) {
+            // Si hace clic en la caja que ya tiene seleccionada, se deselecciona (toggle)
+            if (selectedBoxData && selectedBoxData.id === boxData.id) {
+                deselectBox();
+                return;
+            }
+
+            selectedBoxData = boxData;
+            currentEuler.set(0, 0, 0); // Reset rotación
             
             // Estilos de selección
             document.querySelectorAll('.box-item').forEach(el => {
                 el.classList.remove('border-blue-500', 'bg-gray-700');
-                if (el.dataset.id === box.id) el.classList.add('border-blue-500', 'bg-gray-700');
+                if (el.dataset.id === boxData.id) el.classList.add('border-blue-500', 'bg-gray-700');
             });
 
             createGhostBox();
+            updateSuggestedSpot();
+            updateGhostPosition(); // Forzar actualización visual inmediata
         }
 
-        // --- MATERIALES CON TEXTO (CANVAS) ---
+        function deselectBox() {
+            selectedBoxData = null;
+            if (ghostMesh) scene.remove(ghostMesh);
+            ghostMesh = null;
+            if (suggestedMesh) scene.remove(suggestedMesh);
+            suggestedMesh = null;
+            document.body.style.cursor = 'default';
+
+            // Quitar estilos de selección del menú lateral
+            document.querySelectorAll('.box-item').forEach(el => {
+                el.classList.remove('border-blue-500', 'bg-gray-700');
+            });
+        }
+
+        // --- MATERIALES CON TEXTO Y REALISMO (CANVAS) ---
         function createBoxMaterials(modelo, colorHex) {
             const createTex = (text1, text2, isTop, isBot) => {
                 const canvas = document.createElement('canvas');
                 canvas.width = 256; canvas.height = 256;
                 const ctx = canvas.getContext('2d');
                 
+                // Color base
                 ctx.fillStyle = '#' + colorHex.toString(16).padStart(6, '0');
                 ctx.fillRect(0, 0, 256, 256);
                 
-                ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+                // Ruido procedural para textura de cartón
+                const imgData = ctx.getImageData(0, 0, 256, 256);
+                for (let i = 0; i < imgData.data.length; i += 4) {
+                    const noise = (Math.random() - 0.5) * 30;
+                    imgData.data[i] = Math.max(0, Math.min(255, imgData.data[i] + noise));
+                    imgData.data[i+1] = Math.max(0, Math.min(255, imgData.data[i+1] + noise));
+                    imgData.data[i+2] = Math.max(0, Math.min(255, imgData.data[i+2] + noise));
+                }
+                ctx.putImageData(imgData, 0, 0);
+
+                // Sombreado de bordes
+                const grad = ctx.createRadialGradient(128, 128, 100, 128, 128, 180);
+                grad.addColorStop(0, 'rgba(0,0,0,0)');
+                grad.addColorStop(1, 'rgba(0,0,0,0.5)');
+                ctx.fillStyle = grad;
+                ctx.fillRect(0, 0, 256, 256);
+                
+                // Marco
+                ctx.strokeStyle = 'rgba(0,0,0,0.6)';
                 ctx.lineWidth = 12;
                 ctx.strokeRect(0, 0, 256, 256);
 
@@ -514,18 +699,21 @@
         }
 
         function rotateBox(axis) {
-            if (!selectedBoxData) return;
+            if (!selectedBoxData || !ghostMesh) return;
             const step = Math.PI / 2;
-            if (axis === 'x') currentEuler.x += step;
-            if (axis === 'y') currentEuler.y += step;
-            if (axis === 'z') currentEuler.z += step;
+            let axisVec;
+            if (axis === 'x') axisVec = new THREE.Vector3(1, 0, 0);
+            if (axis === 'y') axisVec = new THREE.Vector3(0, 1, 0);
             
-            // Normalizar ángulos
-            currentEuler.x = currentEuler.x % (Math.PI * 2);
-            currentEuler.y = currentEuler.y % (Math.PI * 2);
-            currentEuler.z = currentEuler.z % (Math.PI * 2);
+            // Rotar sobre el eje global (mundo) para que los giros sean siempre intuitivos
+            // sin importar cómo esté acostada la caja actualmente.
+            ghostMesh.rotateOnWorldAxis(axisVec, step);
+            
+            // Actualizamos nuestra variable de estado
+            currentEuler.copy(ghostMesh.rotation);
 
             createGhostBox();
+            updateSuggestedSpot();
         }
 
         let currentIntersection = null;
@@ -534,14 +722,97 @@
             return [palletMesh, ...placedBoxes.map(b => b.mesh)];
         }
 
+        // --- OPTIMIZADOR INTELIGENTE (DESACTIVADO POR PETICIÓN DEL USUARIO) ---
+        function updateSuggestedSpot() {
+            if (suggestedMesh) scene.remove(suggestedMesh);
+            suggestedMesh = null;
+            return; // Se deshabilita la simulación de posición sugerida
+
+
+            // Usamos las dimensiones físicas rotadas
+            ghostMesh.position.set(0,0,0);
+            ghostMesh.rotation.copy(currentEuler);
+            ghostMesh.updateMatrixWorld();
+            const size = new THREE.Vector3();
+            new THREE.Box3().setFromObject(ghostMesh).getSize(size);
+            
+            const physW = size.x;
+            const physH = size.y;
+            const physD = size.z;
+
+            let bestPos = null;
+            let lowestY = Infinity;
+
+            const layerHeights = [PALLET_H];
+            placedBoxes.forEach(b => {
+                const topY = b.y + b.h;
+                if (!layerHeights.includes(topY)) layerHeights.push(topY);
+            });
+            layerHeights.sort((a,b) => a - b);
+
+            for (const baseY of layerHeights) {
+                if (baseY + physH > maxHeight) continue;
+                if (bestPos && baseY > lowestY) break;
+
+                const step = 20; // Resolución del escaneo
+                // Tolerancia overhang
+                const overX = physW * 0.15;
+                const overZ = physD * 0.15;
+                const minX = -PALLET_W/2 + physW/2 - overX;
+                const maxX = PALLET_W/2 - physW/2 + overX;
+                const minZ = -PALLET_D/2 + physD/2 - overZ;
+                const maxZ = PALLET_D/2 - physD/2 + overZ;
+
+                for (let z = minZ; z <= maxZ; z += step) {
+                    for (let x = minX; x <= maxX; x += step) {
+                        const centerY = baseY + physH/2;
+                        const vBox = new THREE.Box3().setFromCenterAndSize(
+                            new THREE.Vector3(x, centerY, z),
+                            new THREE.Vector3(physW*0.98, physH*0.98, physD*0.98)
+                        );
+                        let overlaps = false;
+                        for (const pb of placedBoxes) {
+                            if (vBox.intersectsBox(new THREE.Box3().setFromObject(pb.mesh))) { overlaps = true; break; }
+                        }
+                        
+                        let supported = (baseY === PALLET_H);
+                        if (!supported) {
+                            const groundBox = new THREE.Box3().setFromCenterAndSize(
+                                new THREE.Vector3(x, baseY - 5, z),
+                                new THREE.Vector3(physW*0.5, 10, physD*0.5)
+                            );
+                            for (const pb of placedBoxes) {
+                                if (groundBox.intersectsBox(new THREE.Box3().setFromObject(pb.mesh))) { supported = true; break; }
+                            }
+                        }
+
+                        if (!overlaps && supported) {
+                            bestPos = { x, y: centerY, z };
+                            lowestY = baseY;
+                            break;
+                        }
+                    }
+                    if (bestPos) break;
+                }
+                if (bestPos) break;
+            }
+
+            if (bestPos) {
+                const geo = new THREE.BoxGeometry(physW, physH, physD);
+                const mat = new THREE.MeshBasicMaterial({ color: 0x00ff00, wireframe: true, transparent: true, opacity: 0.8 });
+                suggestedMesh = new THREE.Mesh(geo, mat);
+                suggestedMesh.position.set(bestPos.x, bestPos.y, bestPos.z);
+                scene.add(suggestedMesh);
+            }
+        }
+
         function updateGhostPosition() {
             if (!ghostMesh) return;
             
             ghostMesh.visible = true;
-            raycaster.setFromCamera(mouse, camera);
 
-            // Buscar intersección con el pallet o cajas existentes
-            const intersects = raycaster.intersectObjects(getIntersectableObjects());
+            // Guardar la posición anterior para restaurarla si abortamos la actualización
+            const prevPos = ghostMesh.position.clone();
 
             // Dimensiones físicas actuales del ghostMesh
             ghostMesh.position.set(0,0,0);
@@ -556,58 +827,136 @@
             let targetX, targetZ, centerY;
             let canPlace = false;
 
-            if (intersects.length > 0 && intersects[0].face && intersects[0].face.normal.y > 0.9) {
-                const hit = intersects[0];
-                centerY = hit.point.y + h / 2;
-                targetX = hit.point.x;
-                targetZ = hit.point.z;
+            if (isMouseOverUI) {
+                // Modo Showroom Seguro: Si el mouse está en la UI, flotar alto y al centro.
+                targetX = 0;
+                targetZ = 0;
+                centerY = Math.max(PALLET_H + h/2 + 300, maxHeight / 2);
+                currentIntersection = null;
                 
-                // Ajustar para no salirse del pallet
-                const minX = -PALLET_W/2 + w/2;
-                const maxX = PALLET_W/2 - w/2;
-                const minZ = -PALLET_D/2 + d/2;
-                const maxZ = PALLET_D/2 - d/2;
-
-                targetX = Math.max(minX, Math.min(maxX, targetX));
-                targetZ = Math.max(minZ, Math.min(maxZ, targetZ));
-
-                // Chequeo de colisión
                 ghostMesh.position.set(targetX, centerY, targetZ);
-                ghostMesh.updateMatrixWorld();
-                const virtualBox = new THREE.Box3().setFromObject(ghostMesh);
-                virtualBox.expandByScalar(-1);
+                ghostMesh.children[0].material.color.setHex(0xffffff);
+                document.body.style.cursor = 'default';
+                return;
+            }
 
-                canPlace = true;
-                for (const placed of placedBoxes) {
-                    const pbBox = new THREE.Box3().setFromObject(placed.mesh);
-                    if (virtualBox.intersectsBox(pbBox)) {
-                        canPlace = false;
-                        break;
+            raycaster.setFromCamera(mouse, camera);
+
+            // Buscar intersección con el pallet o cajas existentes (false para no intersectar los bordes/líneas)
+            const intersects = raycaster.intersectObjects(getIntersectableObjects(), false);
+
+            if (intersects.length > 0 && intersects[0].face) {
+                const hit = intersects[0];
+                
+                // Convertir la normal local de la cara a normal del mundo (por si la caja base fue rotada)
+                const normalMatrix = new THREE.Matrix3().getNormalMatrix(hit.object.matrixWorld);
+                const worldNormal = hit.face.normal.clone().applyMatrix3(normalMatrix).normalize();
+
+                if (worldNormal.y > 0.9) {
+                    centerY = hit.point.y + h / 2;
+                    targetX = hit.point.x;
+                    targetZ = hit.point.z;
+                } else {
+                    // Golpeó un lateral de una caja.
+                    // En lugar de tirarlo al piso, lo empujamos hacia afuera de la pared
+                    // y tiramos un rayo hacia abajo para ver sobre qué se apoya.
+                    targetX = hit.point.x + worldNormal.x * (w / 2 + 0.1);
+                    targetZ = hit.point.z + worldNormal.z * (d / 2 + 0.1);
+                    
+                    // Rayo hacia abajo simulando gravedad
+                    const rayOrigin = new THREE.Vector3(targetX, hit.point.y + h/2 + 10, targetZ);
+                    const downRay = new THREE.Raycaster(rayOrigin, new THREE.Vector3(0, -1, 0));
+                    const downHits = downRay.intersectObjects(getIntersectableObjects(), false);
+                    
+                    if (downHits.length > 0) {
+                        centerY = downHits[0].point.y + h / 2;
+                    } else {
+                        centerY = PALLET_H + h / 2;
                     }
                 }
-
-                // Chequeo de altura máxima
-                if (hit.point.y + h > maxHeight) canPlace = false;
-                
-                if (canPlace) {
-                    currentIntersection = { x: targetX, y: centerY, z: targetZ, w, h, d, euler: currentEuler.clone() };
-                } else {
-                    currentIntersection = null;
-                }
             } else {
-                // Proyectar en el piso infinito para que el usuario siempre vea la caja flotando en su cursor
-                const floorPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
-                const planeIntersect = new THREE.Vector3();
-                raycaster.ray.intersectPlane(floorPlane, planeIntersect);
+                // Si sale del perímetro (no toca el pallet ni las cajas), 
+                // abortamos para que la caja quede congelada en su último lugar válido
+                // en vez de arrastrarse por el piso infinito de toda la pantalla.
+                ghostMesh.position.copy(prevPos);
+                ghostMesh.updateMatrixWorld();
+                return;
+            }
+
+            // --- IMÁN / MAGNETISMO DE BORDES ---
+            if (targetX !== undefined && targetZ !== undefined) {
+                const snapDist = 40; // tolerancia 40mm
+                let bestX = targetX;
+                let bestZ = targetZ;
                 
-                if (planeIntersect) {
-                    targetX = planeIntersect.x;
-                    targetZ = planeIntersect.z;
-                    centerY = h / 2; // Apoyado en el piso (y=0)
-                } else {
-                    targetX = 0; targetZ = 0; centerY = h / 2;
+                let linesX = [-PALLET_W/2, PALLET_W/2];
+                let linesZ = [-PALLET_D/2, PALLET_D/2];
+                
+                placedBoxes.forEach(b => {
+                    linesX.push(b.mesh.position.x - b.w/2);
+                    linesX.push(b.mesh.position.x + b.w/2);
+                    linesZ.push(b.mesh.position.z - b.d/2);
+                    linesZ.push(b.mesh.position.z + b.d/2);
+                });
+                
+                let minDiffX = Infinity;
+                linesX.forEach(lx => {
+                    let diff1 = Math.abs((targetX - w/2) - lx);
+                    if (diff1 < snapDist && diff1 < minDiffX) { minDiffX = diff1; bestX = lx + w/2; }
+                    let diff2 = Math.abs((targetX + w/2) - lx);
+                    if (diff2 < snapDist && diff2 < minDiffX) { minDiffX = diff2; bestX = lx - w/2; }
+                });
+                
+                let minDiffZ = Infinity;
+                linesZ.forEach(lz => {
+                    let diff1 = Math.abs((targetZ - d/2) - lz);
+                    if (diff1 < snapDist && diff1 < minDiffZ) { minDiffZ = diff1; bestZ = lz + d/2; }
+                    let diff2 = Math.abs((targetZ + d/2) - lz);
+                    if (diff2 < snapDist && diff2 < minDiffZ) { minDiffZ = diff2; bestZ = lz - d/2; }
+                });
+                
+                targetX = bestX;
+                targetZ = bestZ;
+            }
+
+            // Ajustar para no salirse del pallet (Overhang del 15% permitido)
+            const overX = w * 0.15;
+            const overZ = d * 0.15;
+            const minX = -PALLET_W/2 + w/2 - overX;
+            const maxX = PALLET_W/2 - w/2 + overX;
+            const minZ = -PALLET_D/2 + d/2 - overZ;
+            const maxZ = PALLET_D/2 - d/2 + overZ;
+
+            // En lugar de hacer Math.min/max para que resbale por los bordes,
+            // abortamos la actualización para que la caja "se congele" en el aire
+            // apenas el puntero intenta sacarla de los límites permitidos.
+            if (targetX < minX || targetX > maxX || targetZ < minZ || targetZ > maxZ) {
+                ghostMesh.position.copy(prevPos);
+                ghostMesh.updateMatrixWorld();
+                return;
+            }
+
+            // Chequeo de colisión
+            ghostMesh.position.set(targetX, centerY, targetZ);
+            ghostMesh.updateMatrixWorld();
+            const virtualBox = new THREE.Box3().setFromObject(ghostMesh);
+            virtualBox.expandByScalar(-1); // Encoger 1mm para evitar falsos positivos al apilar
+
+            canPlace = true;
+            for (const placed of placedBoxes) {
+                const pbBox = new THREE.Box3().setFromObject(placed.mesh);
+                if (virtualBox.intersectsBox(pbBox)) {
+                    canPlace = false;
+                    break;
                 }
-                canPlace = false;
+            }
+
+            // Chequeo de altura máxima
+            if (centerY + h / 2 > maxHeight) canPlace = false;
+
+            if (canPlace) {
+                currentIntersection = { x: targetX, y: centerY, z: targetZ, w, h, d, euler: currentEuler.clone() };
+            } else {
                 currentIntersection = null;
             }
 
@@ -634,18 +983,47 @@
             // Click derecho para borrar caja específica
             if (event.button === 2) {
                 raycaster.setFromCamera(mouse, camera);
-                const intersects = raycaster.intersectObjects(placedBoxes.map(b => b.mesh));
+                const intersects = raycaster.intersectObjects(placedBoxes.map(b => b.mesh), false);
                 if (intersects.length > 0) {
-                    const hitMesh = intersects[0].object;
-                    removeSpecificBox(hitMesh);
+                    removeSpecificBox(intersects[0].object);
                 }
                 return;
             }
 
-            // Click izquierdo para colocar
-            if (event.button !== 0 || !ghostMesh || !ghostMesh.visible || !currentIntersection) return;
+            // Click izquierdo
+            if (event.button === 0) {
+                // 1. Si tenemos una caja en la mano y la intersección es válida, la colocamos.
+                if (ghostMesh && ghostMesh.visible && currentIntersection) {
+                    placeBox(currentIntersection);
+                    return;
+                }
 
-            placeBox(currentIntersection);
+                // 2. Si NO tenemos caja seleccionada (manos libres), intentamos recoger una colocada.
+                if (!ghostMesh) {
+                    raycaster.setFromCamera(mouse, camera);
+                    const intersects = raycaster.intersectObjects(placedBoxes.map(b => b.mesh), false);
+                    if (intersects.length > 0) {
+                        const hitMesh = intersects[0].object;
+                        const index = placedBoxes.findIndex(b => b.mesh === hitMesh);
+                        if (index !== -1) {
+                            const boxInfo = placedBoxes[index];
+                            
+                            // Remover de colocadas
+                            scene.remove(boxInfo.mesh);
+                            placedBoxes.splice(index, 1);
+                            
+                            // Seleccionarla
+                            selectedBoxData = boxInfo.data;
+                            currentEuler.copy(boxInfo.mesh.rotation);
+                            createGhostBox();
+                            
+                            updateStats();
+                            updateSuggestedSpot();
+                            updateGhostPosition();
+                        }
+                    }
+                }
+            }
         }
 
         function removeSpecificBox(mesh) {
@@ -655,7 +1033,8 @@
                 placedBoxes.splice(index, 1);
             }
             updateStats();
-            // Forzar reevaluación del mouse
+            // Forzar reevaluación
+            updateSuggestedSpot();
             updateGhostPosition();
         }
 
@@ -686,6 +1065,7 @@
             currentIntersection = null;
 
             updateStats();
+            updateSuggestedSpot();
         }
 
         function undoLastBox() {
@@ -693,6 +1073,7 @@
             const last = placedBoxes.pop();
             scene.remove(last.mesh);
             updateStats();
+            updateSuggestedSpot();
         }
 
         // --- LLENAR CAPA AUTOMÁTICAMENTE ---
@@ -839,43 +1220,138 @@
                 const imgHeight = (renderer.domElement.height / renderer.domElement.width) * imgWidth;
                 pdf.addImage(imgData3D, 'JPEG', 14, 35, imgWidth, imgHeight);
 
-                // Estadísticas
+                // Estadísticas Globales
                 let startY = 35 + imgHeight + 15;
                 pdf.setFontSize(14);
                 pdf.setTextColor(0, 0, 0);
-                pdf.text("Resumen del Pallet", 14, startY);
+                pdf.text("Resumen Global", 14, startY);
+
+                // Agrupar por capas (pisos)
+                const layers = {};
+                placedBoxes.forEach(b => {
+                    const base = Math.round(b.y - b.h / 2);
+                    if (!layers[base]) layers[base] = [];
+                    layers[base].push(b);
+                });
+                const sortedLayers = Object.keys(layers).sort((a,b) => Number(a) - Number(b));
 
                 startY += 10;
                 pdf.setFontSize(11);
-                const highestY = statHeight.textContent;
-                const weight = statWeight.textContent;
-                const count = statCount.textContent;
-                
-                pdf.text(`Altura Total: ${highestY} / ${maxHeight} mm`, 14, startY);
-                pdf.text(`Peso Total: ${weight}`, 14, startY + 8);
-                pdf.text(`Cantidad de Cajas: ${count}`, 14, startY + 16);
+                pdf.text(`Altura Total Alcanzada: ${statHeight.textContent} / ${maxHeight} mm`, 14, startY);
+                pdf.text(`Peso Total del Pallet: ${statWeight.textContent}`, 14, startY + 8);
+                pdf.text(`Cantidad de Cajas Totales: ${statCount.textContent}`, 14, startY + 16);
+                pdf.text(`Cantidad de Pisos (Capas): ${sortedLayers.length}`, 14, startY + 24);
 
-                // Desglose
-                startY += 30;
-                pdf.setFontSize(14);
-                pdf.text("Detalle de Cajas", 14, startY);
-                
-                startY += 10;
-                pdf.setFontSize(11);
-                
+                // Tabla Global
+                startY += 34;
+                pdf.setFontSize(10);
+                pdf.setFont("helvetica", "bold");
+                pdf.setFillColor(230, 230, 230);
+                pdf.rect(14, startY, pageWidth - 28, 8, "F");
+                pdf.text("Caja / Modelo", 16, startY + 5.5);
+                pdf.text("Cantidad", 110, startY + 5.5);
+                pdf.text("Peso Total", 150, startY + 5.5);
+                startY += 8;
+
+                pdf.setFont("helvetica", "normal");
                 const breakdown = {};
                 placedBoxes.forEach(b => {
-                    if (breakdown[b.data.modelo]) breakdown[b.data.modelo]++;
-                    else breakdown[b.data.modelo] = 1;
+                    if (!breakdown[b.data.modelo]) breakdown[b.data.modelo] = { qty: 0, weight: 0 };
+                    breakdown[b.data.modelo].qty++;
+                    breakdown[b.data.modelo].weight += b.data.peso;
                 });
 
-                let i = 0;
-                for (const [modelo, qty] of Object.entries(breakdown)) {
-                    pdf.text(`- ${modelo}: ${qty} unidades`, 14, startY + (i * 8));
-                    i++;
+                for (const [modelo, info] of Object.entries(breakdown)) {
+                    pdf.rect(14, startY, pageWidth - 28, 8);
+                    pdf.text(modelo.substring(0, 45), 16, startY + 5.5);
+                    pdf.text(info.qty.toString(), 110, startY + 5.5);
+                    pdf.text(info.weight.toFixed(2) + " kg", 150, startY + 5.5);
+                    startY += 8;
                 }
 
-                pdf.save(`Palletizado_${new Date().getTime()}.pdf`);
+                // DETALLE POR CAPA
+                for (let i = 0; i < sortedLayers.length; i++) {
+                    const layerY = sortedLayers[i];
+                    const boxesInLayer = layers[layerY];
+                    
+                    startY += 15;
+                    // Check page break (A4 height is ~297mm)
+                    if (startY > 250) {
+                        pdf.addPage();
+                        startY = 20;
+                    }
+
+                    pdf.setFontSize(14);
+                    pdf.setFont("helvetica", "bold");
+                    pdf.setTextColor(41, 128, 185);
+                    pdf.text(`Piso ${i + 1} (Elevación base: ${layerY} mm) - ${boxesInLayer.length} cajas`, 14, startY);
+                    
+                    startY += 5;
+                    
+                    // Dibujar Plano 2D
+                    const canvas2D = document.createElement('canvas');
+                    canvas2D.width = 600;
+                    const scale = canvas2D.width / PALLET_W;
+                    canvas2D.height = PALLET_D * scale;
+                    const ctx = canvas2D.getContext('2d');
+                    
+                    ctx.fillStyle = '#ffffff';
+                    ctx.fillRect(0, 0, canvas2D.width, canvas2D.height);
+                    ctx.strokeStyle = '#374151'; // Borde oscuro para el pallet
+                    ctx.lineWidth = 4;
+                    ctx.strokeRect(0, 0, canvas2D.width, canvas2D.height);
+
+                    ctx.lineWidth = 2;
+                    ctx.strokeStyle = '#b45309'; // Marrón ámbar para las cajas como en el boceto
+                    
+                    boxesInLayer.forEach(b => {
+                        const x = (b.x + PALLET_W/2) * scale;
+                        const y = (b.z + PALLET_D/2) * scale;
+                        const bw = b.w * scale;
+                        const bd = b.d * scale;
+                        
+                        ctx.strokeRect(x - bw/2, y - bd/2, bw, bd);
+                        
+                        ctx.fillStyle = '#000000';
+                        ctx.font = '16px Arial';
+                        ctx.textAlign = 'center';
+                        ctx.textBaseline = 'middle';
+                        ctx.fillText(b.data.modelo.substring(0, 10), x, y);
+                    });
+                    
+                    const imgData2D = canvas2D.toDataURL('image/jpeg', 1.0);
+                    const mapWidth = 80;
+                    const mapHeight = (canvas2D.height / canvas2D.width) * mapWidth;
+                    
+                    if (startY + mapHeight > 280) {
+                        pdf.addPage();
+                        startY = 20;
+                    }
+                    
+                    pdf.addImage(imgData2D, 'JPEG', 14, startY, mapWidth, mapHeight);
+                    
+                    // Resumen de cajas en este piso al lado del mapa
+                    const lBreakdown = {};
+                    boxesInLayer.forEach(b => {
+                        if (!lBreakdown[b.data.modelo]) lBreakdown[b.data.modelo] = 0;
+                        lBreakdown[b.data.modelo]++;
+                    });
+                    
+                    pdf.setFontSize(10);
+                    pdf.setFont("helvetica", "normal");
+                    pdf.setTextColor(0, 0, 0);
+                    let listY = startY + 5;
+                    pdf.text("Contenido del piso:", 14 + mapWidth + 10, listY);
+                    listY += 6;
+                    for (const [mod, q] of Object.entries(lBreakdown)) {
+                        pdf.text(`- ${mod}: ${q} un.`, 14 + mapWidth + 10, listY);
+                        listY += 6;
+                    }
+                    
+                    startY += mapHeight; 
+                }
+
+                pdf.save(`Reporte_Pallet_${new Date().getTime()}.pdf`);
 
             } catch (err) {
                 console.error(err);
@@ -895,6 +1371,12 @@
         function animate() {
             requestAnimationFrame(animate);
             controls.update();
+            
+            // La caja fantasma siempre respeta la rotación fija dada por el usuario
+            if (ghostMesh) {
+                ghostMesh.rotation.copy(currentEuler);
+            }
+
             renderer.render(scene, camera);
         }
     </script>
