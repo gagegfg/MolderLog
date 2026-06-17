@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MOLDERIL - Editor de Modelos de Cajas</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone@7.23.10/babel.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="config.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <style>
+        body {
+          background-image: url('fondo.jpg');
+          background-size: cover;
+          background-position: center;
+          background-repeat: no-repeat;
+          background-attachment: fixed;
+        }
+        .backdrop-blur-lg {
+            -webkit-backdrop-filter: blur(12px);
+            backdrop-filter: blur(12px);
+        }
+    </style>
+</head>
+<body class="bg-gray-100 font-sans">
+
+    <div id="static-loader" class="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 p-4 font-sans z-50">
+        <div class="relative bg-[#D2B48C]/20 backdrop-blur-lg border border-[#D2B48C]/30 p-8 rounded-xl shadow-2xl w-full max-w-md text-center">
+          <img src="logo.jpg" alt="Logo Molderil" class="mx-auto mb-6 h-32 [filter:drop-shadow(2px_2px_4px_rgba(0,0,0,0.4))_drop_shadow(-2px_-2px_4px_rgba(255,255,255,0.6))]"/>
+          <p id="loader-status" class="text-xl text-white mb-4 [text-shadow:_1px_1px_2px_rgba(0,0,0,0.5)]">Cargando base de datos...</p>
+          <div class="w-full bg-white/20 rounded-full h-4 border border-white/30">
+            <div id="loader-progress" class="bg-amber-400 h-full rounded-full transition-all duration-500" style="width: 10%"></div>
+          </div>
+        </div>
+    </div>
+
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+        const { createRoot } = ReactDOM;
+
+        // =================================================================
+        // ### CONFIGURACIÓN DE SUPABASE ###
+        // =================================================================
+        const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+        const App = () => {
+            const [isLoading, setIsLoading] = useState(true);
+            const [isAppReady, setIsAppReady] = useState(false);
+            const [boxes, setBoxes] = useState([]);
+            const [isModalOpen, setIsModalOpen] = useState(false);
+            const [editingBox, setEditingBox] = useState(null);
+            const fileInputRef = useRef(null);
+
+            // --- Carga inicial visual ---
+            useEffect(() => {
+                const staticLoader = document.getElementById('static-loader');
+                const loaderStatus = document.getElementById('loader-status');
+                const loaderProgress = document.getElementById('loader-progress');
+
+                const loadingTasks = [
+                    { status: "Conectando a Supabase...", duration: 500, progress: 50 },
+                    { status: "Descargando modelos...", duration: 800, progress: 90, action: fetchData },
+                    { status: "¡Listo!", duration: 400, progress: 100 }
+                ];
+
+                let currentTask = 0;
+                const runLoadingTask = () => {
+                    if (currentTask < loadingTasks.length) {
+                        const task = loadingTasks[currentTask];
+                        if (loaderStatus) loaderStatus.textContent = task.status;
+                        if (loaderProgress) loaderProgress.style.width = `${task.progress}%`;
+                        if(task.action) task.action();
+                        setTimeout(() => {
+                            currentTask++;
+                            runLoadingTask();
+                        }, task.duration);
+                    } else {
+                        if (staticLoader) {
+                            staticLoader.classList.add('opacity-0');
+                            setTimeout(() => {
+                                staticLoader.remove();
+                                setIsAppReady(true);
+                            }, 500);
+                        }
+                    }
+                };
+                runLoadingTask();
+            }, []);
+
+            // --- Carga de datos reales ---
+            const fetchData = async () => {
+                setIsLoading(true);
+                try {
+                    const { data, error } = await supabaseClient
+                        .from('modelos_cajas')
+                        .select('*')
+                        .order('modelo', { ascending: true });
+
+                    if (error) {
+                        // Si la tabla no existe, avisar amigablemente
+                        if (error.code === '42P01') {
+                            alert("La tabla 'modelos_cajas' no existe en Supabase. Por favor ejecuta el código SQL que te pasé en el plan.");
+                        } else {
+                            throw error;
+                        }
+                    } else {
+                        setBoxes(data || []);
+                    }
+                } catch (e) {
+                    console.error("Error al cargar:", e);
+                } finally {
+                    setIsLoading(false);
+                }
+            };
+
+            // --- Manejo del Excel (Importación) ---
+            const triggerExcelUpload = () => {
+                fileInputRef.current.click();
+            };
+
+            const handleExcelUpload = async (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+
+                setIsLoading(true);
+                try {
+                    const arrayBuffer = await file.arrayBuffer();
+                    const data = new Uint8Array(arrayBuffer);
+                    const workbook = XLSX.read(data, {type: 'array'});
+                    const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+                    const jsonData = XLSX.utils.sheet_to_json(firstSheet);
+
+                    let importCount = 0;
+                    for (const row of jsonData) {
+                        // Mapeo flexible por si las columnas varían ligeramente de nombre
+                        const modelo = row['Modelo'] || row['modelo'] || row['MODELO'];
+                        const ancho = row['Ancho'] || row['ancho'] || row['ANCHO'];
+                        const alto = row['Alto'] || row['alto'] || row['ALTO'];
+                        const profundidad = row['Profundidad'] || row['profundidad'] || row['PROFUNDIDAD'];
+                        const peso = row['Peso'] || row['peso'] || row['PESO'];
+
+                        if (modelo && ancho && alto && profundidad && peso) {
+                            // Insertar en Supabase
+                            const { error } = await supabaseClient
+                                .from('modelos_cajas')
+                                .insert([{
+                                    modelo: String(modelo),
+                                    ancho: Number(ancho),
+                                    alto: Number(alto),
+                                    profundidad: Number(profundidad),
+                                    peso: Number(peso)
+                                }]);
+                            if (!error) importCount++;
+                        }
+                    }
+
+                    alert(`Importación completada. Se importaron ${importCount} cajas con éxito.`);
+                    fetchData(); // Refrescar la tabla
+                } catch (err) {
+                    alert(`Error al procesar el Excel: ${err.message}`);
+                } finally {
+                    setIsLoading(false);
+                    e.target.value = null; // Resetear input
+                }
+            };
+
+            // --- Guardar Caja (Editar/Crear) ---
+            const handleSaveBox = async (boxData) => {
+                setIsLoading(true);
+                try {
+                    if (boxData.id) { // Editando
+                        const { error } = await supabaseClient
+                            .from('modelos_cajas')
+                            .update({
+                                modelo: boxData.modelo,
+                                ancho: Number(boxData.ancho),
+                                alto: Number(boxData.alto),
+                                profundidad: Number(boxData.profundidad),
+                                peso: Number(boxData.peso)
+                            })
+                            .eq('id', boxData.id);
+
+                        if (error) throw error;
+                    } else { // Creando nueva
+                        const { error } = await supabaseClient
+                            .from('modelos_cajas')
+                            .insert([{
+                                modelo: boxData.modelo,
+                                ancho: Number(boxData.ancho),
+                                alto: Number(boxData.alto),
+                                profundidad: Number(boxData.profundidad),
+                                peso: Number(boxData.peso)
+                            }]);
+
+                        if (error) throw error;
+                    }
+                    fetchData();
+                    setIsModalOpen(false);
+                    setEditingBox(null);
+                } catch (e) {
+                    alert(`Error al guardar: ${e.message}`);
+                } finally {
+                    setIsLoading(false);
+                }
+            };
+
+            // --- Eliminar Caja ---
+            const handleDelete = async (id, modeloName) => {
+                if (!window.confirm(`¿Estás seguro de que deseas eliminar permanentemente el modelo "${modeloName}"?`)) return;
+                
+                setIsLoading(true);
+                try {
+                    const { error } = await supabaseClient
+                        .from('modelos_cajas')
+                        .delete()
+                        .eq('id', id);
+
+                    if (error) throw error;
+                    fetchData();
+                } catch (e) {
+                    alert(`Error al eliminar: ${e.message}`);
+                } finally {
+                    setIsLoading(false);
+                }
+            };
+
+            if (!isAppReady) return null;
+
+            return (
+                <div className="min-h-screen p-4 sm:p-6 bg-black bg-opacity-50">
+                    {isModalOpen && <BoxModal box={editingBox} onSave={handleSaveBox} onClose={() => setIsModalOpen(false)} />}
+                    
+                    {/* Input invisible para importar excel */}
+                    <input type="file" accept=".xlsx, .xls" ref={fileInputRef} onChange={handleExcelUpload} className="hidden" />
+
+                    <div className="bg-white p-6 rounded-2xl shadow-xl flex flex-col h-[calc(100vh-2rem)] sm:h-[calc(100vh-3rem)]">
+                        <div className="flex-shrink-0">
+                            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 border-b pb-4 border-gray-200">
+                                <div>
+                                    <h1 className="text-3xl font-extrabold text-gray-800">Modelos de Cajas</h1>
+                                    <p className="text-gray-500 mt-1">Administra los tamaños y pesos para el simulador 3D.</p>
+                                </div>
+                                <div className="mt-4 sm:mt-0 flex gap-2">
+                                    <a href="simulador_pallet.html" className="bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors flex items-center">
+                                        <i className="fas fa-cube mr-2"></i>Ir al Simulador
+                                    </a>
+                                    <a href="index.html" className="bg-gray-200 text-gray-800 font-semibold py-2 px-4 rounded-lg hover:bg-gray-300 transition-colors">Volver al Menú</a>
+                                </div>
+                            </div>
+                            
+                            <div className="flex flex-col sm:flex-row justify-between items-center mb-4">
+                                <p className="text-gray-600 font-semibold">{boxes.length} modelo(s) registrado(s)</p>
+                                <div className="flex items-center space-x-2 mt-4 sm:mt-0">
+                                    <button onClick={triggerExcelUpload} className="bg-amber-500 text-white font-semibold py-2 px-4 rounded-lg shadow-sm hover:bg-amber-600 flex items-center" title="Cargar archivo Excel (.xlsx)">
+                                        <i className="fas fa-file-excel mr-2"></i>Importar Excel
+                                    </button>
+                                    <button onClick={fetchData} className="bg-gray-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-gray-700 flex items-center">
+                                        <i className={`fas fa-sync-alt ${isLoading ? 'animate-spin' : ''} mr-2`}></i>Refrescar
+                                    </button>
+                                    <button onClick={() => { setEditingBox(null); setIsModalOpen(true); }} className="bg-green-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-green-700 flex items-center">
+                                        <i className="fas fa-plus mr-2"></i>Nueva Caja
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="flex-grow overflow-auto rounded-lg shadow-md border">
+                            <table className="min-w-full divide-y divide-gray-200">
+                                <thead className="bg-gray-800 text-white sticky top-0 z-10">
+                                    <tr>
+                                        <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Nombre del Modelo</th>
+                                        <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Ancho (X)</th>
+                                        <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Alto (Y)</th>
+                                        <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Profundidad (Z)</th>
+                                        <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Peso Base (Kg)</th>
+                                        <th className="px-4 py-3 text-center text-xs font-medium uppercase tracking-wider">Acciones</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="bg-white divide-y divide-gray-200">
+                                    {isLoading && !boxes.length ? (
+                                        <tr><td colSpan="6" className="p-8 text-center text-gray-500">Cargando datos...</td></tr>
+                                    ) : boxes.length === 0 ? (
+                                        <tr><td colSpan="6" className="p-8 text-center text-gray-500">No hay cajas registradas. Usa el botón "Importar Excel" para comenzar.</td></tr>
+                                    ) : (
+                                        boxes.map((item, index) => (
+                                            <tr key={item.id} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                                                <td className="px-4 py-3 whitespace-nowrap text-sm font-bold text-gray-900">{item.modelo}</td>
+                                                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600">{item.ancho} mm</td>
+                                                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600">{item.alto} mm</td>
+                                                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600">{item.profundidad} mm</td>
+                                                <td className="px-4 py-3 whitespace-nowrap text-sm font-semibold text-amber-600">{item.peso} kg</td>
+                                                <td className="px-4 py-3 text-center">
+                                                    <button onClick={() => { setEditingBox(item); setIsModalOpen(true); }} className="text-blue-600 hover:text-blue-900 mx-2" title="Editar">
+                                                        <i className="fas fa-pencil-alt"></i>
+                                                    </button>
+                                                    <button onClick={() => handleDelete(item.id, item.modelo)} className="text-red-600 hover:text-red-900 mx-2" title="Eliminar">
+                                                        <i className="fas fa-trash"></i>
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        ))
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const BoxModal = ({ box, onSave, onClose }) => {
+            const [formData, setFormData] = useState(box || { modelo: '', ancho: '', alto: '', profundidad: '', peso: '' });
+
+            const handleChange = (e) => {
+                const { name, value } = e.target;
+                setFormData(prev => ({ ...prev, [name]: value }));
+            };
+
+            const handleSubmit = (e) => {
+                e.preventDefault();
+                onSave(formData);
+            };
+
+            return (
+                <div className="fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center z-50 p-4">
+                    <div className="bg-white p-6 rounded-xl shadow-lg w-full max-w-md border-t-4 border-blue-600">
+                        <h2 className="text-2xl font-bold text-gray-800 mb-6 border-b pb-2">{box ? 'Editar Modelo' : 'Crear Nuevo Modelo'}</h2>
+                        <form onSubmit={handleSubmit} className="space-y-4">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700">Nombre del Modelo</label>
+                                <input type="text" name="modelo" value={formData.modelo} onChange={handleChange} placeholder="Ej. CAJA 01 BD 200" className="mt-1 block w-full p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500" required />
+                            </div>
+                            <div className="grid grid-cols-3 gap-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700">Ancho (X)</label>
+                                    <div className="relative">
+                                        <input type="number" step="any" name="ancho" value={formData.ancho} onChange={handleChange} className="mt-1 block w-full p-2 border border-gray-300 rounded-md" required />
+                                        <span className="absolute right-3 top-3 text-xs text-gray-400">mm</span>
+                                    </div>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700">Alto (Y)</label>
+                                    <div className="relative">
+                                        <input type="number" step="any" name="alto" value={formData.alto} onChange={handleChange} className="mt-1 block w-full p-2 border border-gray-300 rounded-md" required />
+                                        <span className="absolute right-3 top-3 text-xs text-gray-400">mm</span>
+                                    </div>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700">Prof (Z)</label>
+                                    <div className="relative">
+                                        <input type="number" step="any" name="profundidad" value={formData.profundidad} onChange={handleChange} className="mt-1 block w-full p-2 border border-gray-300 rounded-md" required />
+                                        <span className="absolute right-3 top-3 text-xs text-gray-400">mm</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700">Peso Base</label>
+                                <div className="relative">
+                                    <input type="number" step="any" name="peso" value={formData.peso} onChange={handleChange} className="mt-1 block w-full p-2 border border-gray-300 rounded-md" required />
+                                    <span className="absolute right-3 top-3 text-xs text-gray-400">kg</span>
+                                </div>
+                            </div>
+                            
+                            <div className="flex justify-end space-x-3 pt-6">
+                                <button type="button" onClick={onClose} className="bg-gray-100 text-gray-700 border font-semibold py-2 px-4 rounded-lg hover:bg-gray-200">Cancelar</button>
+                                <button type="submit" className="bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-blue-700 shadow-md">Guardar Modelo</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            );
+        };
+
+        const root = createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>

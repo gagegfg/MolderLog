@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>Molderil - Simulador de Paletizado 3D</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="config.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
@@ -75,7 +77,17 @@
 
             <!-- Lista de Cajas -->
             <div class="p-4 flex-1 overflow-y-auto">
-                <h2 class="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-2">Cajas Disponibles</h2>
+                <div class="flex justify-between items-center mb-2">
+                    <h2 class="text-sm font-semibold text-gray-400 uppercase tracking-wider">Cajas Disponibles</h2>
+                    <div class="flex gap-1">
+                        <a href="editar_modelos.html" class="bg-gray-700 hover:bg-gray-600 text-white text-xs px-2 py-1 rounded transition-colors" title="Editar Modelos de Cajas">
+                            <i class="fas fa-edit"></i>
+                        </a>
+                        <button id="btn-reload-boxes" class="bg-gray-700 hover:bg-gray-600 text-white text-xs px-2 py-1 rounded transition-colors" title="Recargar Cajas (Borrará el avance)">
+                            <i class="fas fa-sync-alt"></i>
+                        </button>
+                    </div>
+                </div>
                 <div id="box-list" class="space-y-2">
                     <p class="text-xs text-gray-500 italic text-center py-4">Carga un Excel para ver las cajas</p>
                 </div>
@@ -339,31 +351,91 @@
             document.getElementById('btn-rot-y').addEventListener('click', () => rotateBox('y'));
             document.getElementById('btn-undo').addEventListener('click', undoLastBox);
             document.getElementById('btn-export').addEventListener('click', exportPDF);
+            document.getElementById('btn-reload-boxes').addEventListener('click', reloadBoxes);
             btnFillLayer.addEventListener('click', fillLayer);
 
-            // Intentar cargar archivo base automáticamente
-            loadDefaultExcel();
+            // Intentar cargar cajas desde Supabase, o Excel como respaldo
+            loadBoxesFromDatabase();
         }
 
-        // --- LECTURA DE EXCEL AUTOMÁTICA ---
-        async function loadDefaultExcel() {
+        // --- LECTURA DE CAJAS (SUPABASE + FALLBACK EXCEL) ---
+        async function loadBoxesFromDatabase() {
             try {
-                const response = await fetch('MODELOS_CAJAS.xlsx');
-                if (response.ok) {
-                    const arrayBuffer = await response.arrayBuffer();
-                    const data = new Uint8Array(arrayBuffer);
-                    const workbook = XLSX.read(data, {type: 'array'});
-                    const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-                    const jsonData = XLSX.utils.sheet_to_json(firstSheet);
+                // Configurar cliente Supabase si no existe
+                if (typeof supabaseClient === 'undefined') {
+                    window.supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+                }
+
+                const { data, error } = await supabaseClient
+                    .from('modelos_cajas')
+                    .select('*')
+                    .order('modelo', { ascending: true });
+
+                if (error) throw error;
+
+                if (data && data.length > 0) {
+                    // Mapear datos de Supabase al formato que espera processExcelData
+                    const formattedData = data.map(row => ({
+                        'Modelo': row.modelo,
+                        'Ancho': row.ancho,
+                        'Alto': row.alto,
+                        'Profundidad': row.profundidad,
+                        'Peso': row.peso
+                    }));
+
+                    processExcelData(formattedData);
                     
-                    processExcelData(jsonData);
-                    
-                    // Actualizar UI para reflejar que se cargó por defecto
                     const label = document.querySelector('label.text-gray-400');
-                    if (label) label.innerHTML = 'MODELOS_CAJAS.xlsx cargado. (Subir otro)';
+                    if (label) label.innerHTML = `Modelos cargados desde la Nube.`;
+                    console.log(`Cargadas ${data.length} cajas desde Supabase.`);
+                    return;
+                } else {
+                    console.warn("Tabla modelos_cajas vacía en Supabase. Intentando cargar Excel de respaldo...");
+                    await loadDefaultExcelFallback();
                 }
             } catch (err) {
-                console.warn('No se pudo cargar MODELOS_CAJAS.xlsx automáticamente. Se requiere carga manual.');
+                console.error("Error conectando a Supabase:", err);
+                console.warn("Intentando cargar Excel de respaldo...");
+                await loadDefaultExcelFallback();
+            }
+        }
+
+        async function loadDefaultExcelFallback() {
+            const fileNames = ['MODELOS_CAJAS.xlsx', 'modelos_cajas.xlsx', './MODELOS_CAJAS.xlsx', './modelos_cajas.xlsx'];
+            for (const fileName of fileNames) {
+                try {
+                    const response = await fetch(fileName);
+                    if (response.ok) {
+                        const arrayBuffer = await response.arrayBuffer();
+                        const data = new Uint8Array(arrayBuffer);
+                        const workbook = XLSX.read(data, {type: 'array'});
+                        const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+                        const jsonData = XLSX.utils.sheet_to_json(firstSheet);
+                        
+                        processExcelData(jsonData);
+                        
+                        const label = document.querySelector('label.text-gray-400');
+                        if (label) label.innerHTML = `${fileName} cargado automáticamente.`;
+                        console.log(`Cargado exitosamente Excel de respaldo: ${fileName}`);
+                        return;
+                    }
+                } catch (err) {
+                    // Silent catch for iterations
+                }
+            }
+            console.warn('No se pudo cargar Supabase ni el Excel de respaldo. Se requiere carga manual.');
+        }
+
+        function reloadBoxes() {
+            if (confirm("Advertencia: Al recargar los modelos de cajas desde la nube, se borrará todo tu progreso actual en el pallet 3D.\n\n¿Estás seguro de que deseas continuar?")) {
+                // Borrar todas las cajas del pallet
+                placedBoxes.forEach(b => scene.remove(b.mesh));
+                placedBoxes = [];
+                updateStats();
+                updateGhostPosition(); // Forzar actualización de posición del fantasma
+                
+                // Volver a cargar de la BD
+                loadBoxesFromDatabase();
             }
         }
 
