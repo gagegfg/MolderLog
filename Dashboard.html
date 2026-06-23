@@ -3,94 +3,91 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MOLDERIL - Dashboard Logístico</title>
+    <title>MolderLog - Dashboard Analítico</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone@7.23.10/babel.min.js"></script>
     
-    <!-- Chart.js (para gráficos) y adaptador de fechas -->
+    <!-- Chart.js y adaptadores -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/date-fns@2.30.0/locale/es/index.js"></script>
 
-    <!-- XLSX (para exportar a Excel) -->
+    <!-- XLSX -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 
-    <!-- Scripts para Supabase -->
+    <!-- Supabase -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="config.js"></script>
 
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
     <style>
         body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6;
             background-image: url('fondo.jpg');
             background-size: cover;
             background-position: center;
-            background-repeat: no-repeat;
             background-attachment: fixed;
         }
-        .backdrop-blur-lg {
-            -webkit-backdrop-filter: blur(12px);
-            backdrop-filter: blur(12px);
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
         }
-        /* Estilo para el loader */
-        .loader {
-            border-top-color: #fcd34d; /* Color ámbar */
-            -webkit-animation: spin 1s linear infinite;
-            animation: spin 1s linear infinite;
+        .tab-btn {
+            transition: all 0.3s ease;
+            position: relative;
         }
-        @-webkit-keyframes spin {
-            0% { -webkit-transform: rotate(0deg); }
-            100% { -webkit-transform: rotate(360deg); }
+        .tab-btn::after {
+            content: '';
+            position: absolute;
+            bottom: -2px;
+            left: 0;
+            width: 0;
+            height: 3px;
+            background-color: #3b82f6;
+            transition: width 0.3s ease;
         }
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
+        .tab-btn.active::after {
+            width: 100%;
+        }
+        .tab-btn.active {
+            color: #1d4ed8;
+            font-weight: 600;
         }
         
-        /* Estilos para Pestañas */
-        .tab-button {
-            transition: all 0.3s ease;
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb { background: #c1c1c1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #a8a8a8; }
+        
+        .loader {
+            border-top-color: #3b82f6;
+            animation: spin 1s linear infinite;
         }
-        .tab-button[aria-selected="true"] {
-            border-color: #f59e0b; /* amber-500 */
-            color: #f59e0b;
-            background-color: #fffbeb; /* amber-50 */
-        }
-        .tab-button[aria-selected="false"] {
-            border-color: transparent;
-            color: #6b7280; /* gray-500 */
-        }
-        .tab-button[aria-selected="false"]:hover {
-            color: #111827; /* gray-900 */
-            background-color: #f3f4f6; /* gray-100 */
-        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     </style>
 </head>
-<body class="bg-gray-100 font-sans">
-    <div id="root"></div>
+<body class="text-gray-800 antialiased min-h-screen flex flex-col">
+    <div id="root" class="flex-grow flex flex-col"></div>
 
     <script type="text/babel">
-        const { useState, useEffect, useRef, useCallback, useMemo } = React;
-        const { createRoot } = ReactDOM;
+        const { useState, useEffect, useMemo, useRef } = React;
 
-        // --- INICIALIZACIÓN DE SUPABASE ---
+        // --- SUPABASE CLIENT ---
         let supabaseClient;
         if (typeof supabase !== 'undefined' && typeof SUPABASE_URL !== 'undefined' && typeof SUPABASE_KEY !== 'undefined') {
             supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
         }
 
-        // --- FUNCIÓN DE FECHA POR DEFECTO ---
-        const getTresMesesAtras = () => {
-            const date = new Date();
-            date.setDate(1); 
-            date.setMonth(date.getMonth() - 3);
-            return date.toISOString().split('T')[0];
-        };
-        const getHoy = () => new Date().toISOString().split('T')[0];
-
-        // --- COMPONENTES DE GRÁFICOS REUTILIZABLES ---
+        // --- CHART COMPONENT ---
         const ChartComponent = ({ type, data, options, title }) => {
             const canvasRef = useRef(null);
             const chartRef = useRef(null);
@@ -98,912 +95,547 @@
             useEffect(() => {
                 if (!canvasRef.current) return;
                 
-                // No dibujar si no hay datos
-                if (!data || !data.datasets || data.datasets.length === 0 || data.datasets[0].data.length === 0) {
-                     if (chartRef.current) {
-                        chartRef.current.destroy(); // Destruir gráfico anterior si existe
-                        chartRef.current = null;
-                    }
-                    // Mostrar mensaje de "No hay datos"
+                const hasData = data?.datasets?.some(ds => ds.data.length > 0);
+                if (!hasData) {
+                    if (chartRef.current) { chartRef.current.destroy(); chartRef.current = null; }
                     const ctx = canvasRef.current.getContext('2d');
                     ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
                     ctx.save();
                     ctx.textAlign = 'center';
-                    ctx.fillStyle = '#6b7280'; // gray-500
-                    ctx.font = "16px 'Inter', sans-serif";
-                    ctx.fillText('No hay datos para mostrar', canvasRef.current.width / 2, canvasRef.current.height / 2);
+                    ctx.fillStyle = '#6b7280';
+                    ctx.font = "14px 'Inter', sans-serif";
+                    ctx.fillText('No hay datos', canvasRef.current.width / 2, canvasRef.current.height / 2);
                     ctx.restore();
                     return;
                 }
 
-                if (chartRef.current) {
-                    chartRef.current.destroy();
-                }
+                if (chartRef.current) chartRef.current.destroy();
 
                 const ctx = canvasRef.current.getContext('2d');
-                chartRef.current = new Chart(ctx, {
-                    type: type,
-                    data: data,
-                    options: options
-                });
+                chartRef.current = new Chart(ctx, { type, data, options });
 
-                return () => {
-                    if (chartRef.current) {
-                        chartRef.current.destroy();
-                        chartRef.current = null;
-                    }
-                };
-            }, [data, options, type]); // Depender de 'data' para redibujar
+                return () => { if (chartRef.current) chartRef.current.destroy(); };
+            }, [data, options, type]);
 
             return (
-                <div className="bg-white p-6 rounded-2xl shadow-xl border border-gray-200 h-full flex flex-col">
-                    <h3 className="text-xl font-bold text-gray-800 mb-4">{title}</h3>
-                    <div className="flex-grow relative h-64 md:h-80 lg:h-96">
+                <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 flex flex-col h-full transition-transform hover:-translate-y-1 duration-300">
+                    <h3 className="text-lg font-bold text-gray-700 mb-4">{title}</h3>
+                    <div className="flex-grow relative h-64">
                         <canvas ref={canvasRef}></canvas>
                     </div>
                 </div>
             );
         };
-        
-        // --- COMPONENTE TABLA REUTILIZABLE ---
-        const SimpleTable = ({ title, headers, data }) => (
-            <div className="bg-white p-6 rounded-2xl shadow-xl border border-gray-200 h-full flex flex-col">
-                <h3 className="text-xl font-bold text-gray-800 mb-4">{title}</h3>
-                <div className="flex-grow overflow-y-auto" style={{maxHeight: '400px'}}>
-                    <table className="min-w-full divide-y divide-gray-200">
-                        <thead className="bg-gray-50 sticky top-0">
-                            <tr>
-                                {headers.map(header => (
-                                    <th key={header} scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                        {header}
-                                    </th>
-                                ))}
-                            </tr>
-                        </thead>
-                        <tbody className="bg-white divide-y divide-gray-200">
-                            {(!data || data.length === 0) ? (
-                                <tr>
-                                    <td colSpan={headers.length} className="px-6 py-4 text-center text-gray-500">
-                                        No hay datos para mostrar
-                                    </td>
-                                </tr>
-                            ) : (
-                                data.map((row, index) => (
-                                    <tr key={index} className="hover:bg-gray-50">
-                                        {headers.map(header => (
-                                            <td key={`${index}-${header}`} className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
-                                                {row[header.toLowerCase()]}
-                                            </td>
-                                        ))}
-                                    </tr>
-                                ))
-                            )}
-                        </tbody>
-                    </table>
+
+        // --- KPI CARD ---
+        const KpiCard = ({ title, value, icon, colorClass }) => (
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center space-x-4 transition-transform hover:-translate-y-1 duration-300">
+                <div className={`p-4 rounded-xl ${colorClass} bg-opacity-10 text-xl flex-shrink-0`}>
+                    <i className={`fas ${icon}`}></i>
+                </div>
+                <div>
+                    <p className="text-sm font-medium text-gray-500 uppercase tracking-wider">{title}</p>
+                    <p className="text-3xl font-extrabold text-gray-900 mt-1">{value}</p>
                 </div>
             </div>
         );
 
-
-        // --- COMPONENTE DE TARJETA KPI ---
-        const KpiCard = ({ title, value, icon, unit = '', color = 'amber' }) => {
-            const colors = {
-                amber: 'bg-amber-100 text-amber-600',
-                blue: 'bg-blue-100 text-blue-600',
-                green: 'bg-green-100 text-green-600',
-            };
-            return (
-                <div className="bg-white p-6 rounded-2xl shadow-xl border border-gray-200">
-                    <div className="flex items-center space-x-4">
-                        <div className={`p-3 rounded-full ${colors[color] || colors.amber}`}>
-                            <i className={`fas ${icon} fa-xl`}></i>
-                        </div>
-                        <div>
-                            <p className="text-sm font-medium text-gray-500">{title}</p>
-                            <p className="text-3xl font-extrabold text-gray-900">
-                                {value}
-                                {unit && <span className="text-lg font-semibold text-gray-500 ml-1">{unit}</span>}
-                            </p>
-                        </div>
-                    </div>
-                </div>
-            );
-        };
-
-        // --- COMPONENTE LOADER ---
-        const LoadingOverlay = ({ message = "Cargando datos..." }) => (
-            <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 rounded-2xl">
-                <div className="flex items-center space-x-3 text-xl font-semibold text-white bg-gray-800/50 p-6 rounded-xl backdrop-blur-lg">
-                    <div className="loader border-4 border-gray-500 rounded-full w-8 h-8"></div>
-                    <span>{message}</span>
-                </div>
-            </div>
-        );
-        
-        // --- COLORES PARA GRÁFICOS ---
-        const CHART_COLORS = [
-            '#3b82f6', // blue-500
-            '#10b981', // green-500
-            '#ef4444', // red-500
-            '#f97316', // orange-500
-            '#8b5cf6', // violet-500
-            '#06b6d4', // cyan-500
-            '#d946ef', // fuchsia-500
-            '#f59e0b', // amber-500
-            '#14b8a6', // teal-500
-            '#6366f1', // indigo-500
-        ];
-
-        // --- COMPONENTE PRINCIPAL DE LA APP ---
+        // --- APP ---
         const App = () => {
+            // Fechas
+            const defaultDesde = new Date();
+            defaultDesde.setMonth(defaultDesde.getMonth() - 3);
+            const strDesde = defaultDesde.toISOString().split('T')[0];
+            const strHasta = new Date().toISOString().split('T')[0];
+
+            const [fechaDesde, setFechaDesde] = useState(strDesde);
+            const [fechaHasta, setFechaHasta] = useState(strHasta);
+
+            // Filtros
+            const [filtroCliente, setFiltroCliente] = useState('');
+            const [filtroTransporte, setFiltroTransporte] = useState('');
+            const [filtroProducto, setFiltroProducto] = useState('');
+
+            // Datos Crudos
+            const [rawDespachos, setRawDespachos] = useState([]);
+            const [rawInventario, setRawInventario] = useState([]);
             const [isLoading, setIsLoading] = useState(true);
-            const [currentTab, setCurrentTab] = useState('dispatch'); // dispatch, inventory, operations, client-transport, advanced
-            
-            // Filtros de fecha (solo para Despachos y Operaciones)
-            const [fechaDesde, setFechaDesde] = useState(getTresMesesAtras());
-            const [fechaHasta, setFechaHasta] = useState(getHoy());
 
-            // --- ESTADO PARA TODOS LOS DATOS ---
-            // Pestaña 1: Despachos
-            const [kpisDespacho, setKpisDespacho] = useState({ total_despachos: 0, total_bultos: 0, total_cantidad: 0, clientes_activos: 0 });
-            const [bultosPorMes, setBultosPorMes] = useState({ labels: [], datasets: [] });
-            const [topClientes, setTopClientes] = useState({ labels: [], datasets: [] });
-            const [topTransportes, setTopTransportes] = useState({ labels: [], datasets: [] });
-            const [topSkusDespachados, setTopSkusDespachados] = useState({ labels: [], datasets: [] });
+            // Tabs
+            const [currentTab, setCurrentTab] = useState('gerencial'); // gerencial, operativa, inventario
 
-            // Pestaña 2: Inventario
-            const [kpisInventario, setKpisInventario] = useState({ stock_bultos: 0, stock_cantidad: 0, antiguedad_promedio: 0 });
-            const [inventarioAging, setInventarioAging] = useState({ labels: [], datasets: [] });
-            const [stockPorSku, setStockPorSku] = useState({ labels: [], datasets: [] });
-
-            // Pestaña 3: Operaciones
-            const [topOperarios, setTopOperarios] = useState({ labels: [], datasets: [] });
-            
-            // Pestaña 4: Cliente-Transporte
-            const [clienteTransporteData, setClienteTransporteData] = useState([]);
-            const [transportClientCount, setTransportClientCount] = useState({ labels: [], datasets: [] });
-            const [clientTransportCount, setClientTransportCount] = useState({ labels: [], datasets: [] });
-
-            // Pestaña 5: Análisis Avanzado
-            const [advancedAnalysisData, setAdvancedAnalysisData] = useState({ labels: [], datasets: [] });
-            const [monthlyEvolutionData, setMonthlyEvolutionData] = useState({ labels: [], datasets: [] });
-            const [filteredMonthlyEvolutionData, setFilteredMonthlyEvolutionData] = useState({ labels: [], datasets: [] });
-            const [advancedClients, setAdvancedClients] = useState([]);
-            const [advancedTransports, setAdvancedTransports] = useState([]);
-            const [selectedAdvancedClient, setSelectedAdvancedClient] = useState('');
-            const [selectedAdvancedTransport, setSelectedAdvancedTransport] = useState('');
-            const [isAdvancedLoading, setIsAdvancedLoading] = useState(false);
-
-
-            // Opciones comunes de Chart.js
+            // Default Chart config
             Chart.defaults.font.family = "'Inter', sans-serif";
-            Chart.defaults.plugins.tooltip.backgroundColor = 'rgba(0, 0, 0, 0.7)';
-            Chart.defaults.plugins.tooltip.titleFont = { weight: 'bold', size: 14 };
-            Chart.defaults.plugins.tooltip.bodyFont = { size: 12 };
-            Chart.defaults.plugins.tooltip.padding = 10;
-            Chart.defaults.plugins.tooltip.cornerRadius = 6;
+            Chart.defaults.plugins.tooltip.backgroundColor = 'rgba(15, 23, 42, 0.9)';
+            Chart.defaults.plugins.tooltip.padding = 12;
+            Chart.defaults.plugins.tooltip.cornerRadius = 8;
             Chart.defaults.responsive = true;
             Chart.defaults.maintainAspectRatio = false;
 
-            // Función para cargar todos los datos
-            const fetchData = useCallback(async (inicio, fin) => {
-                if (!supabaseClient) {
-                    console.error("Error: No se pudo conectar a Supabase.");
-                    setIsLoading(false);
-                    return;
-                }
-                
+            // Fetch Data
+            const fetchData = async () => {
+                if (!supabaseClient) return;
                 setIsLoading(true);
                 try {
-                    // --- Promesas de Despacho (dependen de la fecha) ---
-                    const despachoPromises = [
-                        supabaseClient.rpc('get_dashboard_kpis', { fecha_inicio: inicio, fecha_fin: fin }).single(),
-                        supabaseClient.rpc('get_bultos_por_mes', { fecha_inicio: inicio, fecha_fin: fin }),
-                        supabaseClient.rpc('get_top_clientes', { fecha_inicio: inicio, fecha_fin: fin }),
-                        supabaseClient.rpc('get_viajes_por_transporte', { fecha_inicio: inicio, fecha_fin: fin }),
-                        supabaseClient.rpc('get_top_skus', { fecha_inicio: inicio, fecha_fin: fin })
-                    ];
-
-                    // --- Promesas de Inventario (NO dependen de la fecha) ---
-                    const inventarioPromises = [
-                        supabaseClient.rpc('get_inventario_kpis').single(),
-                        supabaseClient.rpc('get_inventario_aging'),
-                        supabaseClient.rpc('get_stock_por_sku')
-                    ];
+                    // Fetch Despachos
+                    const { data: dData, error: dErr } = await supabaseClient
+                        .from('vista_dashboard_despachos_base')
+                        .select('*')
+                        .gte('Fecha', fechaDesde)
+                        .lte('Fecha', fechaHasta)
+                        .limit(100000);
                     
-                    // --- Promesas de Operaciones (dependen de la fecha) ---
-                    const operacionesPromises = [
-                        supabaseClient.rpc('get_top_operarios', { fecha_inicio: inicio, fecha_fin: fin })
-                    ];
+                    if (dErr) throw dErr;
+                    setRawDespachos(dData || []);
+
+                    // Fetch Inventario (Sin filtro de fechas para ver stock actual total, o se podría limitar, pero es stock)
+                    const { data: iData, error: iErr } = await supabaseClient
+                        .from('vista_dashboard_inventario_base')
+                        .select('*')
+                        .limit(50000);
                     
-                    // --- Promesas de Cliente-Transporte (dependen de la fecha) ---
-                    const clienteTransportePromises = [
-                        supabaseClient.rpc('get_cliente_transporte_analysis', { fecha_inicio: inicio, fecha_fin: fin }),
-                        supabaseClient.rpc('get_transport_client_count', { fecha_inicio: inicio, fecha_fin: fin }),
-                        supabaseClient.rpc('get_client_transport_count', { fecha_inicio: inicio, fecha_fin: fin })
-                    ];
-
-                    // --- Promesas de Análisis Avanzado (dependen de la fecha) ---
-                    const advancedAnalysisPromises = [
-                        supabaseClient.rpc('get_top_transportes_por_bultos', { fecha_inicio: inicio, fecha_fin: fin }),
-                        supabaseClient.rpc('get_evolucion_bultos_filtrado', { fecha_inicio: inicio, fecha_fin: fin, p_cliente: null, p_transporte: null }),
-                        supabaseClient.rpc('get_lista_clientes_despacho'),
-                        supabaseClient.rpc('get_lista_transportes_despacho')
-                    ];
-
-
-                    // Ejecutar todas las promesas
-                    const [
-                        despachoResults,
-                        inventarioResults,
-                        operacionesResults,
-                        clienteTransporteResults,
-                        advancedAnalysisResults
-                    ] = await Promise.all([
-                        Promise.all(despachoPromises),
-                        Promise.all(inventarioPromises),
-                        Promise.all(operacionesPromises),
-                        Promise.all(clienteTransportePromises),
-                        Promise.all(advancedAnalysisPromises)
-                    ]);
-
-                    // --- 1. Procesar Despachos ---
-                    const [kpisRes, bultosMesRes, clientesRes, transportesRes, skusRes] = despachoResults;
-                    if (kpisRes.data) setKpisDespacho(kpisRes.data);
-                    if (bultosMesRes.data) {
-                        setBultosPorMes({
-                            labels: bultosMesRes.data.map(d => new Date(d.mes)),
-                            datasets: [{
-                                label: 'Bultos (Pallets) Despachados',
-                                data: bultosMesRes.data.map(d => d.bultos),
-                                fill: true, backgroundColor: 'rgba(252, 211, 77, 0.2)', borderColor: 'rgba(245, 158, 11, 1)',
-                                tension: 0.3, pointBackgroundColor: 'rgba(245, 158, 11, 1)',
-                            }]
-                        });
-                    }
-                    if (clientesRes.data) {
-                        setTopClientes({
-                            labels: clientesRes.data.map(d => d.cliente),
-                            datasets: [{ label: 'Bultos', data: clientesRes.data.map(d => d.bultos), backgroundColor: CHART_COLORS, }]
-                        });
-                    }
-                    if (transportesRes.data) {
-                        setTopTransportes({
-                            labels: transportesRes.data.map(d => d.transporte),
-                            datasets: [{ label: 'Nº de Viajes', data: transportesRes.data.map(d => d.viajes), backgroundColor: '#6366f1', borderRadius: 6, }]
-                        });
-                    }
-                    if (skusRes.data) {
-                        setTopSkusDespachados({
-                            labels: skusRes.data.map(d => `${d.sku} (${d.descripcion ? d.descripcion.substring(0,20) : ''}...)`),
-                            datasets: [{ label: 'Cantidad Total Movilizada', data: skusRes.data.map(d => d.cantidad_total), backgroundColor: '#14b8a6', borderRadius: 6, }]
-                        });
-                    }
-
-                    // --- 2. Procesar Inventario ---
-                    const [kpisInvRes, agingRes, stockSkuRes] = inventarioResults;
-                    if (kpisInvRes.data) setKpisInventario(kpisInvRes.data);
-                    if (agingRes.data) {
-                        setInventarioAging({
-                            labels: agingRes.data.map(d => d.rango_antiguedad),
-                            datasets: [{ label: 'Bultos en Stock', data: agingRes.data.map(d => d.bultos), backgroundColor: ['#22c55e', '#f59e0b', '#ef4444', '#b91c1c'], borderRadius: 6, }]
-                        });
-                    }
-                    if (stockSkuRes.data) {
-                        setStockPorSku({
-                            labels: stockSkuRes.data.map(d => `${d.sku} (${d.descripcion ? d.descripcion.substring(0,20) : ''}...)`),
-                            datasets: [{ label: 'Cantidad Total en Stock', data: stockSkuRes.data.map(d => d.cantidad_total), backgroundColor: '#06b6d4', borderRadius: 6, }]
-                        });
-                    }
-                    
-                    // --- 3. Procesar Operaciones ---
-                    const [operariosRes] = operacionesResults;
-                    if (operariosRes.data) {
-                        setTopOperarios({
-                            labels: operariosRes.data.map(d => `Legajo ${d.legajo}`),
-                            datasets: [{ label: 'Bultos Despachados', data: operariosRes.data.map(d => d.bultos), backgroundColor: '#a855f7', borderRadius: 6, }]
-                        });
-                    }
-                    
-                    // --- 4. Procesar Cliente-Transporte ---
-                    const [clienteTransporteRes, transportCountRes, clientCountRes] = clienteTransporteResults;
-                    if (clienteTransporteRes.data) setClienteTransporteData(clienteTransporteRes.data);
-                    if (transportCountRes.data) {
-                        setTransportClientCount({
-                            labels: transportCountRes.data.map(d => d.transporte),
-                            datasets: [{ label: 'Nº de Clientes', data: transportCountRes.data.map(d => d.conteo_clientes), backgroundColor: '#d946ef', borderRadius: 6, }]
-                        });
-                    }
-                    if (clientCountRes.data) {
-                        setClientTransportCount({
-                            labels: clientCountRes.data.map(d => d.cliente),
-                            datasets: [{ label: 'Nº de Transportes', data: clientCountRes.data.map(d => d.conteo_transportes), backgroundColor: '#f97316', borderRadius: 6, }]
-                        });
-                    }
-
-                    // --- 5. Procesar Análisis Avanzado ---
-                    const [bultosTransporteRes, evoMensualRes, clientesFiltroRes, transportesFiltroRes] = advancedAnalysisResults;
-                    if (bultosTransporteRes.data) {
-                        setAdvancedAnalysisData({
-                            labels: bultosTransporteRes.data.map(d => d.transporte),
-                            datasets: [{ label: 'Bultos Totales', data: bultosTransporteRes.data.map(d => d.bultos), backgroundColor: CHART_COLORS, borderRadius: 6 }]
-                        });
-                    }
-                    if (evoMensualRes.data) {
-                        const monthlyData = {
-                            labels: evoMensualRes.data.map(d => new Date(d.mes)),
-                            datasets: [{
-                                label: 'Bultos Totales',
-                                data: evoMensualRes.data.map(d => d.bultos),
-                                fill: true, backgroundColor: 'rgba(59, 130, 246, 0.2)', borderColor: '#3b82f6',
-                                tension: 0.3, pointBackgroundColor: '#3b82f6',
-                            }]
-                        };
-                        setMonthlyEvolutionData(monthlyData);
-                        setFilteredMonthlyEvolutionData(monthlyData); // Inicializa el gráfico filtrado con los datos totales
-                    }
-                    if (clientesFiltroRes.data) setAdvancedClients(clientesFiltroRes.data.map(c => c.cliente));
-                    if (transportesFiltroRes.data) setAdvancedTransports(transportesFiltroRes.data.map(t => t.transporte));
-
-
-                } catch (error) {
-                    console.error("Error al cargar datos del dashboard:", error);
-                    alert(`Error al cargar datos: ${error.message}`);
+                    if (iErr) throw iErr;
+                    setRawInventario(iData || []);
+                } catch (err) {
+                    console.error("Error fetching data:", err);
+                    alert("Error cargando datos. Revisa la consola o asegúrate de haber creado las vistas SQL.");
                 } finally {
                     setIsLoading(false);
                 }
-            }, []);
+            };
 
-            // Carga inicial
+            // Trigger fetch on date change or mount
             useEffect(() => {
-                fetchData(fechaDesde, fechaHasta);
-            }, []);
+                fetchData();
+            }, [fechaDesde, fechaHasta]);
 
-            // Efecto para el gráfico dinámico de Análisis Avanzado
-            useEffect(() => {
-                const fetchFilteredData = async () => {
-                    if (!selectedAdvancedClient && !selectedAdvancedTransport) {
-                        // Si no hay filtros, mostrar los datos totales que ya tenemos
-                        setFilteredMonthlyEvolutionData(monthlyEvolutionData);
-                        return;
-                    }
+            // --- LISTAS PARA DESPLEGABLES ---
+            const listasOptions = useMemo(() => {
+                const clientes = new Set();
+                const transportes = new Set();
+                const productos = new Set();
 
-                    if (!supabaseClient) return;
-                    
-                    setIsAdvancedLoading(true);
-                    try {
-                        const { data, error } = await supabaseClient.rpc('get_evolucion_bultos_filtrado', {
-                            fecha_inicio: fechaDesde,
-                            fecha_fin: fechaHasta,
-                            p_cliente: selectedAdvancedClient || null,
-                            p_transporte: selectedAdvancedTransport || null
-                        });
+                rawDespachos.forEach(d => {
+                    if (d.Cliente) clientes.add(d.Cliente);
+                    if (d.Transporte) transportes.add(d.Transporte);
+                    if (d.Molde_SKU) productos.add(d.Molde_SKU);
+                });
+                rawInventario.forEach(d => {
+                    if (d.Cliente) clientes.add(d.Cliente);
+                    if (d.Molde_SKU) productos.add(d.Molde_SKU);
+                });
 
-                        if (error) throw error;
-
-                        if (data) {
-                            setFilteredMonthlyEvolutionData({
-                                labels: data.map(d => new Date(d.mes)),
-                                datasets: [{
-                                    label: `Bultos ${selectedAdvancedClient || ''} ${selectedAdvancedTransport || ''}`.trim(),
-                                    data: data.map(d => d.bultos),
-                                    fill: true, backgroundColor: 'rgba(239, 68, 68, 0.2)', borderColor: '#ef4444',
-                                    tension: 0.3, pointBackgroundColor: '#ef4444',
-                                }]
-                            });
-                        }
-                    } catch (error) {
-                        console.error("Error al cargar datos filtrados:", error);
-                        alert(`Error al cargar datos filtrados: ${error.message}`);
-                    } finally {
-                        setIsAdvancedLoading(false);
-                    }
+                return {
+                    clientes: Array.from(clientes).sort(),
+                    transportes: Array.from(transportes).sort(),
+                    productos: Array.from(productos).sort()
                 };
+            }, [rawDespachos, rawInventario]);
 
-                fetchFilteredData();
-            }, [selectedAdvancedClient, selectedAdvancedTransport, fechaDesde, fechaHasta, monthlyEvolutionData]); // Depende también de los datos totales
-            
-            const handleFiltrar = () => {
-                fetchData(fechaDesde, fechaHasta);
-                // Limpiar filtros de análisis avanzado al cambiar el rango de fechas principal
-                setSelectedAdvancedClient('');
-                setSelectedAdvancedTransport('');
+            // --- FILTRADO DE DATOS EN MEMORIA ---
+            const filteredDespachos = useMemo(() => {
+                return rawDespachos.filter(d => {
+                    if (filtroCliente && d.Cliente !== filtroCliente) return false;
+                    if (filtroTransporte && d.Transporte !== filtroTransporte) return false;
+                    if (filtroProducto && d.Molde_SKU !== filtroProducto) return false;
+                    return true;
+                });
+            }, [rawDespachos, filtroCliente, filtroTransporte, filtroProducto]);
+
+            const filteredInventario = useMemo(() => {
+                return rawInventario.filter(d => {
+                    if (filtroCliente && d.Cliente !== filtroCliente) return false;
+                    // Ignoramos Transporte para inventario
+                    if (filtroProducto && d.Molde_SKU !== filtroProducto) return false;
+                    return true;
+                });
+            }, [rawInventario, filtroCliente, filtroProducto]);
+
+            // --- PROCESAMIENTO GERENCIAL ---
+            const kpisGerencial = useMemo(() => {
+                const idListas = new Set(filteredDespachos.map(d => d.idLista));
+                const totalBultos = filteredDespachos.length; // 1 fila = 1 pallet en la vista
+                const totalCantidades = filteredDespachos.reduce((sum, d) => sum + (Number(d.Cantidad) || 0), 0);
+                return { viajes: idListas.size, bultos: totalBultos, cantidades: totalCantidades };
+            }, [filteredDespachos]);
+
+            const chartEvolucionMensual = useMemo(() => {
+                const agrupado = {};
+                filteredDespachos.forEach(d => {
+                    const mes = d.Fecha.substring(0, 7); // YYYY-MM
+                    if (!agrupado[mes]) agrupado[mes] = 0;
+                    agrupado[mes] += 1; // 1 bulto
+                });
+                const labels = Object.keys(agrupado).sort();
+                return {
+                    labels,
+                    datasets: [{
+                        label: 'Bultos Despachados',
+                        data: labels.map(l => agrupado[l]),
+                        borderColor: '#3b82f6', backgroundColor: 'rgba(59, 130, 246, 0.2)',
+                        fill: true, tension: 0.4
+                    }]
+                };
+            }, [filteredDespachos]);
+
+            const getTop5 = (data, keyGroup, keySum) => {
+                const agrupado = {};
+                data.forEach(d => {
+                    const val = d[keyGroup] || 'N/A';
+                    if (!agrupado[val]) agrupado[val] = 0;
+                    agrupado[val] += keySum ? (Number(d[keySum]) || 0) : 1;
+                });
+                return Object.entries(agrupado)
+                    .sort((a, b) => b[1] - a[1])
+                    .slice(0, 5);
             };
 
-            const handleClearAdvancedFilters = () => {
-                setSelectedAdvancedClient('');
-                setSelectedAdvancedTransport('');
-            };
+            const chartTopClientes = useMemo(() => {
+                const top = getTop5(filteredDespachos, 'Cliente', null); // by bultos
+                return {
+                    labels: top.map(t => t[0]),
+                    datasets: [{
+                        data: top.map(t => t[1]),
+                        backgroundColor: ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6']
+                    }]
+                };
+            }, [filteredDespachos]);
 
-            // --- INICIO: LÓGICA DE EXPORTACIÓN ---
-            const handleExport = () => {
-                if (currentTab === 'dispatch') {
-                    exportDispatchData();
-                } else if (currentTab === 'inventory') {
-                    exportInventoryData();
-                } else if (currentTab === 'operations') {
-                    exportOperationsData();
-                } else if (currentTab === 'client-transport') {
-                    exportClientTransportData();
-                } else if (currentTab === 'advanced') {
-                    // Aquí podrías agregar una función de exportación para la nueva pestaña
-                    console.log("Exportación para Análisis Avanzado no implementada.");
+            const chartTopTransportes = useMemo(() => {
+                // By Viajes (Distinct idLista)
+                const agrupado = {};
+                filteredDespachos.forEach(d => {
+                    const t = d.Transporte || 'N/A';
+                    if (!agrupado[t]) agrupado[t] = new Set();
+                    agrupado[t].add(d.idLista);
+                });
+                const top = Object.entries(agrupado).map(([k, v]) => [k, v.size]).sort((a,b)=>b[1]-a[1]).slice(0,5);
+                return {
+                    labels: top.map(t => t[0]),
+                    datasets: [{
+                        label: 'Nº Viajes',
+                        data: top.map(t => t[1]),
+                        backgroundColor: '#10b981',
+                        borderRadius: 6
+                    }]
+                };
+            }, [filteredDespachos]);
+
+            // --- PROCESAMIENTO OPERATIVO ---
+            const tablaOperativa = useMemo(() => {
+                // Agrupar por Transporte, Cliente, Molde -> sum bultos, sum cantidad
+                const agrupado = {};
+                filteredDespachos.forEach(d => {
+                    const key = `${d.Transporte}|${d.Cliente}|${d.Molde_SKU}`;
+                    if (!agrupado[key]) {
+                        agrupado[key] = {
+                            Transporte: d.Transporte, Cliente: d.Cliente, Producto: d.Molde_SKU,
+                            Bultos: 0, Cantidad: 0, UltimaFecha: d.Fecha
+                        };
+                    }
+                    agrupado[key].Bultos += 1;
+                    agrupado[key].Cantidad += (Number(d.Cantidad) || 0);
+                    if (d.Fecha > agrupado[key].UltimaFecha) agrupado[key].UltimaFecha = d.Fecha;
+                });
+                return Object.values(agrupado).sort((a,b) => b.Bultos - a.Bultos);
+            }, [filteredDespachos]);
+
+            const chartLineaTiempoTransporte = useMemo(() => {
+                // Si no hay filtro de transporte, mostramos los top 3 o 5 para no saturar
+                let transportesAMostrar = [];
+                if (filtroTransporte) {
+                    transportesAMostrar = [filtroTransporte];
+                } else {
+                    const top = getTop5(filteredDespachos, 'Transporte', null);
+                    transportesAMostrar = top.slice(0,3).map(t=>t[0]);
                 }
+
+                const datasets = transportesAMostrar.map((transp, i) => {
+                    const tData = filteredDespachos.filter(d => d.Transporte === transp);
+                    const porFecha = {};
+                    tData.forEach(d => {
+                        const f = d.Fecha;
+                        if (!porFecha[f]) porFecha[f] = new Set();
+                        porFecha[f].add(d.idLista);
+                    });
+                    
+                    // Asegurar orden
+                    const fKeys = Object.keys(porFecha).sort();
+                    
+                    const colors = ['#f97316', '#3b82f6', '#8b5cf6', '#10b981', '#ef4444'];
+                    return {
+                        label: transp,
+                        data: fKeys.map(k => ({ x: k, y: porFecha[k].size })),
+                        borderColor: colors[i % colors.length],
+                        backgroundColor: colors[i % colors.length],
+                        tension: 0.2
+                    };
+                });
+
+                return { datasets };
+            }, [filteredDespachos, filtroTransporte]);
+
+
+            // --- PROCESAMIENTO INVENTARIO ---
+            const kpisInventario = useMemo(() => {
+                const totalBultos = filteredInventario.length;
+                const totalCantidades = filteredInventario.reduce((sum, d) => sum + (Number(d.Cantidad) || 0), 0);
+                return { bultos: totalBultos, cantidades: totalCantidades };
+            }, [filteredInventario]);
+
+            const tablaInventario = useMemo(() => {
+                const agrupado = {};
+                filteredInventario.forEach(d => {
+                    const key = `${d.Cliente}|${d.Molde_SKU}`;
+                    if (!agrupado[key]) {
+                        agrupado[key] = { Cliente: d.Cliente, Producto: d.Molde_SKU, Bultos: 0, Cantidad: 0 };
+                    }
+                    agrupado[key].Bultos += 1;
+                    agrupado[key].Cantidad += (Number(d.Cantidad) || 0);
+                });
+                return Object.values(agrupado).sort((a,b) => b.Bultos - a.Bultos);
+            }, [filteredInventario]);
+
+
+            const handleLimpiarFiltros = () => {
+                setFiltroCliente('');
+                setFiltroTransporte('');
+                setFiltroProducto('');
             };
 
-            const exportDispatchData = () => {
-                const wb = XLSX.utils.book_new();
-
-                // 1. KPIs
-                const kpisData = [{
-                    "Total Despachos": kpisDespacho.total_despachos,
-                    "Bultos Movilizados": kpisDespacho.total_bultos,
-                    "Total Cantidad": kpisDespacho.total_cantidad,
-                    "Clientes Activos": kpisDespacho.clientes_activos
-                }];
-                const ws_kpis = XLSX.utils.json_to_sheet(kpisData);
-                XLSX.utils.book_append_sheet(wb, ws_kpis, "KPIs Despacho");
-
-                // 2. Bultos por Mes
-                const bultosMesData = bultosPorMes.labels.map((label, i) => ({
-                    Mes: label.toISOString().split('T')[0],
-                    Bultos: bultosPorMes.datasets[0].data[i]
-                }));
-                const ws_bultos_mes = XLSX.utils.json_to_sheet(bultosMesData);
-                XLSX.utils.book_append_sheet(wb, ws_bultos_mes, "Bultos por Mes");
-
-                // 3. Top Clientes
-                const topClientesData = topClientes.labels.map((label, i) => ({
-                    Cliente: label,
-                    Bultos: topClientes.datasets[0].data[i]
-                }));
-                const ws_top_clientes = XLSX.utils.json_to_sheet(topClientesData);
-                XLSX.utils.book_append_sheet(wb, ws_top_clientes, "Top Clientes");
-
-                // 4. Top Transportes
-                const topTransportesData = topTransportes.labels.map((label, i) => ({
-                    Transporte: label,
-                    Bultos: topTransportes.datasets[0].data[i]
-                }));
-                const ws_top_transportes = XLSX.utils.json_to_sheet(topTransportesData);
-                XLSX.utils.book_append_sheet(wb, ws_top_transportes, "Top Transportes");
-                
-                // 5. Top SKUs
-                const topSkusData = topSkusDespachados.labels.map((label, i) => ({
-                    SKU_Descripcion: label,
-                    Cantidad: topSkusDespachados.datasets[0].data[i]
-                }));
-                const ws_top_skus = XLSX.utils.json_to_sheet(topSkusData);
-                XLSX.utils.book_append_sheet(wb, ws_top_skus, "Top SKUs Despachados");
-
-                XLSX.writeFile(wb, `Export_Despachos_${fechaDesde}_a_${fechaHasta}.xlsx`);
-            };
-
-            const exportInventoryData = () => {
-                const wb = XLSX.utils.book_new();
-                
-                // 1. KPIs
-                const kpisData = [{
-                    "Bultos en Stock": kpisInventario.stock_bultos,
-                    "Cantidad en Stock": kpisInventario.stock_cantidad,
-                    "Antigüedad Promedio (días)": kpisInventario.antiguedad_promedio
-                }];
-                const ws_kpis = XLSX.utils.json_to_sheet(kpisData);
-                XLSX.utils.book_append_sheet(wb, ws_kpis, "KPIs Inventario");
-
-                // 2. Antigüedad
-                const agingData = inventarioAging.labels.map((label, i) => ({
-                    "Rango Antigüedad": label,
-                    Bultos: inventarioAging.datasets[0].data[i]
-                }));
-                const ws_aging = XLSX.utils.json_to_sheet(agingData);
-                XLSX.utils.book_append_sheet(wb, ws_aging, "Antigüedad Stock");
-                
-                // 3. Stock por SKU
-                const stockSkuData = stockPorSku.labels.map((label, i) => ({
-                    SKU_Descripcion: label,
-                    Cantidad: stockPorSku.datasets[0].data[i]
-                }));
-                const ws_stock_sku = XLSX.utils.json_to_sheet(stockSkuData);
-                XLSX.utils.book_append_sheet(wb, ws_stock_sku, "Stock por SKU");
-                
-                XLSX.writeFile(wb, "Export_Inventario_Actual.xlsx");
-            };
-
-            const exportOperationsData = () => {
-                const wb = XLSX.utils.book_new();
-                
-                // 1. Top Operarios
-                const operariosData = topOperarios.labels.map((label, i) => ({
-                    Legajo: label,
-                    Bultos: topOperarios.datasets[0].data[i]
-                }));
-                const ws_operarios = XLSX.utils.json_to_sheet(operariosData);
-                XLSX.utils.book_append_sheet(wb, ws_operarios, "Top Operarios");
-                
-                XLSX.writeFile(wb, `Export_Operaciones_${fechaDesde}_a_${fechaHasta}.xlsx`);
-            };
-
-            const exportClientTransportData = () => {
-                const wb = XLSX.utils.book_new();
-                
-                // 1. Clientes por Transporte
-                const transportClientData = transportClientCount.labels.map((label, i) => ({
-                    Transporte: label,
-                    "Nº Clientes": transportClientCount.datasets[0].data[i]
-                }));
-                const ws_transport = XLSX.utils.json_to_sheet(transportClientData);
-                XLSX.utils.book_append_sheet(wb, ws_transport, "Clientes por Transporte");
-                
-                // 2. Transportes por Cliente
-                const clientTransportData = clientTransportCount.labels.map((label, i) => ({
-                    Cliente: label,
-                    "Nº Transportes": clientTransportCount.datasets[0].data[i]
-                }));
-                const ws_client = XLSX.utils.json_to_sheet(clientTransportData);
-                XLSX.utils.book_append_sheet(wb, ws_client, "Transportes por Cliente");
-                
-                // 3. Datos Crudos (el "mix")
-                const ws_data = XLSX.utils.json_to_sheet(clienteTransporteData);
-                XLSX.utils.book_append_sheet(wb, ws_data, "Detalle Bultos Cliente-Transp");
-                
-                XLSX.writeFile(wb, `Export_Cliente_Transporte_${fechaDesde}_a_${fechaHasta}.xlsx`);
-            };
-            // --- FIN: LÓGICA DE EXPORTACIÓN ---
-            
-            const formatNumber = (num) => {
-                if (isNaN(num)) return '0';
-                if (num === null) return '0';
-                return new Intl.NumberFormat('es-ES', { maximumFractionDigits: 1 }).format(num);
-            };
-            
-            const TabButton = ({ tabId, title, icon }) => (
-                <button
-                    role="tab"
-                    aria-selected={currentTab === tabId}
-                    onClick={() => setCurrentTab(tabId)}
-                    className="tab-button flex items-center justify-center font-semibold p-4 border-b-4"
-                >
-                    <i className={`fas ${icon} mr-2`}></i>
-                    <span>{title}</span>
-                </button>
-            );
-            
-            const Select = ({ value, onChange, options, placeholder, className }) => (
-                <select
-                    value={value}
-                    onChange={e => onChange(e.target.value)}
-                    className={`rounded-md border-gray-300 shadow-sm p-2 border ${className}`}
-                >
-                    <option value="">{placeholder}</option>
-                    {options.map(opt => <option key={opt} value={opt}>{opt}</option>)}
-                </select>
-            );
+            const formatter = new Intl.NumberFormat('es-AR');
 
             return (
-                <div className="min-h-screen p-4 sm:p-6 bg-black bg-opacity-50">
-                    <div className="relative bg-gray-50 p-6 rounded-2xl shadow-xl flex flex-col min-h-0">
-                        {isLoading && <LoadingOverlay />}
-
-                        {/* --- CABECERA --- */}
-                        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 pb-4 border-b border-gray-200">
-                            <div>
-                                <h1 className="text-3xl font-extrabold text-gray-800">Dashboard Logístico</h1>
-                                <p className="text-gray-500">Análisis de Despachos, Inventario y Operaciones</p>
-                            </div>
-                            <div className="flex items-center space-x-3 mt-4 sm:mt-0">
-                                <a 
-                                    href="grillaqr.html" 
-                                    className="bg-green-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-green-700 transition-transform transform hover:scale-105 flex items-center"
-                                >
-                                    <i className="fas fa-qrcode mr-2"></i>Trazabilidad
-                                </a>
-                                <a 
-                                    href="histolistaempaque.html" 
-                                    className="bg-gray-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-gray-700 transition-transform transform hover:scale-105 flex items-center"
-                                >
-                                    <i className="fas fa-history mr-2"></i>Histórico
-                                </a>
-                                <a 
-                                    href="index.html" 
-                                    className="bg-gray-500 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-gray-600 transition-transform transform hover:scale-105 flex items-center"
-                                >
-                                    <i className="fas fa-home mr-2"></i>Menú Principal
-                                </a>
-                            </div>
+                <div className="flex-grow flex flex-col p-4 md:p-6 pb-20 max-w-7xl mx-auto w-full">
+                    
+                    {/* Header Principal */}
+                    <div className="glass-panel p-6 rounded-3xl mb-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                        <div>
+                            <h1 className="text-3xl font-extrabold text-gray-800 tracking-tight">Dashboard Logístico</h1>
+                            <p className="text-gray-500 font-medium mt-1">Análisis integral de Despachos e Inventario</p>
                         </div>
-                        
-                        {/* --- PESTAÑAS --- */}
-                        <div className="border-b border-gray-200 mb-6">
-                            <nav className="-mb-px flex space-x-4 overflow-x-auto" aria-label="Tabs">
-                                <TabButton tabId="dispatch" title="Análisis de Despachos" icon="fa-shipping-fast" />
-                                <TabButton tabId="inventory" title="Análisis de Inventario" icon="fa-boxes-stacked" />
-                                <TabButton tabId="advanced" title="Análisis Avanzado" icon="fa-chart-line" />
-                                <TabButton tabId="operations" title="Análisis de Operaciones" icon="fa-user-cog" />
-                                <TabButton tabId="client-transport" title="Cliente-Transporte" icon="fa-route" />
-                            </nav>
+                        <div className="flex gap-3">
+                            <a href="grillaqr.html" className="bg-white text-gray-700 border border-gray-200 px-4 py-2 rounded-xl font-semibold shadow-sm hover:bg-gray-50 transition"><i className="fas fa-qrcode mr-2"></i> Trazabilidad</a>
+                            <a href="index.html" className="bg-gray-800 text-white px-4 py-2 rounded-xl font-semibold shadow-sm hover:bg-gray-700 transition"><i className="fas fa-home mr-2"></i> Inicio</a>
                         </div>
-                        
-                        {/* --- FILTROS DE FECHA (Condicionales) --- */}
-                        {currentTab !== 'inventory' && (
-                            <div className="flex flex-col sm:flex-row items-center space-y-2 sm:space-y-0 sm:space-x-4 mb-6 p-4 border rounded-lg bg-white shadow-sm">
-                                <div className="flex items-center gap-x-2">
-                                    <label className="text-sm font-medium text-gray-700">Desde:</label>
-                                    <input 
-                                        type="date" 
-                                        value={fechaDesde} 
-                                        onChange={e => setFechaDesde(e.target.value)} 
-                                        className="rounded-md border-gray-300 shadow-sm p-2 border"
-                                    />
-                                </div>
-                                <div className="flex items-center gap-x-2">
-                                    <label className="text-sm font-medium text-gray-700">Hasta:</label>
-                                    <input 
-                                        type="date" 
-                                        value={fechaHasta} 
-                                        onChange={e => setFechaHasta(e.target.value)} 
-                                        className="rounded-md border-gray-300 shadow-sm p-2 border"
-                                    />
-                                </div>
-                                <button onClick={handleFiltrar} disabled={isLoading} className="w-full sm:w-auto bg-blue-600 text-white font-semibold py-2 px-6 rounded-lg shadow-md hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center">
-                                    <i className={`fas ${isLoading ? 'fa-sync-alt animate-spin' : 'fa-filter'} mr-2`}></i>
-                                    {isLoading ? 'Cargando...' : 'Filtrar'}
-                                </button>
-                                {/* --- BOTÓN EXPORTAR --- */}
-                                <button onClick={handleExport} disabled={isLoading} className="w-full sm:w-auto bg-green-600 text-white font-semibold py-2 px-6 rounded-lg shadow-md hover:bg-green-700 disabled:opacity-50 flex items-center justify-center">
-                                    <i className="fas fa-file-excel mr-2"></i>
-                                    Exportar
-                                </button>
-                            </div>
-                        )}
-                        
-                        {currentTab === 'inventory' && (
-                            <div className="flex flex-col sm:flex-row items-center justify-between mb-6 p-4 border rounded-lg bg-blue-50 border-blue-200 text-blue-800 shadow-sm">
-                                <span>
-                                    <i className="fas fa-info-circle mr-2"></i>
-                                    El análisis de inventario muestra el estado actual del stock (no se ve afectado por el filtro de fechas).
-                                </span>
-                                {/* --- BOTÓN EXPORTAR (Pestaña Inventario) --- */}
-                                <button onClick={handleExport} disabled={isLoading} className="w-full sm:w-auto mt-2 sm:mt-0 bg-green-600 text-white font-semibold py-2 px-6 rounded-lg shadow-md hover:bg-green-700 disabled:opacity-50 flex items-center justify-center">
-                                    <i className="fas fa-file-excel mr-2"></i>
-                                    Exportar
-                                </button>
-                            </div>
-                        )}
-
-
-                        {/* --- CONTENIDO DE PESTAÑAS --- */}
-                        
-                        {/* --- Pestaña 1: DESPACHOS --- */}
-                        <div role="tabpanel" hidden={currentTab !== 'dispatch'}>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
-                                <KpiCard title="Total Despachos" value={formatNumber(kpisDespacho.total_despachos)} icon="fa-shipping-fast" color="amber" />
-                                <KpiCard title="Bultos Movilizados" value={formatNumber(kpisDespacho.total_bultos)} icon="fa-pallet" color="amber" />
-                                <KpiCard title="Total Cantidad" value={formatNumber(kpisDespacho.total_cantidad)} icon="fa-box-open" unit="U." color="amber" />
-                                <KpiCard title="Clientes Activos" value={formatNumber(kpisDespacho.clientes_activos)} icon="fa-users" color="amber" />
-                            </div>
-                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                                <ChartComponent
-                                    type="line"
-                                    title="Evolutivo de Bultos Despachados"
-                                    data={bultosPorMes}
-                                    options={{
-                                        scales: {
-                                            x: { type: 'time', time: { unit: 'month', displayFormats: { month: 'MMM yyyy' }, tooltipFormat: 'MMMM yyyy' }, title: { display: true, text: 'Mes' }, 
-                                                adapters: { date: { locale: (window.dateFns && window.dateFns.locale && window.dateFns.locale.es) ? window.dateFns.locale.es : undefined } } 
-                                            },
-                                            y: { beginAtZero: true, title: { display: true, text: 'Nº de Bultos (Pallets)' } }
-                                        }
-                                    }}
-                                />
-                                <ChartComponent
-                                    type="doughnut"
-                                    title="Top 5 Clientes (por Bultos)"
-                                    data={topClientes}
-                                    options={{ plugins: { legend: { position: 'right' } } }}
-                                />
-                                <div className="lg:col-span-2">
-                                    <ChartComponent
-                                        type="bar"
-                                        title="Top 5 Transportes (por Viajes)"
-                                        data={topTransportes}
-                                        options={{
-                                            indexAxis: 'y',
-                                            scales: { 
-                                                x: { beginAtZero: true, title: { display: true, text: 'Nº de Viajes' } },
-                                                y: { ticks: { autoSkip: false } }
-                                            },
-                                            plugins: { legend: { display: false } }
-                                        }}
-                                    />
-                                </div>
-                                <div className="lg:col-span-2">
-                                    <ChartComponent
-                                        type="bar"
-                                        title="Top 10 SKUs Despachados (por Cantidad)"
-                                        data={topSkusDespachados}
-                                        options={{
-                                            scales: { 
-                                                x: { ticks: { autoSkip: false } },
-                                                y: { beginAtZero: true, title: { display: true, text: 'Cantidad Total' } } 
-                                            },
-                                            plugins: { legend: { display: false } }
-                                        }}
-                                    />
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* --- Pestaña 2: INVENTARIO --- */}
-                        <div role="tabpanel" hidden={currentTab !== 'inventory'}>
-                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 mb-6">
-                                <KpiCard title="Bultos en Stock" value={formatNumber(kpisInventario.stock_bultos)} icon="fa-boxes-stacked" color="blue" />
-                                <KpiCard title="Cantidad en Stock" value={formatNumber(kpisInventario.stock_cantidad)} icon="fa-box-open" unit="U." color="blue" />
-                                <KpiCard title="Antigüedad Promedio" value={formatNumber(kpisInventario.antiguedad_promedio)} icon="fa-hourglass-half" unit="días" color="blue" />
-                            </div>
-                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                                <ChartComponent
-                                    type="bar"
-                                    title="Antigüedad de Inventario (Aging)"
-                                    data={inventarioAging}
-                                    options={{
-                                        scales: { 
-                                            x: { title: { display: true, text: 'Rango de Antigüedad' } },
-                                            y: { beginAtZero: true, title: { display: true, text: 'Nº de Bultos (Pallets)' } } 
-                                        },
-                                        plugins: { legend: { display: false } }
-                                    }}
-                                />
-                                <div className="lg:row-span-2">
-                                    <ChartComponent
-                                        type="bar"
-                                        title="Top 10 SKUs en Stock (por Cantidad)"
-                                        data={stockPorSku}
-                                        options={{
-                                            indexAxis: 'y',
-                                            scales: { 
-                                                x: { beginAtZero: true, title: { display: true, text: 'Cantidad Total en Stock' } },
-                                                y: { ticks: { autoSkip: false } }
-                                            },
-                                            plugins: { legend: { display: false } }
-                                        }}
-                                    />
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* --- Pestaña 3: ANÁLISIS AVANZADO --- */}
-                        <div role="tabpanel" hidden={currentTab !== 'advanced'}>
-                            <div className="grid grid-cols-1 gap-6">
-                                <ChartComponent
-                                    type="bar"
-                                    title="Bultos Totales por Transporte"
-                                    data={advancedAnalysisData}
-                                    options={{
-                                        scales: { 
-                                            x: { ticks: { autoSkip: false } },
-                                            y: { beginAtZero: true, title: { display: true, text: 'Nº de Bultos (Pallets)' } } 
-                                        },
-                                        plugins: { legend: { display: false } }
-                                    }}
-                                />
-                                <ChartComponent
-                                    type="line"
-                                    title="Evolución Mensual Total de Bultos"
-                                    data={monthlyEvolutionData}
-                                    options={{
-                                        scales: {
-                                            x: { type: 'time', time: { unit: 'month', displayFormats: { month: 'MMM yyyy' }, tooltipFormat: 'MMMM yyyy' }, title: { display: true, text: 'Mes' }, 
-                                                adapters: { date: { locale: (window.dateFns && window.dateFns.locale && window.dateFns.locale.es) ? window.dateFns.locale.es : undefined } } 
-                                            },
-                                            y: { beginAtZero: true, title: { display: true, text: 'Nº de Bultos (Pallets)' } }
-                                        }
-                                    }}
-                                />
-                                {/* Gráfico dinámico con filtros */}
-                                <div className="bg-white p-6 rounded-2xl shadow-xl border border-gray-200 h-full flex flex-col">
-                                    <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-4">
-                                        <h3 className="text-xl font-bold text-gray-800 mb-2 md:mb-0">Evolución Mensual de Bultos (Filtrada)</h3>
-                                        <div className="flex items-center space-x-2">
-                                            <Select
-                                                value={selectedAdvancedClient}
-                                                onChange={setSelectedAdvancedClient}
-                                                options={advancedClients}
-                                                placeholder="Filtrar por Cliente"
-                                            />
-                                            <Select
-                                                value={selectedAdvancedTransport}
-                                                onChange={setSelectedAdvancedTransport}
-                                                options={advancedTransports}
-                                                placeholder="Filtrar por Transporte"
-                                            />
-                                            <button onClick={handleClearAdvancedFilters} className="bg-gray-200 text-gray-700 font-semibold py-2 px-4 rounded-lg hover:bg-gray-300">
-                                                <i className="fas fa-eraser"></i>
-                                            </button>
-                                        </div>
-                                    </div>
-                                    <div className="flex-grow relative h-64 md:h-80 lg:h-96">
-                                        {isAdvancedLoading && <LoadingOverlay message="Cargando gráfico..."/>}
-                                        <ChartComponent
-                                            type="line"
-                                            data={filteredMonthlyEvolutionData}
-                                            options={{
-                                                scales: {
-                                                    x: { type: 'time', time: { unit: 'month', displayFormats: { month: 'MMM yyyy' }, tooltipFormat: 'MMMM yyyy' }, title: { display: true, text: 'Mes' }, 
-                                                        adapters: { date: { locale: (window.dateFns && window.dateFns.locale && window.dateFns.locale.es) ? window.dateFns.locale.es : undefined } } 
-                                                    },
-                                                    y: { beginAtZero: true, title: { display: true, text: 'Nº de Bultos (Pallets)' } }
-                                                }
-                                            }}
-                                        />
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* --- Pestaña 4: OPERACIONES --- */}
-                        <div role="tabpanel" hidden={currentTab !== 'operations'}>
-                            <div className="grid grid-cols-1 gap-6">
-                                <ChartComponent
-                                    type="bar"
-                                    title="Top 10 Operarios (por Bultos Despachados)"
-                                    data={topOperarios}
-                                    options={{
-                                        scales: { 
-                                            x: { ticks: { autoSkip: false } },
-                                            y: { beginAtZero: true, title: { display: true, text: 'Nº de Bultos (Pallets)' } } 
-                                        },
-                                        plugins: { legend: { display: false } }
-                                    }}
-                                />
-                            </div>
-                        </div>
-                        
-                        {/* --- Pestaña 5: CLIENTE-TRANSPORTE --- */}
-                        <div role="tabpanel" hidden={currentTab !== 'client-transport'}>
-                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-                                <ChartComponent
-                                    type="bar"
-                                    title="Top 10: Nº de Clientes por Transporte"
-                                    data={transportClientCount}
-                                    options={{
-                                        indexAxis: 'y',
-                                        scales: { 
-                                            x: { beginAtZero: true, title: { display: true, text: 'Nº de Clientes Únicos' } },
-                                            y: { ticks: { autoSkip: false } }
-                                        },
-                                        plugins: { legend: { display: false } }
-                                    }}
-                                />
-                                <ChartComponent
-                                    type="bar"
-                                    title="Top 10: Nº de Transportes por Cliente"
-                                    data={clientTransportCount}
-                                    options={{
-                                        indexAxis: 'y',
-                                        scales: { 
-                                            x: { beginAtZero: true, title: { display: true, text: 'Nº de Transportes Únicos' } },
-                                            y: { ticks: { autoSkip: false } }
-                                        },
-                                        plugins: { legend: { display: false } }
-                                    }}
-                                />
-                            </div>
-                            <div className="grid grid-cols-1 gap-6">
-                                <SimpleTable 
-                                    title="Detalle: Bultos por Cliente y Transporte (El Mix)"
-                                    headers={["Cliente", "Transporte", "Bultos"]}
-                                    data={clienteTransporteData}
-                                />
-                            </div>
-                        </div>
-
                     </div>
+
+                    {/* Barra de Filtros Globales */}
+                    <div className="glass-panel p-4 rounded-2xl mb-6 flex flex-wrap items-end gap-4 shadow-sm z-10 relative">
+                        <div className="flex-1 min-w-[140px]">
+                            <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">Desde</label>
+                            <input type="date" value={fechaDesde} onChange={e => setFechaDesde(e.target.value)} className="w-full rounded-xl border-gray-200 shadow-sm px-3 py-2 bg-white focus:ring-2 focus:ring-blue-500 outline-none text-sm font-medium"/>
+                        </div>
+                        <div className="flex-1 min-w-[140px]">
+                            <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">Hasta</label>
+                            <input type="date" value={fechaHasta} onChange={e => setFechaHasta(e.target.value)} className="w-full rounded-xl border-gray-200 shadow-sm px-3 py-2 bg-white focus:ring-2 focus:ring-blue-500 outline-none text-sm font-medium"/>
+                        </div>
+                        <div className="flex-1 min-w-[180px]">
+                            <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">Cliente</label>
+                            <select value={filtroCliente} onChange={e => setFiltroCliente(e.target.value)} className="w-full rounded-xl border-gray-200 shadow-sm px-3 py-2 bg-white focus:ring-2 focus:ring-blue-500 outline-none text-sm font-medium">
+                                <option value="">Todos los clientes</option>
+                                {listasOptions.clientes.map(c => <option key={c} value={c}>{c}</option>)}
+                            </select>
+                        </div>
+                        <div className="flex-1 min-w-[180px]">
+                            <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">Producto (SKU)</label>
+                            <select value={filtroProducto} onChange={e => setFiltroProducto(e.target.value)} className="w-full rounded-xl border-gray-200 shadow-sm px-3 py-2 bg-white focus:ring-2 focus:ring-blue-500 outline-none text-sm font-medium">
+                                <option value="">Todos los productos</option>
+                                {listasOptions.productos.map(p => <option key={p} value={p}>{p}</option>)}
+                            </select>
+                        </div>
+                        <div className={`flex-1 min-w-[180px] transition-opacity ${currentTab === 'inventario' ? 'opacity-40 pointer-events-none' : ''}`}>
+                            <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">Transporte</label>
+                            <select value={filtroTransporte} onChange={e => setFiltroTransporte(e.target.value)} className="w-full rounded-xl border-gray-200 shadow-sm px-3 py-2 bg-white focus:ring-2 focus:ring-blue-500 outline-none text-sm font-medium">
+                                <option value="">Todos los transportes</option>
+                                {listasOptions.transportes.map(t => <option key={t} value={t}>{t}</option>)}
+                            </select>
+                        </div>
+                        <div className="w-full md:w-auto mt-2 md:mt-0">
+                            <button onClick={handleLimpiarFiltros} className="w-full md:w-auto bg-red-50 text-red-600 px-4 py-2 rounded-xl font-semibold hover:bg-red-100 transition border border-red-200 text-sm">
+                                <i className="fas fa-eraser mr-1"></i> Limpiar Filtros
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Loading Overlay */}
+                    {isLoading && (
+                        <div className="fixed inset-0 bg-white bg-opacity-80 backdrop-blur-sm z-50 flex items-center justify-center">
+                            <div className="flex flex-col items-center">
+                                <div className="loader border-4 border-gray-200 rounded-full w-12 h-12 mb-4"></div>
+                                <p className="text-lg font-semibold text-gray-600">Sincronizando información...</p>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Pestañas */}
+                    <div className="flex space-x-6 border-b border-gray-300 mb-6 px-2 overflow-x-auto glass-panel rounded-t-2xl pt-2">
+                        <button onClick={() => setCurrentTab('gerencial')} className={`tab-btn px-4 py-3 text-sm uppercase tracking-wider font-medium text-gray-500 hover:text-gray-800 ${currentTab==='gerencial'?'active':''}`}>
+                            <i className="fas fa-chart-pie mr-2"></i> Vista Gerencial
+                        </button>
+                        <button onClick={() => setCurrentTab('operativa')} className={`tab-btn px-4 py-3 text-sm uppercase tracking-wider font-medium text-gray-500 hover:text-gray-800 ${currentTab==='operativa'?'active':''}`}>
+                            <i className="fas fa-truck-loading mr-2"></i> Trazabilidad Operativa
+                        </button>
+                        <button onClick={() => setCurrentTab('inventario')} className={`tab-btn px-4 py-3 text-sm uppercase tracking-wider font-medium text-gray-500 hover:text-gray-800 ${currentTab==='inventario'?'active':''}`}>
+                            <i className="fas fa-boxes-stacked mr-2"></i> Inventario Actual
+                        </button>
+                    </div>
+
+                    {/* --- CONTENIDO VISTA GERENCIAL --- */}
+                    {currentTab === 'gerencial' && (
+                        <div className="space-y-6 fade-in">
+                            {/* KPIs */}
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                <KpiCard title="Viajes Totales" value={formatter.format(kpisGerencial.viajes)} icon="fa-truck" colorClass="text-blue-600 bg-blue-100" />
+                                <KpiCard title="Bultos Despachados" value={formatter.format(kpisGerencial.bultos)} icon="fa-pallet" colorClass="text-amber-600 bg-amber-100" />
+                                <KpiCard title="Cantidades" value={formatter.format(kpisGerencial.cantidades)} icon="fa-cubes" colorClass="text-emerald-600 bg-emerald-100" />
+                            </div>
+
+                            {/* Charts Row 1 */}
+                            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                                <div className="lg:col-span-2">
+                                    <ChartComponent 
+                                        type="line" 
+                                        title="Evolución de Bultos" 
+                                        data={chartEvolucionMensual} 
+                                        options={{ scales: { y: { beginAtZero: true } }, plugins: { legend: { display: false } } }} 
+                                    />
+                                </div>
+                                <div className="lg:col-span-1">
+                                    <ChartComponent 
+                                        type="doughnut" 
+                                        title="Top 5 Clientes (Bultos)" 
+                                        data={chartTopClientes} 
+                                        options={{ plugins: { legend: { position: 'bottom' } }, cutout: '65%' }} 
+                                    />
+                                </div>
+                            </div>
+                            
+                            {/* Charts Row 2 */}
+                            <div className="grid grid-cols-1 gap-6">
+                                <ChartComponent 
+                                    type="bar" 
+                                    title="Top Transportes (Por Nº de Viajes)" 
+                                    data={chartTopTransportes} 
+                                    options={{ indexAxis: 'y', plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true } } }} 
+                                />
+                            </div>
+                        </div>
+                    )}
+
+                    {/* --- CONTENIDO VISTA OPERATIVA --- */}
+                    {currentTab === 'operativa' && (
+                        <div className="space-y-6 fade-in">
+                            <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100">
+                                <h3 className="text-lg font-bold text-gray-700 mb-1">Línea de Tiempo de Viajes por Transporte</h3>
+                                <p className="text-sm text-gray-500 mb-4">Muestra los picos de actividad (viajes diarios) de los transportes. {filtroTransporte ? '' : 'Mostrando el Top 3 por defecto.'}</p>
+                                <div className="h-72">
+                                    <ChartComponent 
+                                        type="line" 
+                                        title="" 
+                                        data={chartLineaTiempoTransporte} 
+                                        options={{
+                                            scales: {
+                                                x: { type: 'time', time: { unit: 'day', displayFormats: { day: 'dd MMM' } }, title: { display: true, text: 'Fecha' } },
+                                                y: { beginAtZero: true, title: { display: true, text: 'Nº de Viajes' } }
+                                            },
+                                            plugins: { legend: { position: 'top' } }
+                                        }} 
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                                <div className="p-5 border-b border-gray-100 flex justify-between items-center">
+                                    <h3 className="text-lg font-bold text-gray-700">Trazabilidad Detallada</h3>
+                                    <span className="bg-blue-50 text-blue-700 text-xs font-bold px-3 py-1 rounded-full">{tablaOperativa.length} registros (agrupados)</span>
+                                </div>
+                                <div className="overflow-x-auto max-h-[500px]">
+                                    <table className="w-full text-left border-collapse">
+                                        <thead className="bg-gray-50 sticky top-0 shadow-sm">
+                                            <tr>
+                                                <th className="py-3 px-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Transporte</th>
+                                                <th className="py-3 px-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Cliente</th>
+                                                <th className="py-3 px-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Producto (Molde)</th>
+                                                <th className="py-3 px-4 text-xs font-bold text-gray-500 uppercase tracking-wider text-right">Bultos</th>
+                                                <th className="py-3 px-4 text-xs font-bold text-gray-500 uppercase tracking-wider text-right">Cantidad</th>
+                                                <th className="py-3 px-4 text-xs font-bold text-gray-500 uppercase tracking-wider text-right">Último Despacho</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-gray-100">
+                                            {tablaOperativa.map((row, i) => (
+                                                <tr key={i} className="hover:bg-gray-50 transition-colors">
+                                                    <td className="py-3 px-4 text-sm font-medium text-gray-900">{row.Transporte}</td>
+                                                    <td className="py-3 px-4 text-sm text-gray-600">{row.Cliente}</td>
+                                                    <td className="py-3 px-4 text-sm text-gray-600"><span className="bg-gray-100 px-2 py-1 rounded-md text-xs font-mono">{row.Producto}</span></td>
+                                                    <td className="py-3 px-4 text-sm font-bold text-gray-800 text-right">{formatter.format(row.Bultos)}</td>
+                                                    <td className="py-3 px-4 text-sm text-gray-600 text-right">{formatter.format(row.Cantidad)}</td>
+                                                    <td className="py-3 px-4 text-sm text-gray-500 text-right">{row.UltimaFecha}</td>
+                                                </tr>
+                                            ))}
+                                            {tablaOperativa.length === 0 && (
+                                                <tr><td colSpan="6" className="py-8 text-center text-gray-400">No hay datos que coincidan con los filtros.</td></tr>
+                                            )}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* --- CONTENIDO VISTA INVENTARIO --- */}
+                    {currentTab === 'inventario' && (
+                        <div className="space-y-6 fade-in">
+                            <div className="bg-blue-50 border border-blue-200 text-blue-800 p-4 rounded-xl flex items-start gap-3 shadow-sm">
+                                <i className="fas fa-info-circle mt-1"></i>
+                                <div>
+                                    <p className="font-semibold text-sm">Información de Stock Actual</p>
+                                    <p className="text-xs mt-1">Los filtros de Transporte y Fecha (arriba) no aplican a esta vista. Solo se muestran los pallets actualmente marcados en stock filtrados por Cliente y Producto.</p>
+                                </div>
+                            </div>
+                            
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <KpiCard title="Bultos Totales en Stock" value={formatter.format(kpisInventario.bultos)} icon="fa-boxes-stacked" colorClass="text-emerald-600 bg-emerald-100" />
+                                <KpiCard title="Cantidades en Stock" value={formatter.format(kpisInventario.cantidades)} icon="fa-box-open" colorClass="text-teal-600 bg-teal-100" />
+                            </div>
+
+                            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                                <div className="p-5 border-b border-gray-100">
+                                    <h3 className="text-lg font-bold text-gray-700">Detalle de Stock por Molde</h3>
+                                </div>
+                                <div className="overflow-x-auto max-h-[500px]">
+                                    <table className="w-full text-left border-collapse">
+                                        <thead className="bg-gray-50 sticky top-0 shadow-sm">
+                                            <tr>
+                                                <th className="py-3 px-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Cliente</th>
+                                                <th className="py-3 px-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Producto (Molde)</th>
+                                                <th className="py-3 px-4 text-xs font-bold text-gray-500 uppercase tracking-wider text-right">Bultos</th>
+                                                <th className="py-3 px-4 text-xs font-bold text-gray-500 uppercase tracking-wider text-right">Cantidad Total</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-gray-100">
+                                            {tablaInventario.map((row, i) => (
+                                                <tr key={i} className="hover:bg-gray-50 transition-colors">
+                                                    <td className="py-3 px-4 text-sm font-medium text-gray-900">{row.Cliente}</td>
+                                                    <td className="py-3 px-4 text-sm text-gray-600"><span className="bg-gray-100 px-2 py-1 rounded-md text-xs font-mono">{row.Producto}</span></td>
+                                                    <td className="py-3 px-4 text-sm font-bold text-emerald-600 text-right">{formatter.format(row.Bultos)}</td>
+                                                    <td className="py-3 px-4 text-sm text-gray-600 text-right">{formatter.format(row.Cantidad)}</td>
+                                                </tr>
+                                            ))}
+                                            {tablaInventario.length === 0 && (
+                                                <tr><td colSpan="4" className="py-8 text-center text-gray-400">No hay stock para los filtros seleccionados.</td></tr>
+                                            )}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    )}
                 </div>
             );
         };
 
-        const root = createRoot(document.getElementById('root'));
+        const root = ReactDOM.createRoot(document.getElementById('root'));
         root.render(<App />);
     </script>
 </body>
